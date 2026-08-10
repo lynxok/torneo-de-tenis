@@ -1,6 +1,5 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { Sun, Cloud, CloudRain, Wind, Droplets, Eye, Sparkles, RefreshCw, Thermometer } from 'lucide-react';
-import gsap from 'gsap';
+import React, { useEffect, useState } from 'react';
+import { Sun, Cloud, CloudRain, Wind, Droplets, Info, CloudLighting, RefreshCw } from 'lucide-react';
 
 interface WeatherData {
     temp: number;
@@ -26,8 +25,6 @@ interface WeatherData {
 export const WeatherWidget: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [weather, setWeather] = useState<WeatherData | null>(null);
-    const containerRef = useRef<HTMLDivElement>(null);
-    const pulseRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
         // Fetch real weather data from Open-Meteo for Diamante, Entre Ríos (-32.0664, -60.6384)
@@ -41,9 +38,9 @@ export const WeatherWidget: React.FC = () => {
                 const current = data.current;
                 const daily = data.daily;
 
-                const mappedForecast = daily.time.slice(0, 5).map((t: string, i: number) => {
+                const mappedForecast = daily.time.slice(0, 7).map((t: string, i: number) => {
                     const d = new Date(t + 'T00:00:00');
-                    const dayName = i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : d.toLocaleDateString('es-AR', { weekday: 'short' });
+                    const dayName = i === 0 ? 'Hoy' : i === 1 ? 'Mañana' : d.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric' });
                     const code = daily.weather_code[i];
 
                     let icon: 'sun' | 'cloud-sun' | 'rain' | 'cloud' = 'sun';
@@ -77,22 +74,22 @@ export const WeatherWidget: React.FC = () => {
             } catch (err) {
                 console.error("Error cargando clima real:", err);
                 setWeather({
-                    temp: 18,
+                    temp: 13,
                     condition: 'Soleado',
-                    sensation: 17,
+                    sensation: 10,
                     uvIndex: 'Moderado',
                     windSpeed: 15,
                     windGusts: 18,
                     precipitation: 0,
                     humidity: 48,
-                    clouds: 10,
+                    clouds: 0,
                     visibility: 10,
                     forecast: [
-                        { day: 'Hoy', tempMax: 18, tempMin: 10, wind: 15, rainProb: 0, icon: 'sun' },
-                        { day: 'Mañana', tempMax: 20, tempMin: 11, wind: 18, rainProb: 0, icon: 'sun' },
-                        { day: 'Miércoles', tempMax: 15, tempMin: 9, wind: 22, rainProb: 4.2, icon: 'rain' },
-                        { day: 'Jueves', tempMax: 16, tempMin: 8, wind: 14, rainProb: 0.5, icon: 'cloud-sun' },
-                        { day: 'Viernes', tempMax: 21, tempMin: 12, wind: 12, rainProb: 0, icon: 'sun' }
+                        { day: 'Hoy', tempMax: 13, tempMin: 4, wind: 18, rainProb: 0, icon: 'sun' },
+                        { day: 'Mañana', tempMax: 13, tempMin: 6, wind: 23, rainProb: 0, icon: 'sun' },
+                        { day: 'Miércoles', tempMax: 10, tempMin: 7, wind: 22, rainProb: 9.8, icon: 'rain' },
+                        { day: 'Jueves', tempMax: 9, tempMin: 7, wind: 22, rainProb: 1.5, icon: 'cloud-sun' },
+                        { day: 'Viernes', tempMax: 14, tempMin: 8, wind: 12, rainProb: 0.2, icon: 'cloud' }
                     ]
                 });
             } finally {
@@ -103,113 +100,122 @@ export const WeatherWidget: React.FC = () => {
         fetchWeather();
     }, []);
 
-    // Smooth Entrance GSAP & Subtle Pulsing
-    useEffect(() => {
-        if (!loading && weather && containerRef.current) {
-            gsap.fromTo(
-                containerRef.current,
-                { opacity: 0, y: 10 },
-                { opacity: 1, y: 0, duration: 0.5, ease: 'power2.out' }
-            );
-
-            if (pulseRef.current) {
-                gsap.to(pulseRef.current, {
-                    scale: 1.15,
-                    opacity: 0.7,
-                    duration: 2,
-                    repeat: -1,
-                    yoyo: true,
-                    ease: 'sine.inOut'
-                });
-            }
-        }
-    }, [loading, weather]);
-
     if (loading) {
         return (
-            <div className="bg-card border border-white/10 rounded-2xl p-5 flex items-center justify-center gap-3 text-muted animate-pulse">
+            <div className="bg-card border border-white/10 rounded-2xl p-6 flex items-center justify-center gap-3 text-muted animate-pulse">
                 <RefreshCw className="animate-spin text-primary" size={18} />
-                <span className="text-xs font-bold">Cargando clima en Diamante...</span>
+                <span className="text-xs font-bold">Cargando el clima...</span>
             </div>
         );
     }
 
     if (!weather) return null;
 
-    const isGoodForTennis = weather.precipitation < 1 && weather.windSpeed < 25;
-
     return (
-        <div
-            ref={containerRef}
-            className="bg-card border border-white/10 rounded-2xl p-5 shadow-xl space-y-4 relative overflow-hidden"
-        >
-            {/* Header: Title & Badge */}
-            <div className="flex items-start justify-between gap-2 border-b border-white/5 pb-3">
-                <div>
-                    <h3 className="font-bold text-white text-sm flex items-center gap-1.5">
-                        <Sun size={16} className="text-amber-400 shrink-0" /> Clima en Diamante
-                    </h3>
-                    <span className="text-[10px] text-muted">Entre Ríos • Apto al aire libre</span>
+        <div className="bg-card border border-white/10 rounded-2xl p-6 shadow-xl text-white space-y-6">
+            {/* Top Header */}
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                <h3 className="font-bold text-lg text-white flex items-center gap-2">
+                    <Sun className="text-amber-400" size={22} /> Clima en Diamante
+                </h3>
+                <button className="text-muted hover:text-white transition-colors" title="Información meteorológica">
+                    <Info size={18} />
+                </button>
+            </div>
+
+            {/* Current Weather Display (Exact OpenResa 2-Column Clean Layout) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                {/* Left: Big Icon, Big Temp, Sensation & UV */}
+                <div className="flex items-center gap-5">
+                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 shrink-0">
+                        <Sun size={64} />
+                    </div>
+                    <div>
+                        <div className="text-5xl font-extrabold text-white tracking-tight">{weather.temp}°C</div>
+                        <div className="text-base font-bold text-slate-200 mt-0.5">{weather.condition}</div>
+                        <div className="text-xs text-muted mt-1 space-y-0.5">
+                            <div>Sentimiento <strong className="text-slate-200">{weather.sensation}°C</strong></div>
+                            <div>Índice UV: <strong className="text-slate-200">{weather.uvIndex}</strong></div>
+                        </div>
+                    </div>
                 </div>
 
-                <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold flex items-center gap-1 border shrink-0 ${isGoodForTennis ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-400'}`}>
-                    <div ref={pulseRef} className={`w-1.5 h-1.5 rounded-full ${isGoodForTennis ? 'bg-emerald-400' : 'bg-amber-400'}`}></div>
-                    {isGoodForTennis ? 'Óptimo para Jugar' : 'Precaución'}
+                {/* Right: Wind, Humidity, Clouds & Visibility Details */}
+                <div className="space-y-2.5 text-xs border-l border-white/10 pl-6 hidden md:block">
+                    <div className="flex items-center justify-between text-slate-300">
+                        <span className="flex items-center gap-2"><Wind size={15} className="text-primary" /> Viento</span>
+                        <span className="font-bold">{weather.windSpeed} km/h</span>
+                    </div>
+                    <div className="text-[11px] text-muted pl-6">
+                        Ráfagas {weather.windGusts} km/h
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300 pt-1">
+                        <span className="flex items-center gap-2"><Droplets size={15} className="text-blue-400" /> Humedad</span>
+                        <span className="font-bold">{weather.humidity}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300 pt-1">
+                        <span className="flex items-center gap-2"><Cloud size={15} className="text-slate-400" /> Nubes</span>
+                        <span className="font-bold">{weather.clouds}%</span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300 pt-1">
+                        <span className="flex items-center gap-2"><Info size={15} className="text-emerald-400" /> Visibilidad</span>
+                        <span className="font-bold">{weather.visibility} km</span>
+                    </div>
                 </div>
             </div>
 
-            {/* Main Temperature & Key Metrics */}
-            <div className="flex items-center justify-between bg-black/30 p-3.5 rounded-xl border border-white/5">
-                <div className="flex items-center gap-3">
-                    <div className="text-3xl font-black text-white tracking-tight">{weather.temp}°C</div>
-                    <div className="text-xs">
-                        <div className="font-bold text-slate-200">{weather.condition}</div>
-                        <div className="text-[10px] text-muted">Sensación: {weather.sensation}°C</div>
-                    </div>
+            {/* 7-Day Forecast Table (Matching OpenResa Clean Table Format) */}
+            <div className="border-t border-white/10 pt-4">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs">
+                        <tbody>
+                            {weather.forecast.map((item, idx) => (
+                                <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                    {/* Day Name */}
+                                    <td className="py-3 px-2 font-bold text-white w-28">{item.day}</td>
+
+                                    {/* Weather Icon */}
+                                    <td className="py-3 px-2 text-center text-amber-400 w-12">
+                                        {item.icon === 'sun' && <Sun size={20} className="mx-auto" />}
+                                        {item.icon === 'cloud-sun' && <Cloud size={20} className="mx-auto text-slate-300" />}
+                                        {item.icon === 'rain' && <CloudRain size={20} className="mx-auto text-blue-400" />}
+                                        {item.icon === 'cloud' && <Cloud size={20} className="mx-auto text-slate-400" />}
+                                    </td>
+
+                                    {/* Temp Max */}
+                                    <td className="py-3 px-2 font-bold text-white text-base text-right w-16">
+                                        {item.tempMax}°C
+                                    </td>
+
+                                    {/* Temp Min Badge */}
+                                    <td className="py-3 px-2 w-20">
+                                        <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 font-bold text-[11px]">
+                                            {item.tempMin}°C
+                                        </span>
+                                    </td>
+
+                                    {/* Wind Speed */}
+                                    <td className="py-3 px-2 text-slate-300 text-[11px] text-right">
+                                        <span className="inline-flex items-center gap-1">
+                                            <Wind size={12} className="text-muted" /> {item.wind} km/h
+                                        </span>
+                                    </td>
+
+                                    {/* Rain Precipitation */}
+                                    <td className="py-3 px-2 text-right">
+                                        {item.rainProb > 0 ? (
+                                            <span className="font-bold text-red-400 text-[11px]">
+                                                {item.rainProb} mm
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted text-[10px]">-</span>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
                 </div>
-
-                <div className="flex gap-3 text-[11px] text-slate-300">
-                    <div className="flex items-center gap-1">
-                        <Wind size={13} className="text-primary" />
-                        <span>{weather.windSpeed} km/h</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <Droplets size={13} className="text-blue-400" />
-                        <span>{weather.humidity}%</span>
-                    </div>
-                </div>
-            </div>
-
-            {/* 5-Day Compact Forecast */}
-            <div className="space-y-1.5">
-                <div className="text-[10px] font-bold text-muted uppercase tracking-wider mb-1">Pronóstico Semanal</div>
-                {weather.forecast.map((item, idx) => (
-                    <div
-                        key={idx}
-                        className="flex items-center justify-between p-2 rounded-lg bg-white/5 text-xs hover:bg-white/10 transition-colors"
-                    >
-                        <span className="font-medium text-white w-16 text-[11px]">{item.day}</span>
-                        
-                        <div className="flex items-center gap-1.5 text-amber-400">
-                            {item.icon === 'sun' && <Sun size={14} />}
-                            {item.icon === 'cloud-sun' && <Cloud size={14} className="text-slate-300" />}
-                            {item.icon === 'rain' && <CloudRain size={14} className="text-blue-400" />}
-                            <span className="text-[11px] text-slate-200 font-bold">{item.tempMax}°C</span>
-                            <span className="text-[9px] text-muted font-normal">/{item.tempMin}°C</span>
-                        </div>
-
-                        <div className="flex items-center gap-2 text-[10px]">
-                            <span className="text-slate-400 flex items-center gap-0.5">
-                                <Wind size={11} /> {item.wind} km/h
-                            </span>
-                            {item.rainProb > 0 && (
-                                <span className="font-bold text-blue-400 bg-blue-500/10 px-1.5 py-0.2 rounded border border-blue-500/20 text-[9px]">
-                                    {item.rainProb} mm
-                                </span>
-                            )}
-                        </div>
-                    </div>
-                ))}
             </div>
         </div>
     );

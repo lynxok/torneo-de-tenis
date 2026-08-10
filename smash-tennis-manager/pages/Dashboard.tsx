@@ -324,8 +324,9 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                     )}
                 </div>
 
-                <div id="dashboard-stats-sidebar" className="space-y-6">
-                    {/* Weather Widget (Clima en Diamante) */}
+                {/* Left Column (2/3) */}
+                <div id="dashboard-main-content" className="lg:col-span-2 space-y-8">
+                    {/* Weather Widget (Clima en Diamante - OpenResa Style) */}
                     <WeatherWidget />
 
                     <Card className="bg-orange-500/5 border-orange-500/20">
@@ -472,6 +473,8 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column (2/3) */}
                 <div id="dashboard-main-content" className="lg:col-span-2 space-y-8">
+                    {/* Weather Widget (Clima en Diamante - OpenResa Style) */}
+                    <WeatherWidget />
 
                     {/* --- NEW SECTION: POINTS DEFENSE ALERT --- */}
                     {expiringPoints.length > 0 && (
@@ -686,8 +689,6 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
                 {/* Right Column (1/3) */}
                 <div id="dashboard-stats-sidebar" className="space-y-6">
-                    {/* Weather Widget (Clima en Diamante) */}
-                    <WeatherWidget />
 
                     <div className="grid grid-cols-2 gap-3">
                         <StatCard label="Win Rate" value={`${stats.winRate}%`} icon={TrendingUp} color="text-green-400" />
