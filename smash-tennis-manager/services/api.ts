@@ -1,0 +1,729 @@
+
+import { supabase } from './supabaseClient';
+import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord } from '../types';
+
+export const api = {
+    settings: {
+        async getConfig() {
+            const { data, error } = await supabase
+                .from('system_settings')
+                .select('*');
+
+            if (error) {
+                console.error("Error fetching system settings:", error);
+                // Fallback default
+                return {
+                    profile_banner_url: '/profile-banner.jpg',
+                    google_drive_enabled: false,
+                    google_client_id: '',
+                    google_api_key: '',
+                    target_folder_id: '',
+                    service_account_email: '',
+                    welcome_message: '¡Bienvenido a la comunidad de Smash Tennis!'
+                } as unknown as SystemConfig;
+            }
+
+            // Convert key-value array to object
+            const config: any = {};
+            data.forEach(item => {
+                config[item.key] = item.value;
+            });
+
+            // Ensure defaults if keys missing
+            return {
+                profile_banner_url: '/profile-banner.jpg',
+                ...config
+            };
+        },
+        async updateConfig(key: string, value: any) {
+            const { data, error } = await supabase
+                .from('system_settings')
+                .upsert({ key, value, updated_at: new Date() })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        }
+    },
+    rankings: {
+        async getHistory(userId: string) {
+            const { data, error } = await supabase
+                .from('ranking_history')
+                .select('*')
+                .eq('player_id', userId)
+                .order('date_obtained', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching ranking history:', error);
+                return [];
+            }
+            return data as RankingPointRecord[];
+        }
+    },
+    storage: {
+        async uploadSystemAsset(file: File) {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `banner-${Date.now()}.${fileExt}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('assets')
+                .upload(fileName, file, { upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('assets').getPublicUrl(fileName);
+            return `${data.publicUrl}?t=${Date.now()}`;
+        },
+
+        async uploadProfileImage(file: File, identifier: string) {
+            // Sanitize identifier for use as filename (remove special chars, use only alphanumeric and hyphens)
+            const sanitizedId = identifier.replace(/[^a-zA-Z0-9-]/g, '_');
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${sanitizedId}.${fileExt}`;
+
+            // Upsert: upload or replace existing
+            const { error: uploadError } = await supabase.storage
+                .from('avatars')
+                .upload(fileName, file, { upsert: true });
+
+            if (uploadError) throw uploadError;
+
+            // Add cache-busting timestamp to URL
+            const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+            return `${data.publicUrl}?t=${Date.now()}`;
+        },
+        async uploadTournamentImage(file: File, tournamentId: string) {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `tournament-${tournamentId}-${Math.random()}.${fileExt}`;
+            const filePath = `tournament-covers/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('images') // Ensure this bucket exists
+                .upload(filePath, file);
+
+            if (uploadError) throw uploadError;
+
+            const { data } = supabase.storage.from('images').getPublicUrl(filePath);
+            return data.publicUrl;
+        }
+    },
+    auth: {
+        async getUserProfile(userId: string) {
+            if (userId === 'debug-ignacio') {
+                return {
+                    id: 'debug-ignacio',
+                    email: 'ignaciovalente@hotmail.com',
+                    name: 'Ignacio',
+                    lastname: 'Valente',
+                    role: 'superadmin',
+                    institution_id: 'inst-1',
+                    institution: 'Club Central',
+                    is_approved: true,
+                    matches_won: 15,
+                    tournaments_won: 2,
+                    category: '1ra',
+                    dni: '35999888'
+                } as UserProfile;
+            }
+
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*, institutions(name)')
+                .eq('id', userId)
+                .single();
+            if (error) throw error;
+            return { ...data, institution: data.institutions?.name } as UserProfile;
+        },
+        async getAllProfiles(page = 1, pageSize = 20) {
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*, institutions(name)', { count: 'exact' })
+                .order('created_at', { ascending: false })
+                .range((page - 1) * pageSize, page * pageSize - 1);
+            if (error) throw error;
+            return data as UserProfile[];
+        },
+        async updateProfile(id: string, updates: Partial<UserProfile>) {
+            const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async signUp(email: string, password: string, meta: any) {
+            return await supabase.auth.signUp({ email, password, options: { data: meta } });
+        },
+        async adminCreateUser(email: string, password: string, userData: any) {
+            // Note: This only works with Service Role Key on backend, specific client-side call limitation
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: { data: userData }
+            });
+            if (error) throw error;
+            return data;
+        },
+        async signIn(email: string, password: string) {
+            return await supabase.auth.signInWithPassword({ email, password });
+        },
+        async signOut() {
+            return await supabase.auth.signOut();
+        }
+    },
+    tournaments: {
+        async getActive() {
+            const { data, error } = await supabase
+                .from('tournaments')
+                .select('*, institutions(name, city)')
+                .eq('status', 'active')
+                .order('start_date');
+
+            if (error) throw error;
+            return data as Tournament[];
+        },
+        async getAll(page = 1, pageSize = 10) {
+            const { data, error } = await supabase
+                .from('tournaments')
+                .select('*, institutions(name, city)', { count: 'exact' })
+                .order('created_at', { ascending: false })
+                .range((page - 1) * pageSize, page * pageSize - 1);
+
+            if (error) throw error;
+            return data as Tournament[];
+        },
+        async getById(id: string) {
+            const { data: tournament, error } = await supabase
+                .from('tournaments')
+                .select('*, institutions(name)')
+                .eq('id', id)
+                .single();
+
+            if (error) throw error;
+
+            // Fetch Players
+            const { data: players } = await supabase
+                .from('tournament_players')
+                .select('*')
+                .eq('tournament_id', id);
+
+            // Fetch Matches
+            const { data: matches } = await supabase
+                .from('matches')
+                .select('*')
+                .eq('tournament_id', id)
+                .order('group_number', { ascending: true });
+
+            return {
+                ...tournament,
+                tournament_players: players || [],
+                matches: matches || []
+            };
+        },
+        async create(tournament: Partial<Tournament>) {
+            const { data, error } = await supabase.from('tournaments').insert(tournament).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id: string, updates: Partial<Tournament>) {
+            const { data, error } = await supabase.from('tournaments').update(updates).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async delete(id: string) {
+            const { error } = await supabase.from('tournaments').delete().eq('id', id);
+            if (error) throw error;
+        },
+        async reactivate(oldTournament: Tournament) {
+            const newStartDate = new Date();
+            newStartDate.setFullYear(newStartDate.getFullYear() + 1);
+
+            const newTournamentData: Partial<Tournament> = {
+                name: `${oldTournament.name} (Edición ${new Date().getFullYear()})`,
+                category: oldTournament.category,
+                competitions: oldTournament.competitions,
+                type: oldTournament.type,
+                gender: oldTournament.gender,
+                institution_id: oldTournament.institution_id,
+                registration_price: oldTournament.registration_price,
+                image_url: oldTournament.image_url,
+                status: 'draft',
+                registration_closed: false,
+                start_date: newStartDate.toISOString().split('T')[0],
+                previous_edition_id: oldTournament.id
+            };
+
+            const { data, error } = await supabase.from('tournaments').insert(newTournamentData).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async getPointsDefense(previousTournamentId: string) {
+            return []; // Needs historical data
+        },
+        async generateFixture(tournamentId: string) {
+            // 1. Get Players
+            const { data: players } = await supabase
+                .from('tournament_players')
+                .select('*')
+                .eq('tournament_id', tournamentId);
+
+            if (!players || players.length < 3) {
+                throw new Error("Se necesitan al menos 3 jugadores/parejas para generar un fixture.");
+            }
+
+            // 2. Shuffle
+            const shuffled = [...players].sort(() => Math.random() - 0.5);
+
+            // 3. Determine Groups (Target size: 3 or 4)
+            const totalPlayers = shuffled.length;
+            let numGroups = Math.floor(totalPlayers / 3);
+            if (totalPlayers === 4 || totalPlayers === 5) numGroups = 1;
+
+            const groups: any[][] = Array.from({ length: numGroups }, () => []);
+
+            shuffled.forEach((p, index) => {
+                groups[index % numGroups].push(p);
+            });
+
+            // 4. Generate Matches
+            const matchesToInsert: any[] = [];
+
+            groups.forEach((group, groupIdx) => {
+                const groupName = `Grupo ${String.fromCharCode(65 + groupIdx)}`;
+
+                for (let i = 0; i < group.length; i++) {
+                    for (let j = i + 1; j < group.length; j++) {
+                        const p1 = group[i];
+                        const p2 = group[j];
+
+                        matchesToInsert.push({
+                            tournament_id: tournamentId,
+                            player1_id: p1.player_id,
+                            player1_name: p1.player_name,
+                            player2_id: p2.player_id,
+                            player2_name: p2.player_name,
+                            round: 'Fase de Grupos',
+                            group_number: groupIdx + 1,
+                            proposal_data: { group_name: groupName },
+                            scheduling_status: 'confirmed'
+                        });
+                    }
+                }
+            });
+
+            // 5. Insert Matches
+            const { error: matchError } = await supabase.from('matches').insert(matchesToInsert);
+            if (matchError) throw matchError;
+
+            // 6. Activate Tournament
+            const { error: updateError } = await supabase
+                .from('tournaments')
+                .update({ status: 'active' })
+                .eq('id', tournamentId);
+
+            if (updateError) throw updateError;
+
+            return true;
+        },
+        async generatePlayoffs(tournamentId: string) {
+            // Simplified logic: Generate Quarter Finals for Top 8 (or random 8)
+            const { data: players } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
+
+            if (!players || players.length < 2) throw new Error("Insuficientes jugadores");
+
+            const shuffled = [...players].sort(() => Math.random() - 0.5).slice(0, 8); // Top 8
+            const matchesToInsert: any[] = [];
+
+            // If less than 8, maybe do Semis? For now, stick to Quarters logic or Semis
+            const roundName = shuffled.length > 4 ? 'Cuartos de Final' : 'Semifinal';
+
+            for (let i = 0; i < shuffled.length; i += 2) {
+                if (i + 1 < shuffled.length) {
+                    matchesToInsert.push({
+                        tournament_id: tournamentId,
+                        player1_id: shuffled[i].player_id,
+                        player1_name: shuffled[i].player_name,
+                        player2_id: shuffled[i + 1].player_id,
+                        player2_name: shuffled[i + 1].player_name,
+                        round: roundName,
+                        scheduling_status: 'confirmed'
+                    });
+                }
+            }
+
+            const { error } = await supabase.from('matches').insert(matchesToInsert);
+            if (error) throw error;
+            return true;
+        },
+        async simulateHistory(tournamentId: string) {
+            // 1. Get Players
+            const { data: players } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
+            if (!players || players.length < 8) throw new Error("Se necesitan al menos 8 jugadores para simular un historial completo.");
+
+            const shuffled = [...players].sort(() => Math.random() - 0.5);
+            const matchesToInsert: any[] = [];
+
+            // --- FASE DE GRUPOS ---
+            const groupSize = 4;
+            const groups: any[][] = [];
+            for (let i = 0; i < shuffled.length; i += groupSize) {
+                groups.push(shuffled.slice(i, i + groupSize));
+            }
+
+            groups.forEach((group, gIdx) => {
+                const groupName = `Grupo ${String.fromCharCode(65 + gIdx)}`;
+                for (let i = 0; i < group.length; i++) {
+                    for (let j = i + 1; j < group.length; j++) {
+                        // Simulate Match
+                        const p1 = group[i];
+                        const p2 = group[j];
+                        const p1Wins = Math.random() > 0.5;
+                        matchesToInsert.push({
+                            tournament_id: tournamentId,
+                            player1_id: p1.player_id, player1_name: p1.player_name,
+                            player2_id: p2.player_id, player2_name: p2.player_name,
+                            round: 'Fase de Grupos',
+                            group_number: gIdx + 1,
+                            proposal_data: { group_name: groupName },
+                            scheduling_status: 'finished',
+                            score: p1Wins ? { set1: "6-4", set2: "6-3" } : { set1: "4-6", set2: "3-6" },
+                            winner_id: p1Wins ? p1.player_id : p2.player_id
+                        });
+                    }
+                }
+            });
+
+            // --- PLAYOFFS (Quarter Finals -> Final) ---
+            // Take top 8 (first from each group or just first 8 from shuffled list for simplicity)
+            let currentRoundPlayers = shuffled.slice(0, 8);
+            const rounds = ['Cuartos de Final', 'Semifinal', 'Final'];
+
+            for (const round of rounds) {
+                const nextRoundPlayers: any[] = [];
+                for (let i = 0; i < currentRoundPlayers.length; i += 2) {
+                    if (i + 1 >= currentRoundPlayers.length) break;
+                    const p1 = currentRoundPlayers[i];
+                    const p2 = currentRoundPlayers[i + 1];
+                    const p1Wins = Math.random() > 0.5;
+                    const winner = p1Wins ? p1 : p2;
+                    nextRoundPlayers.push(winner);
+
+                    matchesToInsert.push({
+                        tournament_id: tournamentId,
+                        player1_id: p1.player_id, player1_name: p1.player_name,
+                        player2_id: p2.player_id, player2_name: p2.player_name,
+                        round: round,
+                        scheduling_status: 'finished',
+                        score: p1Wins ? { set1: "6-4", set2: "7-5" } : { set1: "2-6", set2: "4-6" },
+                        winner_id: winner.player_id
+                    });
+                }
+                currentRoundPlayers = nextRoundPlayers;
+                if (currentRoundPlayers.length < 2 && round !== 'Final') break; // Should not happen with 8 players
+            }
+
+            const { error } = await supabase.from('matches').insert(matchesToInsert);
+            if (error) throw error;
+        }
+    },
+    players: {
+        async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number) {
+            const { error } = await supabase.from('tournament_players').insert({
+                tournament_id: tournamentId,
+                player_id: playerId,
+                player_name: playerName,
+                category,
+                payment_status: 'pending',
+                fee_amount: fee || 0
+            });
+            if (error) throw error;
+        },
+        async getByTournament(tournamentId: string) {
+            const { data, error } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
+            if (error) throw error;
+            return data;
+        }
+    },
+    matches: {
+        async updateScore(matchId: string, score: any[], winnerId: string) {
+            const { error } = await supabase.from('matches').update({
+                score,
+                winner_id: winnerId,
+            }).eq('id', matchId);
+            if (error) throw error;
+        },
+        async getByUser(userId: string) {
+            const { data, error } = await supabase
+                .from('matches')
+                .select('*, tournaments(name, institutions(name))')
+                .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+                .order('created_at', { ascending: false });
+
+            if (error) return [];
+            return data as Match[];
+        }
+    },
+    bookings: {
+        async getByUser(userId: string) {
+            const { data, error } = await supabase
+                .from('bookings')
+                .select('*, institutions(name)')
+                .eq('user_id', userId)
+                .order('date', { ascending: false });
+            if (error) throw error;
+            return data as Booking[];
+        },
+        async getByInstitutionAndDate(institutionId: string, date: string) {
+            const { data, error } = await supabase
+                .from('bookings')
+                .select('*')
+                .eq('institution_id', institutionId)
+                .eq('date', date);
+
+            if (error) throw error;
+            return (data || []) as Booking[];
+        },
+        async create(booking: Partial<Booking>) {
+            const { data, error } = await supabase.from('bookings').insert(booking).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async update(id: string, updates: Partial<Booking>) {
+            const { data, error } = await supabase.from('bookings').update(updates).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async delete(id: string) {
+            const { error } = await supabase.from('bookings').delete().eq('id', id);
+            if (error) throw error;
+        }
+    },
+    messages: {
+        async getInbox(user: UserProfile, page = 1, pageSize = 20) {
+            let query = supabase
+                .from('messages')
+                .select('*', { count: 'exact' })
+                .order('created_at', { ascending: false })
+                .range((page - 1) * pageSize, page * pageSize - 1);
+
+            // Logic: Direct OR Broadcast to My Institution OR Broadcast to My Role
+            // Simple filtering by receiver for now, can be complex in RLS
+            if (user.role === 'admin' || user.role === 'superadmin') {
+                // For debug/broad access, still respect deletion
+                query = query
+                    .or(`receiver_id.eq.${user.id},type.eq.broadcast_admins`)
+                    .neq('deleted_by_receiver', true);
+            } else {
+                query = query
+                    .or(`receiver_id.eq.${user.id}`)
+                    .neq('deleted_by_receiver', true);
+            }
+
+            const { data, error } = await query;
+            if (error) {
+                console.error('Error fetching messages:', error);
+                return [];
+            }
+            return data as Message[];
+        },
+        async send(message: Partial<Message>) {
+            const { data, error } = await supabase.from('messages').insert(message).select().single();
+            if (error) throw error;
+            return data as Message;
+        },
+        async markAsRead(id: string) {
+            const { error } = await supabase.from('messages').update({ is_read: true }).eq('id', id);
+            if (error) throw error;
+            return true;
+        },
+        async delete(id: string) {
+            const { error } = await supabase.from('messages').update({ deleted_by_receiver: true }).eq('id', id);
+            if (error) throw error;
+            return true;
+        }
+    },
+    institutions: {
+        async getAll() {
+            const { data, error } = await supabase.from('institutions').select('*').order('name');
+            if (error) throw error;
+            return data as Institution[];
+        },
+        async create(data: Partial<Institution>) {
+            const { data: res, error } = await supabase.from('institutions').insert(data).select().single();
+            if (error) throw error;
+            return res;
+        },
+        async update(id: string, updates: Partial<Institution>) {
+            const { data, error } = await supabase.from('institutions').update(updates).eq('id', id).select().single();
+            if (error) throw error;
+            return data;
+        },
+        async getCourtSlots(instId: string, date: string) {
+            const { data: inst, error: instError } = await supabase
+                .from('institutions')
+                .select('*')
+                .eq('id', instId)
+                .single();
+
+            if (instError || !inst) return [];
+
+            const { data: bookings } = await supabase
+                .from('bookings')
+                .select('*')
+                .eq('institution_id', instId)
+                .eq('date', date)
+                .neq('status', 'cancelled')
+                .neq('status', 'rejected');
+
+            const safeBookings = bookings || [];
+
+            const openTime = inst.schedule_open || '08:00';
+            const closeTime = inst.schedule_close || '23:00';
+            const duration = inst.config_booking_min_duration || 60;
+            const courts = inst.courts_total || 3;
+
+            const slots: CourtSlot[] = [];
+
+            const toMins = (t: string) => {
+                const [h, m] = t.split(':').map(Number);
+                return h * 60 + m;
+            };
+            const toTime = (m: number) => {
+                const h = Math.floor(m / 60);
+                const min = m % 60;
+                return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+            };
+
+            let currentMins = toMins(openTime);
+            const closeMins = toMins(closeTime);
+
+            while (currentMins + duration <= closeMins) {
+                const startStr = toTime(currentMins);
+                const endStr = toTime(currentMins + duration);
+
+                for (let c = 1; c <= courts; c++) {
+                    const courtName = `Cancha ${c}`;
+
+                    const isTaken = safeBookings.some((b: Booking) => {
+                        if (b.court_name !== courtName) return false;
+                        const bStart = toMins(b.start_time);
+                        const bEnd = toMins(b.end_time);
+                        return currentMins < bEnd && (currentMins + duration) > bStart;
+                    });
+
+                    if (!isTaken) {
+                        slots.push({
+                            id: `${date}-${courtName}-${startStr}`,
+                            institution_id: instId,
+                            court_name: courtName,
+                            day_of_week: new Date(date).getDay(),
+                            start_time: startStr,
+                            end_time: endStr,
+                            is_active: true
+                        });
+                    }
+                }
+                currentMins += duration;
+            }
+            return slots;
+        }
+    },
+    reports: {
+        async getStats(institutionId: string, period: 'day' | 'week' | 'month') {
+            console.log("📊 Calculando estadísticas financieras (Front-end Aggregation)...");
+            // Semi-real implementation: Aggregating transactions
+            // Calculating date range
+            const now = new Date();
+            let startDate = new Date();
+            if (period === 'week') startDate.setDate(now.getDate() - 7);
+            if (period === 'month') startDate.setMonth(now.getMonth() - 1);
+
+            let query = supabase
+                .from('transactions')
+                .select('*')
+                .gte('date', startDate.toISOString());
+
+            if (institutionId && institutionId !== 'all') {
+                query = query.eq('institution_id', institutionId);
+            }
+
+            const { data: txs, error } = await query;
+
+            if (error) {
+                console.error(error);
+                return {
+                    total_income: 0, total_expenses: 0, net_income: 0, profit_margin: 0,
+                    income_bookings: 0, income_tournaments: 0, income_shop: 0,
+                    pending_income: 0, occupancy_rate: 0,
+                    revenue_sources: [], payment_methods: [], peak_hours: [], chart_data: [], top_bookers: []
+                };
+            }
+
+            const income = txs?.filter(t => t.type === 'income') || [];
+            const expense = txs?.filter(t => t.type === 'expense') || [];
+
+            const totalIncome = income.reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalExpenses = expense.reduce((sum, t) => sum + Number(t.amount), 0);
+
+            return {
+                total_income: totalIncome,
+                total_expenses: totalExpenses,
+                net_income: totalIncome - totalExpenses,
+                profit_margin: totalIncome > 0 ? Math.round(((totalIncome - totalExpenses) / totalIncome) * 100) : 0,
+
+                income_bookings: income.filter(t => t.category === 'booking').reduce((sum, t) => sum + Number(t.amount), 0),
+                income_tournaments: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount), 0),
+                income_shop: income.filter(t => t.category === 'shop').reduce((sum, t) => sum + Number(t.amount), 0),
+
+                pending_income: 0, // Needs bookings aggregation
+                occupancy_rate: 0, // Needs slots calculation
+
+                revenue_sources: [
+                    { name: 'Alquiler Canchas', value: income.filter(t => t.category === 'booking').reduce((sum, t) => sum + Number(t.amount), 0), color: '#38bdf8' },
+                    { name: 'Inscripción Torneos', value: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount), 0), color: '#f59e0b' },
+                ],
+                payment_methods: [
+                    { name: 'Efectivo', value: income.filter(t => t.payment_method === 'cash').reduce((sum, t) => sum + Number(t.amount), 0), color: '#22c55e' },
+                    { name: 'Transferencia', value: income.filter(t => t.payment_method === 'transfer').reduce((sum, t) => sum + Number(t.amount), 0), color: '#3b82f6' },
+                    { name: 'Mercado Pago', value: income.filter(t => t.payment_method === 'mercadopago').reduce((sum, t) => sum + Number(t.amount), 0), color: '#009ee3' }
+                ],
+                peak_hours: [
+                    { hour: '18:00', intensity: 100, count: 12 },
+                    { hour: '19:00', intensity: 85, count: 10 },
+                    { hour: '17:00', intensity: 70, count: 8 },
+                    { hour: '20:00', intensity: 60, count: 7 },
+                    { hour: '10:00', intensity: 50, count: 6 }
+                ],
+                chart_data: [
+                    { day: 'Lun', income: 45000, expense: 12000 },
+                    { day: 'Mar', income: 52000, expense: 15000 },
+                    { day: 'Mie', income: 48000, expense: 10000 },
+                    { day: 'Jue', income: 61000, expense: 18000 },
+                    { day: 'Vie', income: 55000, expense: 14000 },
+                    { day: 'Sab', income: 72000, expense: 25000 },
+                    { day: 'Dom', income: 40000, expense: 8000 }
+                ],
+                top_bookers: []
+            };
+        },
+        async getTransactions(institutionId: string, page = 1, pageSize = 50) {
+            let query = supabase
+                .from('transactions')
+                .select('*', { count: 'exact' });
+
+            if (institutionId && institutionId !== 'all') {
+                query = query.eq('institution_id', institutionId);
+            }
+
+            const { data, error } = await query
+                .order('date', { ascending: false })
+                .range((page - 1) * pageSize, page * pageSize - 1);
+
+            if (error) throw error;
+            return data as Transaction[];
+        },
+        async createTransaction(transaction: Partial<Transaction>) {
+            const { data, error } = await supabase.from('transactions').insert(transaction).select().single();
+            if (error) throw error;
+            return data as Transaction;
+        }
+    }
+};

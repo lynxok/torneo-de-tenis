@@ -1,0 +1,5 @@
+{
+  "name": "Smash Tennis Manager",
+  "description": "A comprehensive tennis tournament management application. Features include real-time bracket generation, group stage management, match scheduling, court booking, and player profiles.",
+  "requestFramePermissions": []
+}

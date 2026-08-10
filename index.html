@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SMASH TENNIS</title>
+    <link rel="icon" type="image/png" href="pelota sin fondo.png">
+    <link rel="stylesheet" href="style.css?v=98">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+    <!-- Ionicons for icons -->
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+    <!-- jsPDF for PDF export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Chart.js for statistics -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- Leaflet (Map) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+    <!-- Flatpickr (Calendar Date Picker) -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/es.js"></script>
+</head>
+
+<body>
+    <div class="auth-container" id="auth-view"
+        style="display: flex; height: 100vh; align-items: center; justify-content: center; background: radial-gradient(circle at top right, #121824, #07090e); padding: 2rem 1rem; overflow-y: auto;">
+        <div class="glass-card animate-scale-in"
+            style="width: 100%; max-width: 400px; padding: 2.5rem; position: relative; margin: auto;">
+
+            <div style="text-align: center; margin-bottom: 2rem;">
+                <div
+                    style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;">
+                    <img src="Smash.png" alt="Smash" style="height: 150px; object-fit: contain;">
+                    <a href="https://lnx.com.ar" target="_blank"
+                        style="text-decoration: none; display: flex; align-items: center; gap: 8px;">
+                        <span style="color: var(--text-muted); font-size: 1rem;">by</span>
+                        <img src="Principal_blanco_fondotransparente.png" alt="Lynx"
+                            style="height: 60px; object-fit: contain;">
+                    </a>
+                </div>
+            </div>
+
+            <!-- LOGIN FORM -->
+            <div id="form-login">
+                <form id="login-form">
+                    <div class="form-group">
+                        <label class="form-label">Correo Electrónico</label>
+                        <input type="email" id="login-email" class="form-input" required placeholder="tu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Contraseña</label>
+                        <input type="password" id="login-pass" class="form-input" required placeholder="******">
+                    </div>
+                    <button type="submit" class="cta-btn" style="width: 100%; margin-bottom: 1rem;">Iniciar
+                        Sesión</button>
+                    <div style="text-align: center;">
+                        <span style="color: var(--text-muted); font-size: 0.9rem;">¿No tienes cuenta? <a href="#"
+                                onclick="auth.showRegister()" style="color: var(--primary);">Regístrate</a></span>
+                    </div>
+                </form>
+            </div>
+
+            <!-- REGISTER FORM -->
+            <div id="form-register" style="display: none;">
+                <form id="register-form">
+                    <div class="form-group">
+                        <label class="form-label">Nombre</label>
+                        <input type="text" id="reg-name" class="form-input" required placeholder="Juan">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Apellido</label>
+                        <input type="text" id="reg-lastname" class="form-input" required placeholder="Perez">
+                    </div>
+                    <div style="display: flex; gap: 1rem;">
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">DNI</label>
+                            <input type="text" id="reg-dni" class="form-input" required>
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label class="form-label">Teléfono</label>
+                            <input type="tel" id="reg-phone" class="form-input" required>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Categoría</label>
+                        <select id="reg-cat" class="form-select">
+                            <option value="A">Categoría A</option>
+                            <option value="B">Categoría B</option>
+                            <option value="C">Categoría C</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Género</label>
+                        <select id="reg-gender" class="form-select" required>
+                            <option value="masculino">Masculino</option>
+                            <option value="femenino">Femenino</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Correo Electrónico</label>
+                        <input type="email" id="reg-email" class="form-input" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Contraseña</label>
+                        <input type="password" id="reg-pass" class="form-input" required>
+                    </div>
+
+                    <!-- Location Section -->
+                    <div
+                        style="margin-top:1rem; margin-bottom:1rem; border-top:1px solid var(--border); padding-top:1rem;">
+                        <div class="form-group">
+                            <label class="form-label">País</label>
+                            <input type="text" id="reg-country" class="form-input" placeholder="Argentina" required>
+                        </div>
+                        <div style="display: flex; gap: 1rem;">
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label">Provincia / Estado</label>
+                                <input type="text" id="reg-province" class="form-input" placeholder="Buenos Aires"
+                                    required>
+                            </div>
+                            <div class="form-group" style="flex: 1;">
+                                <label class="form-label">Ciudad</label>
+                                <input type="text" id="reg-city" class="form-input" placeholder="CABA" required>
+                            </div>
+                        </div>
+                        <p style="font-size:0.75rem; color:var(--text-muted); margin-top:0.2rem;">* Usaremos tu ciudad
+                            para mostrarte torneos cercanos.</p>
+                    </div>
+
+                    <div class="form-group"
+                        style="display: flex; align-items: center; gap: 0.5rem; background: rgba(0,0,0,0.2); padding: 0.75rem; border-radius: 0.5rem;">
+                        <input type="checkbox" id="reg-role-admin"
+                            style="width: 20px; height: 20px; accent-color: var(--primary);">
+                        <label for="reg-role-admin"
+                            style="cursor: pointer; font-size: 0.9rem; color: var(--text-main);">Registrarse como
+                            Organizador (Profesor)</label>
+                    </div>
+
+                    <div class="form-group" id="reg-player-inst-group" style="margin-top: 1rem;">
+                        <label class="form-label">Institución / Club</label>
+                        <select id="reg-institution-select" class="form-input"
+                            style="background:var(--bg-main); color:var(--text-main);">
+                            <option value="">- Selecciona tu Club -</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group" id="reg-institution-group"
+                        style="display: none; margin-top: 1rem; border-left: 2px solid var(--accent); padding-left: 1rem;">
+                        <label class="form-label">Nombre de tu Institución</label>
+                        <input type="text" id="reg-institution-input" class="form-input" placeholder="Ej. Club CEBERPA">
+                    </div>
+
+                    <button type="submit" class="cta-btn" style="width: 100%; margin-bottom: 1rem;">Registrarse</button>
+                    <div style="text-align: center;">
+                        <span style="color: var(--text-muted); font-size: 0.9rem;">¿Ya tienes cuenta? <a href="#"
+                                onclick="auth.showLogin()" style="color: var(--primary);">Inicia Sesión</a></span>
+                    </div>
+                </form>
+            </div>
+
+            <!-- VERIFY FORM -->
+            <div id="form-verify" style="display: none; text-align: center;">
+                <h3 style="margin-bottom: 1rem;">Verificación de Cuenta</h3>
+                <p style="color: var(--text-muted); margin-bottom: 1.5rem;">Hemos enviado un código a tu correo. Por
+                    favor ingrésalo para activar tu cuenta.</p>
+
+                <div class="form-group">
+                    <input type="text" id="verify-code" class="form-input" placeholder="Código (Ej. 123456)"
+                        style="text-align: center; letter-spacing: 2px;">
+                </div>
+
+                <button id="btn-verify" class="cta-btn" style="width: 100%;">Verificar</button>
+                <button onclick="auth.resendCode()"
+                    style="background: none; border: none; color: var(--text-muted); font-size: 0.8rem; margin-top: 1rem; cursor: pointer;">Reenviar
+                    código</button>
+            </div>
+
+        </div>
+    </div>
+
+    <div class="app-container" id="app-view" style="display: none;">
+        <!-- Mobile Overlay -->
+        <div class="sidebar-overlay" id="sidebar-overlay" onclick="app.toggleMobileMenu()"></div>
+
+        <aside class="sidebar" id="sidebar">
+            <div class="logo-area" style="padding: 0; margin: 0; display: flex; justify-content: center;">
+                <img src="Smash.png" alt="Smash Logo" style="height: 150px; width: auto;">
+            </div>
+            <nav class="main-nav">
+                <button class="nav-btn active" data-view="dashboard" onclick="app.navigateTo('dashboard')">
+                    <ion-icon name="grid-outline"></ion-icon> Panel General
+                </button>
+
+                <button class="nav-btn" data-view="profile" onclick="app.navigateTo('profile')">
+                    <ion-icon name="person-circle-outline"></ion-icon> Mi Perfil
+                </button>
+
+                <!-- Torneos Section -->
+                <div class="nav-section" style="margin-top: 0.5rem;">
+                    <button class="nav-btn" data-view="tournaments" onclick="app.navigateTo('tournaments')">
+                        <ion-icon name="trophy-outline"></ion-icon> Torneos
+                    </button>
+                    <button class="nav-btn" data-view="tournament-history"
+                        onclick="app.navigateTo('tournament-history')">
+                        <ion-icon name="time-outline"></ion-icon> Historial
+                    </button>
+                </div>
+
+                <!-- Ranking Section -->
+                <button class="nav-btn" data-view="ranking" onclick="app.navigateTo('ranking')">
+                    <ion-icon name="podium-outline"></ion-icon> Ranking
+                </button>
+
+                <!-- Jugadores Section -->
+                <button class="nav-btn" data-view="players" onclick="app.navigateTo('players')">
+                    <ion-icon name="people-outline"></ion-icon> Jugadores
+                </button>
+
+                <!-- Mensajes Section -->
+                <button class="nav-btn" data-view="messages" onclick="app.navigateTo('messages')"
+                    style="position:relative;">
+                    <ion-icon name="mail-outline"></ion-icon> Mensajes
+                    <span id="messages-badge"
+                        style="display:none; position:absolute; right:10px; top:50%; transform:translateY(-50%); background:#ef4444; color:white; font-size:0.7rem; padding:2px 6px; border-radius:10px; font-weight:600;">0</span>
+                </button>
+
+                <!-- Reservas Section -->
+                <button class="nav-btn" data-view="bookings" onclick="app.navigateTo('bookings')">
+                    <ion-icon name="calendar-outline"></ion-icon> Reservar Canchas
+                </button>
+
+                <!-- Super Admin Only -->
+                <div class="nav-divider" id="nav-admin-divider"
+                    style="display:none; border-top: 1px solid var(--border); margin: 0.75rem 0;"></div>
+                <div class="nav-section-header" id="nav-admin-header"
+                    style="display:none; padding: 0.5rem 1rem; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">
+                    Administración
+                </div>
+                <button class="nav-btn" data-view="admin-dashboard" id="nav-admin-dashboard" style="display:none;"
+                    onclick="app.navigateTo('admin-dashboard')">
+                    <ion-icon name="stats-chart-outline"></ion-icon> Panel Admin
+                </button>
+                <button class="nav-btn" data-view="users" id="nav-users" style="display:none;"
+                    onclick="app.navigateTo('users')">
+                    <ion-icon name="person-add-outline"></ion-icon> Usuarios
+                </button>
+                <button class="nav-btn" data-view="payments-management" id="nav-payments" style="display:none;"
+                    onclick="app.navigateTo('payments-management')">
+                    <ion-icon name="card-outline"></ion-icon> Gestión de Pagos
+                </button>
+                <button class="nav-btn" data-view="institutions" id="nav-institutions" style="display:none;"
+                    onclick="app.navigateTo('institutions')">
+                    <ion-icon name="business-outline"></ion-icon> Instituciones
+                </button>
+                <button class="nav-btn" data-view="categories" id="nav-categories" style="display:none;"
+                    onclick="app.navigateTo('categories')">
+                    <ion-icon name="pricetags-outline"></ion-icon> Categorías
+                </button>
+            </nav>
+            <div
+                style="margin-top: auto; padding: 1rem; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 5px;">
+                <a href="https://lnx.com.ar" target="_blank"
+                    style="text-decoration: none; display: flex; align-items: center; gap: 8px; opacity: 0.7; transition: opacity 0.2s;"
+                    onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">
+                    <span style="color: var(--text-muted); font-size: 1rem;">by</span>
+                    <img src="Principal_blanco_fondotransparente.png" alt="Lynx"
+                        style="height: 60px; object-fit: contain;">
+                </a>
+                <div style="color: var(--text-muted); font-size: 0.75rem;">
+                    v1.3.26
+                </div>
+            </div>
+        </aside>
+
+        <main class="content-area">
+            <header class="top-bar">
+                <button class="mobile-menu-toggle" onclick="app.toggleMobileMenu()">
+                    <ion-icon name="menu-outline"></ion-icon>
+                </button>
+                <h1 id="page-title">Panel General</h1>
+                <div class="user-profile" style="display: flex; align-items: center; gap: 0.75rem;">
+                    <span id="user-name" style="color: var(--text-muted); font-size:0.9rem; cursor: pointer;"
+                        onclick="app.navigateTo('profile')"></span>
+                    <button onclick="app.navigateTo('profile')"
+                        style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem;"
+                        title="Mi Perfil">
+                        <ion-icon name="person-circle-outline"></ion-icon>
+                    </button>
+
+                    <!-- Notifications Bell -->
+                    <div id="notifications-container" style="position: relative;">
+                        <button id="notifications-bell" onclick="app.toggleNotificationsPanel()"
+                            style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem; position: relative;"
+                            title="Notificaciones">
+                            <ion-icon name="notifications-outline"></ion-icon>
+                            <span id="notifications-badge"
+                                style="display:none; position:absolute; top:-5px; right:-5px; background:#ef4444; color:white; font-size:0.6rem; padding:2px 5px; border-radius:10px; font-weight:700; min-width:14px; text-align:center;">0</span>
+                        </button>
+
+                        <!-- Notifications Panel -->
+                        <div id="notifications-panel"
+                            style="display:none; position:absolute; top:100%; right:0; margin-top:0.5rem; width:320px; max-height:400px; background:var(--bg-card); border:1px solid var(--border); border-radius:0.75rem; box-shadow:0 10px 40px rgba(0,0,0,0.4); z-index:9999; overflow:hidden;">
+                            <div
+                                style="padding:1rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
+                                <h4 style="margin:0; color:var(--text-main); font-size:0.95rem;">Notificaciones</h4>
+                                <button onclick="app.markAllNotificationsRead()"
+                                    style="background:none; border:none; color:var(--primary); font-size:0.75rem; cursor:pointer;">Marcar
+                                    todas leídas</button>
+                            </div>
+                            <div id="notifications-list" style="max-height:300px; overflow-y:auto;">
+                                <!-- Notifications will be injected here -->
+                                <div style="padding:2rem; text-align:center; color:var(--text-muted);">
+                                    <ion-icon name="notifications-off-outline"
+                                        style="font-size:2rem; margin-bottom:0.5rem;"></ion-icon>
+                                    <p style="margin:0; font-size:0.85rem;">No hay notificaciones</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Theme Toggle -->
+                    <button id="theme-toggle" onclick="app.toggleTheme()"
+                        style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem;"
+                        title="Cambiar Tema">
+                        <ion-icon name="moon-outline" id="theme-icon"></ion-icon>
+                    </button>
+
+                    <span class="admin-badge">Admin</span>
+                    <button onclick="auth.logout()"
+                        style="background:none; border:none; color:var(--text-muted); cursor:pointer; font-size:1.2rem;"
+                        title="Cerrar Sesión">
+                        <ion-icon name="log-out-outline"></ion-icon>
+                    </button>
+                </div>
+            </header>
+
+            <div id="view-container">
+                <!-- Views will be injected here via JS -->
+                <div class="view active" id="view-dashboard">
+                    <div class="welcome-card">
+                        <h2>Bienvenido al Gestor de Torneos</h2>
+                        <p>Selecciona una opción del menú para comenzar.</p>
+                        <button class="cta-btn" onclick="app.navigateTo('setup')">Crear Nuevo Torneo</button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Base Modal for generic content -->
+    <div id="base-modal"
+        style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; align-items: center; justify-content: center;">
+        <div id="base-modal-content"
+            style="background: var(--bg-card); width: 90%; max-width: 500px; padding: 2rem; border-radius: 1rem; border: 1px solid var(--border); box-shadow: 0 4px 20px rgba(0,0,0,0.5); max-height: 90vh; overflow-y: auto; position: relative;">
+            <!-- Content injected via JS -->
+        </div>
+    </div>
+
+    <!-- Supabase Client -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js?v=98"></script>
+
+    <!-- App Scripts -->
+    <script src="tournament.js?v=98"></script>
+    <script src="auth.js?v=98"></script>
+    <script src="app.js?v=98"></script>
+</body>
+
+</html>

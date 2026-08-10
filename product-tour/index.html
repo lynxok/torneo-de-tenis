@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smash Tennis - Gestión Profesional de Torneos</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <script type="module" src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.esm.js"></script>
+    <script nomodule src="https://unpkg.com/ionicons@7.1.0/dist/ionicons/ionicons.js"></script>
+</head>
+
+<body>
+
+    <!-- NAVIGATION BAR -->
+    <nav class="main-nav">
+        <div class="nav-logo">
+            <img src="../Smash.png" alt="Smash Tennis" class="logo-img">
+            <span class="logo-text">Smash<span class="logo-accent">Tennis</span></span>
+        </div>
+        <div class="nav-links">
+            <a href="#features">Funcionalidades</a>
+            <a href="#demo">Demo</a>
+            <a href="#roles">Roles</a>
+        </div>
+        <a href="../index.html" class="nav-cta">Ingresar</a>
+    </nav>
+
+    <!-- HERO SECTION -->
+    <header class="hero">
+        <div class="hero-content">
+            <div class="hero-brand-intro">
+                <div class="logo-glow-container">
+                    <img src="../Smash.png" alt="Smash Tennis" class="hero-logo">
+                </div>
+                <span class="hero-slogan">Revolucionando los courts</span>
+            </div>
+
+            <h1 class="hero-title">Tu Torneo de Tenis,<br> <span class="gradient-text">Profesionalizado.</span></h1>
+            <p class="hero-subtitle">Organización de torneos, rankings en tiempo real, brackets automáticos y perfiles
+                de jugadores. Todo en una sola plataforma profesional.</p>
+
+            <div class="cta-group">
+                <a href="../index.html" class="btn primary">
+                    <ion-icon name="rocket"></ion-icon>
+                    Comenzar Ahora
+                </a>
+                <a href="#demo" class="btn secondary">
+                    <ion-icon name="play-circle"></ion-icon>
+                    Ver Demo
+                </a>
+            </div>
+
+            <div class="hero-trust">
+                <span>Desarrollado por</span>
+                <img src="../Principal_blanco_fondotransparente.png" alt="LYNX Consulting" class="trust-logo">
+            </div>
+        </div>
+
+        <div class="hero-visual-bg">
+            <!-- Visual elements now as a background/accent layer -->
+            <div class="hero-cards-container">
+                <div class="hero-card main-card floating-accent">
+                    <div class="card-header">
+                        <div class="card-header-dots">
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                            <span class="dot"></span>
+                        </div>
+                        <span class="card-header-title">Dashboard</span>
+                    </div>
+                </div>
+                <div class="hero-card floating-card bracket-card floating-accent">
+                    <div class="mini-bracket">
+                        <div class="bracket-title"><ion-icon name="git-network"></ion-icon> Llaves</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- NARRATIVE SECTION: PROBLEM -->
+    <section class="narrative dark-bg">
+        <div class="container">
+            <h2 class="section-title">La Vieja Escuela <span class="text-muted">vs</span> <span class="highlight">La
+                    Nueva Era</span></h2>
+            <div class="comparison-grid">
+                <div class="problem-card">
+                    <ion-icon name="document-text-outline" class="icon-lg"></ion-icon>
+                    <h3>Caos Administrativo</h3>
+                    <p>Excel interminables, inscripciones por WhatsApp y pérdida de datos. Organizar un torneo solía ser
+                        un dolor de cabeza.</p>
+                </div>
+                <div class="solution-card glass-card">
+                    <ion-icon name="rocket-outline" class="icon-lg highlight-icon"></ion-icon>
+                    <h3>Automatización Total</h3>
+                    <p>Sorteos instantáneos, brackets generados automáticamente y perfiles de jugadores que se
+                        actualizan solos tras cada match.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FEATURES SHOWCASE -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="feature-row">
+                <div class="feature-text">
+                    <div class="feature-icon"><ion-icon name="git-network-outline"></ion-icon></div>
+                    <h3>Llaves y Cruces Inteligentes</h3>
+                    <p>Olvídate de dibujar líneas en un papel. Nuestro algoritmo genera llaves de eliminación directa y
+                        fases de grupos equilibradas al instante.</p>
+                    <ul class="feature-list">
+                        <li><ion-icon name="checkmark-circle"></ion-icon> Generación automática</li>
+                        <li><ion-icon name="checkmark-circle"></ion-icon> Avance automático de ganadores</li>
+                        <li><ion-icon name="checkmark-circle"></ion-icon> Historias visuales del torneo</li>
+                    </ul>
+                </div>
+                <div class="feature-visual visual-brackets">
+                    <div class="bracket-container">
+                        <!-- Semifinales -->
+                        <div class="bracket-round">
+                            <div class="round-label">Semifinales</div>
+                            <div class="match-card">
+                                <div class="match-player winner">
+                                    <span class="player-name">M. Torres</span>
+                                    <span class="player-score">6</span>
+                                </div>
+                                <div class="match-player loser">
+                                    <span class="player-name">L. Vega</span>
+                                    <span class="player-score">4</span>
+                                </div>
+                            </div>
+                            <div class="bracket-connector"></div>
+                            <div class="match-card">
+                                <div class="match-player loser">
+                                    <span class="player-name">P. Castro</span>
+                                    <span class="player-score">5</span>
+                                </div>
+                                <div class="match-player winner">
+                                    <span class="player-name">S. Ruiz</span>
+                                    <span class="player-score">7</span>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- Final -->
+                        <div class="bracket-round finals">
+                            <div class="round-label final-label">🏆 Final</div>
+                            <div class="match-card final-match">
+                                <div class="match-player winner champion">
+                                    <span class="player-name">M. Torres</span>
+                                    <span class="player-score">7</span>
+                                </div>
+                                <div class="match-player loser">
+                                    <span class="player-name">S. Ruiz</span>
+                                    <span class="player-score">5</span>
+                                </div>
+                            </div>
+                            <div class="champion-badge">
+                                <ion-icon name="trophy"></ion-icon>
+                                <span>Campeón</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="feature-row reverse">
+                <div class="feature-text">
+                    <div class="feature-icon"><ion-icon name="stats-chart-outline"></ion-icon></div>
+                    <h3>Rankings Globales</h3>
+                    <p>Cada set cuenta. Un sistema de puntos unificado que rastrea el desempeño de los jugadores a
+                        través de múltiples torneos y años.</p>
+                </div>
+                <div class="feature-visual visual-rankings">
+                    <div class="ranking-podium">
+                        <div class="podium-step p2">
+                            <div class="avatar-circle">
+                                <span class="avatar-initial">SR</span>
+                            </div>
+                            <div class="podium-info">
+                                <span class="podium-name">S. Ruiz</span>
+                                <span class="podium-points">2,850 pts</span>
+                            </div>
+                            <span class="rank-medal">🥈</span>
+                        </div>
+                        <div class="podium-step p1">
+                            <div class="avatar-circle">
+                                <span class="avatar-initial">MT</span>
+                            </div>
+                            <div class="podium-info">
+                                <span class="podium-name">M. Torres</span>
+                                <span class="podium-points">3,200 pts</span>
+                            </div>
+                            <span class="rank-medal">🥇</span>
+                        </div>
+                        <div class="podium-step p3">
+                            <div class="avatar-circle">
+                                <span class="avatar-initial">LV</span>
+                            </div>
+                            <div class="podium-info">
+                                <span class="podium-name">L. Vega</span>
+                                <span class="podium-points">2,400 pts</span>
+                            </div>
+                            <span class="rank-medal">🥉</span>
+                        </div>
+                    </div>
+                    <div class="ranking-list">
+                        <div class="ranking-item"><span class="rank-num">4</span><span class="rank-name">P.
+                                Castro</span><span class="rank-pts">1,950 pts</span></div>
+                        <div class="ranking-item"><span class="rank-num">5</span><span class="rank-name">J.
+                                Mendez</span><span class="rank-pts">1,800 pts</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- PREMIUM FEATURES GRID -->
+    <section class="premium-features">
+        <div class="container">
+            <h2 class="section-title center animate-on-scroll">Todo lo que Necesitás, en un Solo Lugar</h2>
+            <p class="section-subtitle center animate-on-scroll">Funcionalidades pensadas para organizadores exigentes y
+                jugadores apasionados</p>
+
+            <div class="features-grid">
+                <!-- Feature 1: Notifications -->
+                <div class="feature-card animate-on-scroll">
+                    <div class="feature-card-icon notif">
+                        <ion-icon name="notifications"></ion-icon>
+                    </div>
+                    <h4>Notificaciones en Tiempo Real</h4>
+                    <p>Alertas instantáneas de partidos, cambios de horario y resultados. Nunca te pierdas un momento
+                        importante.</p>
+                    <div class="feature-card-preview">
+                        <div class="mini-notif">
+                            <span class="notif-dot"></span>
+                            <span>Tu partido comienza en 15 min</span>
+                        </div>
+                        <div class="mini-notif">
+                            <span class="notif-dot success"></span>
+                            <span>¡Ganaste! Avanzás a semis</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 2: Court Bookings -->
+                <div class="feature-card animate-on-scroll">
+                    <div class="feature-card-icon qr">
+                        <ion-icon name="calendar"></ion-icon>
+                    </div>
+                    <h4>Reserva de Canchas Inteligente</h4>
+                    <p>Gestioná la disponibilidad en tiempo real. Los jugadores pueden ver y seleccionar los turnos
+                        libres de cada cancha, coordinando sus partidos según su conveniencia.</p>
+                    <div class="feature-card-preview">
+                        <div class="booking-demo">
+                            <div class="booking-grid-mini">
+                                <div class="booking-slot available">
+                                    <span class="slot-time">10:00</span>
+                                    <span class="slot-court">C01</span>
+                                </div>
+                                <div class="booking-slot booked">
+                                    <span class="slot-time">11:00</span>
+                                    <span class="slot-court">C01</span>
+                                </div>
+                                <div class="booking-slot available">
+                                    <span class="slot-time">10:00</span>
+                                    <span class="slot-court">C02</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 3: Payments -->
+                <div class="feature-card animate-on-scroll">
+                    <div class="feature-card-icon payment">
+                        <ion-icon name="card"></ion-icon>
+                    </div>
+                    <h4>Pagos Integrados</h4>
+                    <p>Cobrá inscripciones con Mercado Pago. Links personalizados y confirmación automática.</p>
+                    <div class="feature-card-preview">
+                        <div class="payment-demo">
+                            <div class="payment-amount">$5,000</div>
+                            <div class="payment-status">
+                                <ion-icon name="checkmark-circle"></ion-icon>
+                                Inscripción Confirmada
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 4: Player Stats -->
+                <div class="feature-card animate-on-scroll">
+                    <div class="feature-card-icon stats">
+                        <ion-icon name="analytics"></ion-icon>
+                    </div>
+                    <h4>Estadísticas Detalladas</h4>
+                    <p>Historial completo de partidos, rivales frecuentes, racha de victorias y evolución de ranking.
+                    </p>
+                    <div class="feature-card-preview">
+                        <div class="stats-demo">
+                            <div class="stat-bar">
+                                <span>Victorias</span>
+                                <div class="bar-track">
+                                    <div class="bar-fill" style="width: 85%"></div>
+                                </div>
+                                <span>85%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Feature 5: Chat & Coordination -->
+                <div class="feature-card animate-on-scroll">
+                    <div class="feature-card-icon chat">
+                        <ion-icon name="chatbubbles"></ion-icon>
+                    </div>
+                    <h4>Chat y Coordinación</h4>
+                    <p>Comunicación directa entre jugadores para coordinar detalles del partido, confirmar canchas y
+                        socializar antes y después del juego.</p>
+                    <div class="feature-card-preview">
+                        <div class="chat-demo">
+                            <div class="chat-bubble received">¿Confirmamos a las 18?</div>
+                            <div class="chat-bubble sent">¡Dale, ya reservé! 🎾</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Extra selling points -->
+            <div class="selling-points animate-on-scroll">
+                <div class="selling-point">
+                    <ion-icon name="cloud-done"></ion-icon>
+                    <span>100% en la Nube</span>
+                </div>
+                <div class="selling-point">
+                    <ion-icon name="phone-portrait"></ion-icon>
+                    <span>Diseño Mobile-First</span>
+                </div>
+                <div class="selling-point">
+                    <ion-icon name="flash"></ion-icon>
+                    <span>Setup en 5 Minutos</span>
+                </div>
+                <div class="selling-point">
+                    <ion-icon name="shield-half"></ion-icon>
+                    <span>Datos Protegidos</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- DEMO SECTION -->
+    <section id="demo" class="demo">
+        <div class="demo-container">
+            <h2 class="section-title animate-on-scroll">Míralo en Acción</h2>
+            <p class="hero-subtitle animate-on-scroll" style="max-width: 600px; margin: 0 auto;">
+                Descubre cómo transformamos la gestión de torneos de tenis en una experiencia fluida y profesional.
+            </p>
+
+            <div class="demo-video-wrapper animate-on-scroll scale-in">
+                <img src="demo-video.webp" alt="Smash Tennis Demo" class="demo-video">
+            </div>
+
+
+            <div class="demo-cta animate-on-scroll">
+                <a href="../index.html" class="btn primary">Comenzar Gratis</a>
+                <a href="mailto:ventas@smash.tennis" class="btn secondary">Contactar Ventas</a>
+            </div>
+        </div>
+    </section>
+
+    <!-- ROLES STORY -->
+    <section id="roles" class="roles">
+        <h2 class="section-title center animate-on-scroll">Una Solución, Múltiples Perspectivas</h2>
+        <div class="roles-container">
+            <div class="role-card admin animate-on-scroll">
+                <div class="role-header">
+                    <ion-icon name="construct-outline"></ion-icon> Para el Organizador
+                </div>
+                <div class="role-body">
+                    <p>Control total sobre fechas, reglas y configuraciones. Finalizá torneos con un clic y dejá que el
+                        sistema calcule los nuevos rankings automáticamente.</p>
+                </div>
+            </div>
+            <div class="role-card player animate-on-scroll">
+                <div class="role-header">
+                    <ion-icon name="tennisball-outline"></ion-icon> Para el Jugador
+                </div>
+                <div class="role-body">
+                    <p>Tu carrera tenística en tu bolsillo. Historial de partidos, próximos rivales y estadísticas de
+                        victorias/derrotas siempre a mano.</p>
+                </div>
+            </div>
+            <div class="role-card club animate-on-scroll">
+                <div class="role-header">
+                    <ion-icon name="business-outline"></ion-icon> Para Clubes
+                </div>
+                <div class="role-body">
+                    <p>Hacé tus canchas visibles y permití que los jugadores reserven en tiempo real. Máxima difusión
+                        para tus torneos, todo centralizado en un mismo lugar.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+        <div class="footer-content">
+            <div class="footer-main">
+                <div class="footer-brand">
+                    <img src="../Smash.png" alt="Smash Tennis" class="footer-logo">
+                    <span class="footer-brand-text">Smash<span class="accent">Tennis</span></span>
+                </div>
+                <p>Elevando el nivel del tenis amateur.</p>
+                <div class="socials">
+                </div>
+            </div>
+            <div class="footer-developer">
+                <span>Desarrollado por</span>
+                <a href="https://lnx.com.ar" target="_blank" class="developer-link">
+                    <img src="../Principal_blanco_fondotransparente.png" alt="LYNX Consulting" class="developer-logo">
+                </a>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <span>© 2025 Smash Tennis. Todos los derechos reservados.</span>
+        </div>
+    </footer>
+
+    <!-- Scroll Animation Script -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const animatedElements = document.querySelectorAll('.animate-on-scroll');
+
+            const observer = new IntersectionObserver((entries) => {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.classList.add('visible');
+                    }
+                });
+            }, {
+                threshold: 0.1,
+                rootMargin: '0px 0px -50px 0px'
+            });
+
+            animatedElements.forEach(el => observer.observe(el));
+        });
+    </script>
+
+</body>
+
+</html>

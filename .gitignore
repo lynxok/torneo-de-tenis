@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Build output
+dist/
+*/dist/
+dist-ssr/
+
+# Environment and local-only files
+.env
+.env.*
+!.env.example
+*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Agent-local cache/skills
+.agents/
+
+# OS/editor/temp artifacts
+.DS_Store
+Thumbs.db
+~$*
+*.tmp
+tmp_*.js
+
+# Generated archives
+*.zip
