@@ -1,7 +1,7 @@
 
 import React, { useState } from 'react';
 import { api } from '../services/api';
-import { Trophy, Bug } from 'lucide-react';
+import { Trophy } from 'lucide-react';
 import { useToast } from './ui/Toast';
 
 interface AuthPageProps {
@@ -51,15 +51,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
     <div className="min-h-screen bg-dark flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-card border border-white/10 rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden">
 
-        {onDebugLogin && (
-          <button
-            onClick={onDebugLogin}
-            className="absolute top-4 right-4 p-2 bg-white/5 hover:bg-white/10 text-muted hover:text-green-400 rounded-full transition-colors group"
-            title="Debug: Auto Login Ignacio"
-          >
-            <Bug size={16} />
-          </button>
-        )}
+
 
         <div className="flex flex-col items-center mb-8">
           <img

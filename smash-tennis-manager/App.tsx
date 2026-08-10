@@ -130,17 +130,18 @@ const AppContent = () => {
 
   const handleDebugLogin = () => {
     const debugProfile: UserProfile = {
-      id: 'debug-ignacio',
-      email: 'ignaciovalente@hotmail.com',
-      name: 'Ignacio',
-      lastname: 'Valente',
-      role: 'superadmin',
-      institution_id: 'inst-1',
-      institution: 'Club Central',
+      id: 'admin-parque-espana',
+      email: 'organizador@parqueespana.com',
+      name: 'Organizador',
+      lastname: 'Parque España',
+      role: 'admin',
+      institution_id: 'inst-parque-espana',
+      institution: 'Tenis Parque España - Diamante, E.R.',
       is_approved: true,
-      matches_won: 15,
-      tournaments_won: 2,
-      category: '1ra'
+      matches_won: 48,
+      tournaments_won: 12,
+      category: 'Organizador / Admin',
+      profile_picture_url: '/parque-espana-logo.png'
     };
     setSession({
       access_token: 'debug-token-mock',
@@ -165,7 +166,7 @@ const AppContent = () => {
   if (loading) return <div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando aplicación...</div>;
 
   if (!session || !userProfile || !effectiveUser) {
-    return <AuthPage onLoginSuccess={() => { }} onDebugLogin={handleDebugLogin} />;
+    return <AuthPage onLoginSuccess={() => { }} />;
   }
 
   // INTERCEPTOR: Super Admin Role Selection
