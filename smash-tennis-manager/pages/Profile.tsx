@@ -26,7 +26,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         dni: user.dni || '',
         category: user.category || '',
         gender: user.gender || '',
-        institution_id: user.institution_id || ''
+        institution_id: user.institution_id || '',
+        newPassword: '',
+        confirmPassword: ''
     });
 
     // Image Upload State
@@ -61,7 +63,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             dni: user.dni || '',
             category: user.category || '',
             gender: user.gender || '',
-            institution_id: user.institution_id || ''
+            institution_id: user.institution_id || '',
+            newPassword: '',
+            confirmPassword: ''
         });
         setPreviewUrl(user.profile_picture_url || null);
         setSelectedFile(null);
@@ -121,7 +125,15 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         setSaving(true);
 
         const isInstitutionChanged = formData.institution_id !== user.institution_id;
-        const updates: any = { ...formData };
+        const updates: any = {
+            name: formData.name,
+            lastname: formData.lastname,
+            phone: formData.phone,
+            dni: formData.dni,
+            category: formData.category,
+            gender: formData.gender,
+            institution_id: formData.institution_id
+        };
 
         // Fix: Convert empty string UUIDs to null to avoid Postgres error
         if (updates.institution_id === '') {
@@ -133,6 +145,17 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         }
 
         try {
+            // Check password change
+            if (formData.newPassword.trim().length > 0) {
+                if (formData.newPassword.length < 6) {
+                    throw new Error('La contraseña debe tener al menos 6 caracteres.');
+                }
+                if (formData.newPassword !== formData.confirmPassword) {
+                    throw new Error('Las contraseñas escritas no coinciden.');
+                }
+                await api.auth.updateUserPassword(user.id, formData.newPassword.trim());
+            }
+
             // 1. Upload Image if selected
             if (selectedFile) {
                 setUploadingImage(true);
@@ -380,6 +403,37 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                         <option value="5ta">5ta</option>
                                         <option value="Open">Open</option>
                                     </select>
+                                </div>
+
+                                {/* Password Change Section for Users */}
+                                <div className="pt-3 border-t border-white/10 space-y-3">
+                                    <div className="text-xs font-bold text-slate-300 uppercase flex items-center gap-1.5">
+                                        <Shield size={14} className="text-primary" /> Cambiar mi contraseña (Opcional)
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] text-muted font-medium">Nueva Contraseña</label>
+                                            <input
+                                                type="password"
+                                                placeholder="Mínimo 6 caracteres"
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary text-xs"
+                                                value={formData.newPassword}
+                                                onChange={e => setFormData({ ...formData, newPassword: e.target.value })}
+                                                minLength={6}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] text-muted font-medium">Confirmar Contraseña</label>
+                                            <input
+                                                type="password"
+                                                placeholder="Repetir contraseña"
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary text-xs"
+                                                value={formData.confirmPassword}
+                                                onChange={e => setFormData({ ...formData, confirmPassword: e.target.value })}
+                                                minLength={6}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </form>
                         </div>
