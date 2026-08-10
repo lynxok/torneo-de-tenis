@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Sun, Cloud, CloudRain, Wind, Droplets, Info, CloudLighting, RefreshCw } from 'lucide-react';
+import { Sun, Cloud, CloudRain, Wind, Droplets, Info, RefreshCw } from 'lucide-react';
 
 interface WeatherData {
     temp: number;
@@ -112,27 +112,27 @@ export const WeatherWidget: React.FC = () => {
     if (!weather) return null;
 
     return (
-        <div className="bg-card border border-white/10 rounded-2xl p-6 shadow-xl text-white space-y-6">
+        <div className="bg-card border border-white/10 rounded-2xl p-4 sm:p-6 shadow-xl text-white space-y-4 sm:space-y-6">
             {/* Top Header */}
-            <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                <h3 className="font-bold text-lg text-white flex items-center gap-2">
-                    <Sun className="text-amber-400" size={22} /> Clima en Diamante
+            <div className="flex items-center justify-between border-b border-white/10 pb-3 sm:pb-4">
+                <h3 className="font-bold text-base sm:text-lg text-white flex items-center gap-2">
+                    <Sun className="text-amber-400 shrink-0" size={22} /> Clima en Diamante
                 </h3>
                 <button className="text-muted hover:text-white transition-colors" title="Información meteorológica">
                     <Info size={18} />
                 </button>
             </div>
 
-            {/* Current Weather Display (Exact OpenResa 2-Column Clean Layout) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+            {/* Current Weather Display (Responsive Grid for Mobile, Tablet & Desktop) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 items-center">
                 {/* Left: Big Icon, Big Temp, Sensation & UV */}
-                <div className="flex items-center gap-5">
-                    <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 shrink-0">
-                        <Sun size={64} />
+                <div className="flex items-center gap-4 sm:gap-5">
+                    <div className="p-3 sm:p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl text-amber-400 shrink-0">
+                        <Sun size={48} className="sm:w-16 sm:h-16" />
                     </div>
                     <div>
-                        <div className="text-5xl font-extrabold text-white tracking-tight">{weather.temp}°C</div>
-                        <div className="text-base font-bold text-slate-200 mt-0.5">{weather.condition}</div>
+                        <div className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">{weather.temp}°C</div>
+                        <div className="text-sm sm:text-base font-bold text-slate-200 mt-0.5">{weather.condition}</div>
                         <div className="text-xs text-muted mt-1 space-y-0.5">
                             <div>Sentimiento <strong className="text-slate-200">{weather.sensation}°C</strong></div>
                             <div>Índice UV: <strong className="text-slate-200">{weather.uvIndex}</strong></div>
@@ -140,42 +140,42 @@ export const WeatherWidget: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Right: Wind, Humidity, Clouds & Visibility Details */}
-                <div className="space-y-2.5 text-xs border-l border-white/10 pl-6 hidden md:block">
+                {/* Right: Wind, Humidity, Clouds & Visibility Details - Visible on Tablet (sm:block) */}
+                <div className="space-y-2 text-xs sm:border-l sm:border-white/10 sm:pl-6 pt-3 sm:pt-0 border-t sm:border-t-0 border-white/5">
                     <div className="flex items-center justify-between text-slate-300">
-                        <span className="flex items-center gap-2"><Wind size={15} className="text-primary" /> Viento</span>
+                        <span className="flex items-center gap-2"><Wind size={15} className="text-primary shrink-0" /> Viento</span>
                         <span className="font-bold">{weather.windSpeed} km/h</span>
                     </div>
                     <div className="text-[11px] text-muted pl-6">
                         Ráfagas {weather.windGusts} km/h
                     </div>
-                    <div className="flex items-center justify-between text-slate-300 pt-1">
-                        <span className="flex items-center gap-2"><Droplets size={15} className="text-blue-400" /> Humedad</span>
+                    <div className="flex items-center justify-between text-slate-300 pt-0.5">
+                        <span className="flex items-center gap-2"><Droplets size={15} className="text-blue-400 shrink-0" /> Humedad</span>
                         <span className="font-bold">{weather.humidity}%</span>
                     </div>
-                    <div className="flex items-center justify-between text-slate-300 pt-1">
-                        <span className="flex items-center gap-2"><Cloud size={15} className="text-slate-400" /> Nubes</span>
+                    <div className="flex items-center justify-between text-slate-300 pt-0.5">
+                        <span className="flex items-center gap-2"><Cloud size={15} className="text-slate-400 shrink-0" /> Nubes</span>
                         <span className="font-bold">{weather.clouds}%</span>
                     </div>
-                    <div className="flex items-center justify-between text-slate-300 pt-1">
-                        <span className="flex items-center gap-2"><Info size={15} className="text-emerald-400" /> Visibilidad</span>
+                    <div className="flex items-center justify-between text-slate-300 pt-0.5">
+                        <span className="flex items-center gap-2"><Info size={15} className="text-emerald-400 shrink-0" /> Visibilidad</span>
                         <span className="font-bold">{weather.visibility} km</span>
                     </div>
                 </div>
             </div>
 
-            {/* 7-Day Forecast Table (Matching OpenResa Clean Table Format) */}
+            {/* 7-Day Forecast Table (Responsive Scroll & Touch Layout for Tablet/Mobile) */}
             <div className="border-t border-white/10 pt-4">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left text-xs">
+                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                    <table className="w-full text-left text-xs min-w-[500px]">
                         <tbody>
                             {weather.forecast.map((item, idx) => (
                                 <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                                     {/* Day Name */}
-                                    <td className="py-3 px-2 font-bold text-white w-28">{item.day}</td>
+                                    <td className="py-2.5 sm:py-3 px-2 font-bold text-white w-28 whitespace-nowrap">{item.day}</td>
 
                                     {/* Weather Icon */}
-                                    <td className="py-3 px-2 text-center text-amber-400 w-12">
+                                    <td className="py-2.5 sm:py-3 px-2 text-center text-amber-400 w-12">
                                         {item.icon === 'sun' && <Sun size={20} className="mx-auto" />}
                                         {item.icon === 'cloud-sun' && <Cloud size={20} className="mx-auto text-slate-300" />}
                                         {item.icon === 'rain' && <CloudRain size={20} className="mx-auto text-blue-400" />}
@@ -183,26 +183,26 @@ export const WeatherWidget: React.FC = () => {
                                     </td>
 
                                     {/* Temp Max */}
-                                    <td className="py-3 px-2 font-bold text-white text-base text-right w-16">
+                                    <td className="py-2.5 sm:py-3 px-2 font-bold text-white text-sm sm:text-base text-right w-16 whitespace-nowrap">
                                         {item.tempMax}°C
                                     </td>
 
                                     {/* Temp Min Badge */}
-                                    <td className="py-3 px-2 w-20">
-                                        <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 font-bold text-[11px]">
+                                    <td className="py-2.5 sm:py-3 px-2 w-20 whitespace-nowrap">
+                                        <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 font-bold text-[10px] sm:text-[11px]">
                                             {item.tempMin}°C
                                         </span>
                                     </td>
 
                                     {/* Wind Speed */}
-                                    <td className="py-3 px-2 text-slate-300 text-[11px] text-right">
+                                    <td className="py-2.5 sm:py-3 px-2 text-slate-300 text-[11px] text-right whitespace-nowrap">
                                         <span className="inline-flex items-center gap-1">
                                             <Wind size={12} className="text-muted" /> {item.wind} km/h
                                         </span>
                                     </td>
 
                                     {/* Rain Precipitation */}
-                                    <td className="py-3 px-2 text-right">
+                                    <td className="py-2.5 sm:py-3 px-2 text-right whitespace-nowrap">
                                         {item.rainProb > 0 ? (
                                             <span className="font-bold text-red-400 text-[11px]">
                                                 {item.rainProb} mm
