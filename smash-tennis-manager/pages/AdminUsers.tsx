@@ -35,6 +35,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         name: '',
         lastname: '',
         email: '',
+        password: '',
         phone: '',
         dni: '',
         category: '',
@@ -61,6 +62,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             name: u.name || '',
             lastname: u.lastname || '',
             email: u.email || '',
+            password: '',
             phone: u.phone || '',
             dni: u.dni || '',
             category: u.category || '',
@@ -90,6 +92,14 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             };
 
             await api.auth.updateProfile(editingUser.id, updates);
+
+            // If Super Admin specified a new password, update auth password
+            if (isSuperAdmin && editFormData.password.trim().length > 0) {
+                if (editFormData.password.length < 6) {
+                    throw new Error('La nueva contraseña debe tener al menos 6 caracteres.');
+                }
+                await api.auth.updateUserPassword(editingUser.id, editFormData.password.trim());
+            }
 
             alert('Usuario actualizado correctamente.');
             setShowEditModal(false);
@@ -363,6 +373,24 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                     required
                                 />
                             </div>
+
+                            {/* Super Admin Password Field */}
+                            {isSuperAdmin && (
+                                <div className="space-y-1 bg-amber-500/5 border border-amber-500/20 p-3 rounded-xl">
+                                    <label className="text-xs text-amber-300 uppercase font-bold flex items-center justify-between">
+                                        <span>🔑 Cambiar Contraseña (Super Admin)</span>
+                                        <span className="text-[10px] text-muted font-normal lowercase">(Dejar en blanco para no modificar)</span>
+                                    </label>
+                                    <input
+                                        type="password"
+                                        placeholder="Nueva contraseña (mínimo 6 caracteres)"
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={editFormData.password}
+                                        onChange={e => setEditFormData({ ...editFormData, password: e.target.value })}
+                                        minLength={6}
+                                    />
+                                </div>
+                            )}
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">

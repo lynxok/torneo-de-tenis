@@ -162,6 +162,11 @@ export const api = {
             if (error) throw error;
             return data;
         },
+        async updateUserPassword(userId: string, newPassword: string) {
+            const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+            if (error) throw error;
+            return data;
+        },
         async signIn(email: string, password: string) {
             return await supabase.auth.signInWithPassword({ email, password });
         },
