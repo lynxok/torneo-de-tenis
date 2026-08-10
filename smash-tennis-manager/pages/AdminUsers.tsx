@@ -93,6 +93,11 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
 
             await api.auth.updateProfile(editingUser.id, updates);
 
+            // Update Auth Email if changed
+            if (editFormData.email !== editingUser.email) {
+                await api.auth.updateUserAuthEmail(editingUser.id, editFormData.email);
+            }
+
             // If Super Admin specified a new password, update auth password
             if (isSuperAdmin && editFormData.password.trim().length > 0) {
                 if (editFormData.password.length < 6) {

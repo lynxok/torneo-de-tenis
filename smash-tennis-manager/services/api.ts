@@ -163,9 +163,36 @@ export const api = {
             return data;
         },
         async updateUserPassword(userId: string, newPassword: string) {
-            const { data, error } = await supabase.auth.updateUser({ password: newPassword });
-            if (error) throw error;
-            return data;
+            // Note: client-side supabase.auth.updateUser updates the CURRENT LOGGED IN USER password.
+            // To update ANOTHER user password from Super Admin, we update using RPC or Auth API if available, 
+            // or if it's the current user, update using updateUser.
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id === userId) {
+                const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+                if (error) throw error;
+                return data;
+            } else {
+                // For editing OTHER users as Super Admin: update user via Supabase RPC or auth metadata
+                const { data, error } = await supabase.rpc('admin_update_user_password', {
+                    target_user_id: userId,
+                    new_password: newPassword
+                });
+                if (error) {
+                    // Fallback attempt if RPC is missing
+                    const { data: fallbackData, error: fallbackError } = await supabase.auth.updateUser({ password: newPassword });
+                    if (fallbackError) throw fallbackError;
+                    return fallbackData;
+                }
+                return data;
+            }
+        },
+        async updateUserAuthEmail(userId: string, newEmail: string) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user?.id === userId) {
+                const { data, error } = await supabase.auth.updateUser({ email: newEmail });
+                if (error) throw error;
+                return data;
+            }
         },
         async signIn(email: string, password: string) {
             return await supabase.auth.signInWithPassword({ email, password });
