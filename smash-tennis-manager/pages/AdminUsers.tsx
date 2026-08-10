@@ -1,8 +1,8 @@
 
 import React, { useEffect, useState } from 'react';
-import { UserProfile, UserRole } from '../types';
+import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
-import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck } from 'lucide-react';
+import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2 } from 'lucide-react';
 
 interface AdminUsersProps {
     user?: UserProfile;
@@ -10,6 +10,7 @@ interface AdminUsersProps {
 
 export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     const [users, setUsers] = useState<UserProfile[]>([]);
+    const [institutions, setInstitutions] = useState<Institution[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
 
@@ -26,15 +27,80 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         dni: ''
     });
 
+    // Edit User Modal State (Super Admin & Admin)
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
+    const [updating, setUpdating] = useState(false);
+    const [editFormData, setEditFormData] = useState({
+        name: '',
+        lastname: '',
+        email: '',
+        phone: '',
+        dni: '',
+        category: '',
+        gender: '',
+        role: 'player' as UserRole,
+        institution_id: ''
+    });
+
     const isSuperAdmin = user?.role === 'superadmin';
 
     useEffect(() => {
         loadUsers();
+        api.institutions.getAll().then(setInstitutions);
     }, [user]);
 
     const loadUsers = () => {
         setLoading(true);
         api.auth.getAllProfiles().then(setUsers).finally(() => setLoading(false));
+    };
+
+    const openEditModal = (u: UserProfile) => {
+        setEditingUser(u);
+        setEditFormData({
+            name: u.name || '',
+            lastname: u.lastname || '',
+            email: u.email || '',
+            phone: u.phone || '',
+            dni: u.dni || '',
+            category: u.category || '',
+            gender: u.gender || '',
+            role: u.role || 'player',
+            institution_id: u.institution_id || ''
+        });
+        setShowEditModal(true);
+    };
+
+    const handleSaveUserEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingUser) return;
+        setUpdating(true);
+
+        try {
+            const updates: any = {
+                name: editFormData.name,
+                lastname: editFormData.lastname,
+                email: editFormData.email,
+                phone: editFormData.phone,
+                dni: editFormData.dni,
+                category: editFormData.category || null,
+                gender: editFormData.gender || null,
+                role: editFormData.role,
+                institution_id: editFormData.institution_id || null
+            };
+
+            await api.auth.updateProfile(editingUser.id, updates);
+
+            alert('Usuario actualizado correctamente.');
+            setShowEditModal(false);
+            setEditingUser(null);
+            loadUsers();
+        } catch (error: any) {
+            console.error(error);
+            alert('Error al actualizar usuario: ' + error.message);
+        } finally {
+            setUpdating(false);
+        }
     };
 
     const handleRoleUpdate = async (userId: string, newRole: UserRole) => {
@@ -236,6 +302,15 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                             >
                                                 {u.is_approved ? <CheckCheck size={18} /> : <AlertCircle size={18} />}
                                             </button>
+
+                                            {/* Edit Profile Button (Super Admin & Admin) */}
+                                            <button
+                                                onClick={() => openEditModal(u)}
+                                                className="p-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"
+                                                title="Editar datos del usuario"
+                                            >
+                                                <Edit2 size={18} />
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -244,6 +319,156 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                     </table>
                 </div>
             </div>
+
+            {/* EDIT USER MODAL */}
+            {showEditModal && editingUser && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-lg p-0 shadow-2xl relative flex flex-col max-h-[90vh]">
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Edit2 size={18} className="text-primary" /> Editar Usuario: {editingUser.name} {editingUser.lastname}
+                            </h3>
+                            <button onClick={() => setShowEditModal(false)} className="text-muted hover:text-white"><X size={20} /></button>
+                        </div>
+
+                        <form onSubmit={handleSaveUserEdit} className="p-6 space-y-4 overflow-y-auto">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Nombre *</label>
+                                    <input
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={editFormData.name}
+                                        onChange={e => setEditFormData({ ...editFormData, name: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Apellido *</label>
+                                    <input
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={editFormData.lastname}
+                                        onChange={e => setEditFormData({ ...editFormData, lastname: e.target.value })}
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted uppercase font-bold">Email / Correo *</label>
+                                <input
+                                    type="email"
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                    value={editFormData.email}
+                                    onChange={e => setEditFormData({ ...editFormData, email: e.target.value })}
+                                    required
+                                />
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Teléfono / WhatsApp</label>
+                                    <input
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={editFormData.phone}
+                                        onChange={e => setEditFormData({ ...editFormData, phone: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">DNI / Documento</label>
+                                    <input
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={editFormData.dni}
+                                        onChange={e => setEditFormData({ ...editFormData, dni: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Categoría</label>
+                                    <select
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={editFormData.category}
+                                        onChange={e => setEditFormData({ ...editFormData, category: e.target.value })}
+                                    >
+                                        <option value="">Sin Categoría</option>
+                                        <option value="1ra">1ra Categoría</option>
+                                        <option value="2da">2da Categoría</option>
+                                        <option value="3ra">3ra Categoría</option>
+                                        <option value="4ta">4ta Categoría</option>
+                                        <option value="5ta">5ta Categoría</option>
+                                        <option value="Open">Open</option>
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Género / Rama</label>
+                                    <select
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={editFormData.gender}
+                                        onChange={e => setEditFormData({ ...editFormData, gender: e.target.value })}
+                                    >
+                                        <option value="M">Masculino (Caballeros)</option>
+                                        <option value="F">Femenino (Damas)</option>
+                                        <option value="X">Mixto</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Super Admin Specific Controls: Role & Institution */}
+                            {isSuperAdmin ? (
+                                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/10">
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold">Rol en Sistema</label>
+                                        <select
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                            value={editFormData.role}
+                                            onChange={e => setEditFormData({ ...editFormData, role: e.target.value as UserRole })}
+                                        >
+                                            <option value="player">Jugador</option>
+                                            <option value="professor">Profesor (Sin Caja)</option>
+                                            <option value="admin">Administrador (Club)</option>
+                                            <option value="coordinator">Coordinador</option>
+                                            <option value="superadmin">Super Admin</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold">Club / Institución</label>
+                                        <select
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                            value={editFormData.institution_id}
+                                            onChange={e => setEditFormData({ ...editFormData, institution_id: e.target.value })}
+                                        >
+                                            <option value="">Sin Asignar</option>
+                                            {institutions.map(inst => (
+                                                <option key={inst.id} value={inst.id}>{inst.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            ) : null}
+
+                            <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditModal(false)}
+                                    className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={updating}
+                                    className="px-6 py-2 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                                >
+                                    {updating ? <><Loader2 className="animate-spin" size={18} /> Guardando...</> : <><Save size={18} /> Guardar Cambios</>}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* CREATE USER MODAL */}
             {showCreateModal && (
@@ -255,7 +480,6 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                         </div>
 
                         <form onSubmit={handleCreateUser} className="p-6 space-y-4 overflow-y-auto">
-                            {/* ... Form Content same as before ... */}
                             {!isSuperAdmin && user?.institution && (
                                 <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl flex items-center gap-2 mb-2">
                                     <Building size={16} className="text-blue-400" />
