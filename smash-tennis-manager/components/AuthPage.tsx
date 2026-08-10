@@ -26,7 +26,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
     setLoading(true);
     try {
       if (isLogin) {
-        const { error } = await api.auth.signIn(formData.email, formData.password);
+        const cleanEmail = formData.email.trim();
+        const { error } = await api.auth.signIn(cleanEmail, formData.password);
         if (error) throw error;
         addToast('¡Bienvenido de nuevo!', 'success');
         onLoginSuccess();
