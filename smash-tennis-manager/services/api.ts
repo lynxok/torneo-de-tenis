@@ -145,9 +145,9 @@ export const api = {
             return data as UserProfile[];
         },
         async updateProfile(id: string, updates: Partial<UserProfile>) {
-            const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select().single();
+            const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select();
             if (error) throw error;
-            return data;
+            return data && data.length > 0 ? data[0] : null;
         },
         async signUp(email: string, password: string, meta: any) {
             return await supabase.auth.signUp({ email, password, options: { data: meta } });
@@ -630,38 +630,100 @@ export const api = {
         async getStats(institutionId: string, period: 'day' | 'week' | 'month') {
             console.log("📊 Calculando estadísticas financieras (Front-end Aggregation)...");
             // Semi-real implementation: Aggregating transactions
-            // Calculating date range
+            // Calculate real date range
             const now = new Date();
             let startDate = new Date();
+            if (period === 'day') startDate.setHours(0, 0, 0, 0);
             if (period === 'week') startDate.setDate(now.getDate() - 7);
             if (period === 'month') startDate.setMonth(now.getMonth() - 1);
 
-            let query = supabase
+            let txQuery = supabase
                 .from('transactions')
                 .select('*')
                 .gte('date', startDate.toISOString());
 
+            let bookingQuery = supabase
+                .from('bookings')
+                .select('*')
+                .gte('date', startDate.toISOString().split('T')[0]);
+
             if (institutionId && institutionId !== 'all') {
-                query = query.eq('institution_id', institutionId);
+                txQuery = txQuery.eq('institution_id', institutionId);
+                bookingQuery = bookingQuery.eq('institution_id', institutionId);
             }
 
-            const { data: txs, error } = await query;
+            const [{ data: txs, error: txErr }, { data: bookingsData, error: bookingErr }] = await Promise.all([
+                txQuery,
+                bookingQuery
+            ]);
 
-            if (error) {
-                console.error(error);
-                return {
-                    total_income: 0, total_expenses: 0, net_income: 0, profit_margin: 0,
-                    income_bookings: 0, income_tournaments: 0, income_shop: 0,
-                    pending_income: 0, occupancy_rate: 0,
-                    revenue_sources: [], payment_methods: [], peak_hours: [], chart_data: [], top_bookers: []
-                };
-            }
+            if (txErr) console.error("Error transactions:", txErr);
+            if (bookingErr) console.error("Error bookings:", bookingErr);
 
-            const income = txs?.filter(t => t.type === 'income') || [];
-            const expense = txs?.filter(t => t.type === 'expense') || [];
+            const allTxs = txs || [];
+            const allBookings = bookingsData || [];
+
+            const income = allTxs.filter(t => t.type === 'income');
+            const expense = allTxs.filter(t => t.type === 'expense');
 
             const totalIncome = income.reduce((sum, t) => sum + Number(t.amount), 0);
             const totalExpenses = expense.reduce((sum, t) => sum + Number(t.amount), 0);
+
+            // Calculate Cash Flow by Day (real or zeroed out)
+            const daysMap: { [key: string]: { income: number; expense: number } } = {
+                'Lun': { income: 0, expense: 0 },
+                'Mar': { income: 0, expense: 0 },
+                'Mie': { income: 0, expense: 0 },
+                'Jue': { income: 0, expense: 0 },
+                'Vie': { income: 0, expense: 0 },
+                'Sab': { income: 0, expense: 0 },
+                'Dom': { income: 0, expense: 0 }
+            };
+
+            const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+
+            allTxs.forEach(t => {
+                const d = new Date(t.date);
+                const dayName = dayNames[d.getDay()];
+                if (daysMap[dayName]) {
+                    if (t.type === 'income') daysMap[dayName].income += Number(t.amount);
+                    else daysMap[dayName].expense += Number(t.amount);
+                }
+            });
+
+            const chartData = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].map(d => ({
+                day: d,
+                income: daysMap[d].income,
+                expense: daysMap[d].expense
+            }));
+
+            // Calculate Real Peak Hours from Bookings
+            const hoursMap: { [key: string]: number } = {};
+            allBookings.forEach(b => {
+                if (b.start_time) {
+                    const hourKey = b.start_time.substring(0, 5);
+                    hoursMap[hourKey] = (hoursMap[hourKey] || 0) + 1;
+                }
+            });
+
+            const sortedHours = Object.entries(hoursMap).sort((a, b) => b[1] - a[1]);
+            const maxBookingsCount = sortedHours.length > 0 ? sortedHours[0][1] : 1;
+
+            const peakHours = sortedHours.slice(0, 5).map(([hour, count]) => ({
+                hour,
+                count,
+                intensity: Math.round((count / maxBookingsCount) * 100)
+            }));
+
+            // Calculate Real Payment Methods
+            const cashVal = income.filter(t => t.payment_method === 'cash').reduce((sum, t) => sum + Number(t.amount), 0);
+            const transferVal = income.filter(t => t.payment_method === 'transfer').reduce((sum, t) => sum + Number(t.amount), 0);
+            const mpVal = income.filter(t => t.payment_method === 'mercadopago').reduce((sum, t) => sum + Number(t.amount), 0);
+
+            // Calculate Pending Income from pending bookings
+            const pendingBookingsIncome = allBookings
+                .filter(b => b.payment_status === 'pending' || b.status === 'pending')
+                .reduce((sum, b) => sum + Number(b.total_price || 0), 0);
 
             return {
                 total_income: totalIncome,
@@ -673,34 +735,20 @@ export const api = {
                 income_tournaments: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount), 0),
                 income_shop: income.filter(t => t.category === 'shop').reduce((sum, t) => sum + Number(t.amount), 0),
 
-                pending_income: 0, // Needs bookings aggregation
-                occupancy_rate: 0, // Needs slots calculation
+                pending_income: pendingBookingsIncome,
+                occupancy_rate: 0,
 
                 revenue_sources: [
                     { name: 'Alquiler Canchas', value: income.filter(t => t.category === 'booking').reduce((sum, t) => sum + Number(t.amount), 0), color: '#38bdf8' },
                     { name: 'Inscripción Torneos', value: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount), 0), color: '#f59e0b' },
                 ],
                 payment_methods: [
-                    { name: 'Efectivo', value: income.filter(t => t.payment_method === 'cash').reduce((sum, t) => sum + Number(t.amount), 0), color: '#22c55e' },
-                    { name: 'Transferencia', value: income.filter(t => t.payment_method === 'transfer').reduce((sum, t) => sum + Number(t.amount), 0), color: '#3b82f6' },
-                    { name: 'Mercado Pago', value: income.filter(t => t.payment_method === 'mercadopago').reduce((sum, t) => sum + Number(t.amount), 0), color: '#009ee3' }
+                    { name: 'Efectivo', value: cashVal, color: '#22c55e' },
+                    { name: 'Transferencia', value: transferVal, color: '#3b82f6' },
+                    { name: 'Mercado Pago', value: mpVal, color: '#009ee3' }
                 ],
-                peak_hours: [
-                    { hour: '18:00', intensity: 100, count: 12 },
-                    { hour: '19:00', intensity: 85, count: 10 },
-                    { hour: '17:00', intensity: 70, count: 8 },
-                    { hour: '20:00', intensity: 60, count: 7 },
-                    { hour: '10:00', intensity: 50, count: 6 }
-                ],
-                chart_data: [
-                    { day: 'Lun', income: 45000, expense: 12000 },
-                    { day: 'Mar', income: 52000, expense: 15000 },
-                    { day: 'Mie', income: 48000, expense: 10000 },
-                    { day: 'Jue', income: 61000, expense: 18000 },
-                    { day: 'Vie', income: 55000, expense: 14000 },
-                    { day: 'Sab', income: 72000, expense: 25000 },
-                    { day: 'Dom', income: 40000, expense: 8000 }
-                ],
+                peak_hours: peakHours,
+                chart_data: chartData,
                 top_bookers: []
             };
         },
