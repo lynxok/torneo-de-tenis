@@ -30,6 +30,7 @@ import {
     Flame,
     UserCircle
 } from 'lucide-react';
+import { WeatherWidget } from '../components/WeatherWidget';
 
 interface DashboardProps {
     user: UserProfile;
@@ -324,6 +325,9 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 </div>
 
                 <div id="dashboard-stats-sidebar" className="space-y-6">
+                    {/* Weather Widget (Clima en Diamante) */}
+                    <WeatherWidget />
+
                     <Card className="bg-orange-500/5 border-orange-500/20">
                         <div className="flex justify-between items-center mb-4">
                             <h4 className="font-bold text-white flex items-center gap-2 text-sm uppercase tracking-wider">
@@ -682,6 +686,9 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
                 {/* Right Column (1/3) */}
                 <div id="dashboard-stats-sidebar" className="space-y-6">
+                    {/* Weather Widget (Clima en Diamante) */}
+                    <WeatherWidget />
+
                     <div className="grid grid-cols-2 gap-3">
                         <StatCard label="Win Rate" value={`${stats.winRate}%`} icon={TrendingUp} color="text-green-400" />
                         <StatCard label="Jugados" value={stats.totalPlayed} icon={Activity} color="text-blue-400" />
@@ -748,7 +755,6 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                                     <span className="text-white text-sm font-bold truncate">{m.player1_id === user.id ? m.player2_name : m.player1_name || 'Rival'}</span>
                                                     <span className={`text-xs font-mono ${isWinner ? 'text-green-400' : 'text-slate-400'}`}>{isPlayed ? 'Finalizado' : 'Pendiente'}</span>
                                                 </div>
-                                                <div className="text-xs text-muted truncate">{m.tournaments?.name}</div>
                                             </div>
                                         </div>
                                     );
