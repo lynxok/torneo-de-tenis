@@ -103,7 +103,14 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 if (editFormData.password.length < 6) {
                     throw new Error('La nueva contraseña debe tener al menos 6 caracteres.');
                 }
-                await api.auth.updateUserPassword(editingUser.id, editFormData.password.trim());
+                try {
+                    await api.auth.updateUserPassword(editingUser.id, editFormData.password.trim());
+                } catch (pwErr: any) {
+                    // If Supabase returns 'New password should be different from the old password', treat as OK
+                    if (!pwErr.message?.toLowerCase().includes('should be different')) {
+                        throw pwErr;
+                    }
+                }
             }
 
             alert('Usuario actualizado correctamente.');
