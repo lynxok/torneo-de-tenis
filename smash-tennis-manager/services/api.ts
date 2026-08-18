@@ -145,15 +145,45 @@ export const api = {
             return data as UserProfile[];
         },
         async updateProfile(id: string, updates: Partial<UserProfile>) {
-            // Eliminar campos que no existen en la tabla profiles de Postgres para evitar error PGRST204
-            const sanitizedUpdates: any = { ...updates };
-            delete sanitizedUpdates.is_member;
-            delete sanitizedUpdates.institution;
+            // Lista blanca estricta de columnas reales en la tabla 'profiles' de Supabase
+            const ALLOWED_PROFILES_COLUMNS = [
+                'name',
+                'lastname',
+                'email',
+                'role',
+                'category',
+                'gender',
+                'institution_id',
+                'phone',
+                'dni',
+                'avatar_url',
+                'profile_picture_url',
+                'show_whatsapp',
+                'is_approved',
+                'member_status',
+                'memberships',
+                'matches_won',
+                'tournaments_won',
+                'updated_at'
+            ];
 
-            const { data, error } = await supabase.from('profiles').update(sanitizedUpdates).eq('id', id).select();
+            const sanitizedUpdates: any = {};
+            for (const key of ALLOWED_PROFILES_COLUMNS) {
+                if (key in updates && (updates as any)[key] !== undefined) {
+                    sanitizedUpdates[key] = (updates as any)[key];
+                }
+            }
+
+            const { data, error } = await supabase
+                .from('profiles')
+                .update(sanitizedUpdates)
+                .eq('id', id)
+                .select();
+
             if (error) throw error;
             return data && data.length > 0 ? data[0] : null;
         },
+
 
         async signUp(email: string, password: string, meta: any) {
             return await supabase.auth.signUp({ email, password, options: { data: meta } });
