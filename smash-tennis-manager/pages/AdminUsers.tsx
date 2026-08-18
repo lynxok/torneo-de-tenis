@@ -19,9 +19,11 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     // Quick Approval State
     const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
     const [approvalCategory, setApprovalCategory] = useState<string>('4ta');
+    const [approvalInstitutionId, setApprovalInstitutionId] = useState<string>('');
     const [approvalIsMember, setApprovalIsMember] = useState<boolean>(true);
     const [approvalMemberNumber, setApprovalMemberNumber] = useState<string>('');
     const [processingApproval, setProcessingApproval] = useState(false);
+
 
     // Create User Modal State
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -172,16 +174,22 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         }
         setProcessingApproval(true);
         try {
-            await api.auth.updateProfile(targetUser.id, {
+            const updates: any = {
                 is_approved: true,
-                category: approvalCategory,
-                member_number: approvalMemberNumber || targetUser.member_number || null,
-                member_status: 'active'
-            });
+                category: approvalCategory
+            };
+
+            // Si es SuperAdmin y seleccionó un club (o cambió el club), se actualiza institution_id
+            if (approvalInstitutionId) {
+                updates.institution_id = approvalInstitutionId;
+            }
+
+            await api.auth.updateProfile(targetUser.id, updates);
             alert(`¡${targetUser.name} ha sido aprobado con categoría ${approvalCategory}!`);
             setApprovingUserId(null);
             loadUsers();
         } catch (e: any) {
+
             alert('Error al aprobar usuario: ' + e.message);
         } finally {
             setProcessingApproval(false);
@@ -376,8 +384,24 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                     {approvingUserId === u.id ? (
                                         <div className="bg-slate-900/90 border border-primary/40 rounded-xl p-4 space-y-3 animate-fade-up">
                                             <h5 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1">
-                                                <Award size={14} /> Homologar Categoría y Membresía
+                                                <Award size={14} /> Homologar Club, Categoría y Membresía
                                             </h5>
+
+                                            {/* Selector de Club (Especialmente para SuperAdmin) */}
+                                            <div>
+                                                <label className="text-[11px] text-muted font-bold block mb-1">Club / Sede Asignada *</label>
+                                                <select
+                                                    className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white text-xs focus:border-primary outline-none"
+                                                    value={approvalInstitutionId}
+                                                    onChange={e => setApprovalInstitutionId(e.target.value)}
+                                                    disabled={!isSuperAdmin && !!user?.institution_id}
+                                                >
+                                                    <option value="">-- Sin Club Asignado --</option>
+                                                    {institutions.map(inst => (
+                                                        <option key={inst.id} value={inst.id}>{inst.name}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
 
                                             <div className="grid grid-cols-2 gap-2">
                                                 <div>
@@ -435,26 +459,46 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
-                                            <button
-                                                onClick={() => handleRejectRequest(u.id)}
-                                                className="px-3 py-1.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-semibold transition-colors"
-                                            >
-                                                Rechazar
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setApprovingUserId(u.id);
-                                                    setApprovalCategory(u.category || '4ta');
-                                                    setApprovalMemberNumber(u.member_number || '');
-                                                    setApprovalIsMember(true);
-                                                }}
-                                                className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-lg shadow-primary/20 transition-all"
-                                            >
-                                                <CheckCheck size={14} /> Revisar y Aprobar
-                                            </button>
+                                        <div className="space-y-3 pt-2 border-t border-white/10">
+                                            {/* Badge de Club solicitado o Sin Asignar */}
+                                            <div className="flex items-center justify-between text-xs">
+                                                <span className="text-muted flex items-center gap-1">
+                                                    <Building size={13} className="text-slate-400" /> Club solicitado:
+                                                </span>
+                                                <span className="font-bold text-primary">
+                                                    {u.institution || institutions.find(i => i.id === u.institution_id)?.name || 'Sin club seleccionado'}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex items-center justify-end gap-2">
+                                                <button
+                                                    onClick={() => openEditModal(u)}
+                                                    className="px-3 py-1.5 rounded-xl border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 text-xs font-semibold transition-colors flex items-center gap-1"
+                                                >
+                                                    <Edit2 size={12} /> Editar
+                                                </button>
+                                                <button
+                                                    onClick={() => handleRejectRequest(u.id)}
+                                                    className="px-3 py-1.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-semibold transition-colors"
+                                                >
+                                                    Rechazar
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setApprovingUserId(u.id);
+                                                        setApprovalCategory(u.category || '4ta');
+                                                        setApprovalMemberNumber(u.member_number || '');
+                                                        setApprovalInstitutionId(u.institution_id || '');
+                                                        setApprovalIsMember(true);
+                                                    }}
+                                                    className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-lg shadow-primary/20 transition-all"
+                                                >
+                                                    <CheckCheck size={14} /> Revisar y Aprobar
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
+
                                 </div>
                             ))}
                         </div>

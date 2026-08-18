@@ -135,15 +135,19 @@ export const api = {
             if (error) throw error;
             return { ...data, institution: data.institutions?.name } as UserProfile;
         },
-        async getAllProfiles(page = 1, pageSize = 20) {
+        async getAllProfiles(page = 1, pageSize = 50) {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('*, institutions(name)', { count: 'exact' })
+                .select('*, institutions:institutions(id, name)', { count: 'exact' })
                 .order('created_at', { ascending: false })
                 .range((page - 1) * pageSize, page * pageSize - 1);
             if (error) throw error;
-            return data as UserProfile[];
+            return (data || []).map((p: any) => ({
+                ...p,
+                institution: p.institutions?.name || null
+            })) as UserProfile[];
         },
+
         async updateProfile(id: string, updates: Partial<UserProfile>) {
             // Lista blanca con las columnas exactas existentes en PostgreSQL:
             const ALLOWED_PROFILES_COLUMNS = [
