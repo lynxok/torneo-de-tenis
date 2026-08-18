@@ -108,12 +108,17 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 category: editFormData.category || null,
                 gender: editFormData.gender || null,
                 role: editFormData.role,
-                institution_id: editFormData.institution_id || null,
-                member_number: editFormData.member_number || null,
-                member_status: editFormData.member_status
+                institution_id: editFormData.institution_id ? editFormData.institution_id : null
             };
 
-            await api.auth.updateProfile(editingUser.id, updates);
+            const updatedProfile = await api.auth.updateProfile(editingUser.id, updates);
+
+            // Actualizar el estado local inmediatamente
+            setUsers(prev => prev.map(u => u.id === editingUser.id ? { 
+                ...u, 
+                ...updates, 
+                institution: institutions.find(i => i.id === updates.institution_id)?.name || null 
+            } : u));
 
             // Update Auth Email if changed
             if (editFormData.email !== editingUser.email) {
@@ -139,6 +144,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             setEditingUser(null);
             loadUsers();
         } catch (error: any) {
+
             console.error(error);
             alert('Error al actualizar usuario: ' + error.message);
         } finally {
