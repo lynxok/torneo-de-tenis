@@ -145,7 +145,7 @@ export const api = {
             return data as UserProfile[];
         },
         async updateProfile(id: string, updates: Partial<UserProfile>) {
-            // Lista blanca estricta de columnas reales en la tabla 'profiles' de Supabase
+            // Lista blanca con las columnas exactas existentes en PostgreSQL:
             const ALLOWED_PROFILES_COLUMNS = [
                 'name',
                 'lastname',
@@ -158,12 +158,14 @@ export const api = {
                 'dni',
                 'avatar_url',
                 'profile_picture_url',
-                'show_whatsapp',
                 'is_approved',
-                'member_status',
-                'memberships',
                 'matches_won',
                 'tournaments_won',
+                'latitude',
+                'longitude',
+                'city',
+                'province',
+                'country',
                 'updated_at'
             ];
 
@@ -173,6 +175,7 @@ export const api = {
                     sanitizedUpdates[key] = (updates as any)[key];
                 }
             }
+
 
             const { data, error } = await supabase
                 .from('profiles')
