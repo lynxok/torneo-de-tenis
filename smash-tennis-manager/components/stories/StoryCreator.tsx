@@ -70,6 +70,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
     const [draggingLayerId, setDraggingLayerId] = useState<string | null>(null);
     const [isOverTrash, setIsOverTrash] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -102,23 +103,20 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
     };
 
     useEffect(() => {
-        if (!mentionQuery.trim()) {
-            setMentionResults([]);
-            return;
-        }
+        if (activeTool !== 'mentions') return;
+        setIsSearchingUsers(true);
         const timer = setTimeout(async () => {
-            setIsSearchingUsers(true);
             try {
                 const results = await api.stories.searchUsersForMention(mentionQuery);
                 setMentionResults(results);
             } catch (err) {
-                console.error(err);
+                console.error("Error buscando jugadores:", err);
             } finally {
                 setIsSearchingUsers(false);
             }
-        }, 250);
+        }, mentionQuery.trim() ? 200 : 0);
         return () => clearTimeout(timer);
-    }, [mentionQuery]);
+    }, [mentionQuery, activeTool]);
 
     const handleTouchStart = (layerId: string, e: React.TouchEvent | React.MouseEvent) => {
         e.stopPropagation();
@@ -652,19 +650,33 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                         key={u.id}
                                         type="button"
                                         onClick={() => handleAddMention(u)}
-                                        className="w-full p-3 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-between active:scale-[0.99] transition border border-white/5"
+                                        className="w-full p-3 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-between active:scale-[0.99] transition border border-white/5 cursor-pointer"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-slate-800 border border-white/20 overflow-hidden flex items-center justify-center font-bold text-lime-400">
                                                 {u.profile_picture_url ? (
                                                     <img src={u.profile_picture_url} alt={u.name} className="w-full h-full object-cover" />
                                                 ) : (
-                                                    u.name[0]
+                                                    (u.name || 'J')[0]
                                                 )}
                                             </div>
                                             <div className="text-left">
-                                                <p className="font-bold text-sm text-white">{u.name} {u.lastname || ''}</p>
-                                                <p className="text-xs text-slate-400">Rol: {u.role}</p>
+                                                <p className="font-bold text-sm text-white flex items-center gap-2">
+                                                    <span>{u.name} {u.lastname || ''}</span>
+                                                    {u.role === 'superadmin' && (
+                                                        <span className="px-1.5 py-0.5 rounded bg-lime-400/20 text-lime-400 text-[9px] font-black uppercase">
+                                                            SuperAdmin
+                                                        </span>
+                                                    )}
+                                                    {u.role === 'admin' && (
+                                                        <span className="px-1.5 py-0.5 rounded bg-blue-400/20 text-blue-400 text-[9px] font-black uppercase">
+                                                            Organizador
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <p className="text-xs text-slate-400">
+                                                    {u.category ? `Categoría ${u.category}` : 'Jugador registrado'}
+                                                </p>
                                             </div>
                                         </div>
                                         <ChevronRight className="w-4 h-4 text-slate-400" />
@@ -673,7 +685,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
 
                                 {!isSearchingUsers && mentionQuery && mentionResults.length === 0 && (
                                     <div className="text-center py-8 text-sm text-slate-400">
-                                        No se encontraron jugadores con ese nombre.
+                                        No se encontraron jugadores con "{mentionQuery}".
                                     </div>
                                 )}
                             </div>

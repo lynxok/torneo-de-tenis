@@ -371,3 +371,57 @@ export interface Story {
         role: UserRole;
     };
 }
+
+// REPORTS & HEATMAP TYPES
+export interface HeatmapDayItem {
+    day: string;
+    short: string;
+    day_number: number;
+    count: number;
+    revenue: number;
+    intensity: number; // 0 to 100
+}
+
+export interface HeatmapHourItem {
+    hour: string;
+    count: number;
+    intensity: number; // 0 to 100
+}
+
+export interface HeatmapMatrixCell {
+    day: string;
+    day_short: string;
+    day_number: number;
+    hour: string;
+    count: number;
+    intensity: number; // 0 to 100
+}
+
+export interface ChartDataPoint {
+    day: string;
+    shortDay?: string;
+    income: number;
+    expense: number;
+}
+
+export interface ReportStats {
+    total_income: number;
+    total_expenses: number;
+    net_income: number;
+    profit_margin: number;
+    income_bookings: number;
+    income_tournaments: number;
+    income_shop: number;
+    pending_income: number;
+    occupancy_rate: number;
+    revenue_sources: { name: string; value: number; color: string }[];
+    payment_methods: { name: string; value: number; color: string }[];
+    peak_hours: { hour: string; count: number; intensity: number }[];
+    days_heatmap: HeatmapDayItem[];
+    hours_heatmap: HeatmapHourItem[];
+    matrix_heatmap: HeatmapMatrixCell[][];
+    chart_data: ChartDataPoint[];
+    period_type: 'day' | 'week' | 'month';
+    top_player?: { name: string; matches_won: number };
+    top_bookers?: any[];
+}

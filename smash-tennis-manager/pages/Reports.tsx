@@ -6,7 +6,8 @@ import { Card } from '../components/ui/Card';
 import {
     TrendingUp, TrendingDown, DollarSign, Calendar, CreditCard,
     Download, AlertCircle, PieChart, ArrowUpRight, ArrowDownRight,
-    Wallet, Trophy, User, Crown, Activity, Filter, CheckCircle2, XCircle, Plus, X, Save, Loader2, Smartphone, Building, Clock
+    Wallet, Trophy, User, Crown, Activity, Filter, CheckCircle2, XCircle, Plus, X, Save, Loader2, Smartphone, Building, Clock,
+    Flame, CalendarDays, Grid, BarChart3, Layers, Sparkles
 } from 'lucide-react';
 
 interface ReportsProps {
@@ -18,6 +19,9 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
     const [stats, setStats] = useState<any>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // Heatmap View Tab
+    const [heatmapTab, setHeatmapTab] = useState<'matrix' | 'hours' | 'days'>('matrix');
 
     // Super Admin specific state
     const [institutions, setInstitutions] = useState<Institution[]>([]);
@@ -245,22 +249,30 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
                         {/* MAIN CHART: CASH FLOW (2/3) */}
                         <div className="lg:col-span-2 space-y-6">
                             <Card className="h-96 flex flex-col bg-card/80">
-                                <div className="flex justify-between items-center mb-6">
-                                    <h3 className="font-bold text-white flex items-center gap-2">
-                                        <Activity className="text-primary" size={18} /> Flujo de Caja (Ingresos vs Egresos)
-                                    </h3>
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-6">
+                                    <div>
+                                        <h3 className="font-bold text-white flex items-center gap-2 text-base">
+                                            <Activity className="text-primary" size={18} /> Flujo de Caja (Ingresos vs Egresos)
+                                        </h3>
+                                        <span className="text-[11px] text-muted">
+                                            {period === 'day' && 'Franjas horarias de hoy (08:00 a 22:00)'}
+                                            {period === 'week' && 'Evolución diaria de la semana en curso'}
+                                            {period === 'month' && 'Evolución por semanas del mes en curso'}
+                                        </span>
+                                    </div>
                                     <div className="flex items-center gap-4 text-xs">
-                                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-green-500 rounded-sm"></div> Ingresos</div>
-                                        <div className="flex items-center gap-1"><div className="w-3 h-3 bg-red-500/80 rounded-sm"></div> Egresos</div>
+                                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-green-500 rounded-sm"></div> <span className="text-slate-300">Ingresos</span></div>
+                                        <div className="flex items-center gap-1.5"><div className="w-3 h-3 bg-red-500/80 rounded-sm"></div> <span className="text-slate-300">Egresos</span></div>
                                     </div>
                                 </div>
 
-                                <div className="flex-1 flex items-end justify-between gap-3 px-4 pb-2">
-                                    {stats.chart_data.map((item: any, i: number) => {
-                                        // Calculate heights relative to max income
-                                        const maxVal = Math.max(...stats.chart_data.map((d: any) => d.income)) * 1.1;
-                                        const hIncome = (item.income / maxVal) * 100;
-                                        const hExpense = (item.expense / maxVal) * 100;
+                                <div className="flex-1 flex items-end justify-between gap-2 sm:gap-3 px-2 sm:px-4 pb-2">
+                                    {stats.chart_data && stats.chart_data.map((item: any, i: number) => {
+                                        const maxIncome = Math.max(...stats.chart_data.map((d: any) => d.income || 0), 0);
+                                        const maxExpense = Math.max(...stats.chart_data.map((d: any) => d.expense || 0), 0);
+                                        const maxVal = Math.max(maxIncome, maxExpense, 1) * 1.15;
+                                        const hIncome = Math.max(Math.round(((item.income || 0) / maxVal) * 100), item.income > 0 ? 6 : 2);
+                                        const hExpense = Math.max(Math.round(((item.expense || 0) / maxVal) * 100), item.expense > 0 ? 6 : 2);
 
                                         return (
                                             <div key={i} className="flex-1 flex flex-col items-center gap-1 group h-full justify-end">
@@ -268,17 +280,39 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
                                                 <div className="relative w-full flex gap-1 items-end justify-center h-full">
 
                                                     {/* Tooltip */}
-                                                    <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/90 border border-white/10 text-white text-[10px] p-2 rounded shadow-xl pointer-events-none z-20 whitespace-nowrap">
-                                                        <div className="text-green-400 font-bold">Ing: {formatCurrency(item.income)}</div>
-                                                        <div className="text-red-400 font-bold">Egr: {formatCurrency(item.expense)}</div>
-                                                        <div className="border-t border-white/20 mt-1 pt-1 font-bold text-white">Neto: {formatCurrency(item.income - item.expense)}</div>
+                                                    <div className="absolute bottom-full mb-2 opacity-0 group-hover:opacity-100 transition-opacity bg-black/95 border border-white/15 text-white text-[11px] p-2.5 rounded-lg shadow-2xl pointer-events-none z-30 whitespace-nowrap">
+                                                        <div className="font-bold text-slate-300 border-b border-white/10 pb-1 mb-1">{item.day}</div>
+                                                        <div className="text-green-400 font-semibold flex items-center justify-between gap-3">
+                                                            <span>Ingresos:</span> <span>{formatCurrency(item.income)}</span>
+                                                        </div>
+                                                        <div className="text-red-400 font-semibold flex items-center justify-between gap-3">
+                                                            <span>Egresos:</span> <span>{formatCurrency(item.expense)}</span>
+                                                        </div>
+                                                        <div className="border-t border-white/20 mt-1 pt-1 font-bold text-white flex items-center justify-between gap-3">
+                                                            <span>Neto:</span> <span>{formatCurrency(item.income - item.expense)}</span>
+                                                        </div>
                                                     </div>
 
                                                     {/* Bars */}
-                                                    <div style={{ height: `${hExpense}%` }} className="w-1/3 bg-red-500/60 rounded-t-sm hover:bg-red-500/80 transition-all min-h-[4px]"></div>
-                                                    <div style={{ height: `${hIncome}%` }} className="w-1/3 bg-green-500 rounded-t-sm hover:bg-green-400 transition-all min-h-[4px]"></div>
+                                                    <div
+                                                        style={{ height: `${hExpense}%` }}
+                                                        className={`w-1/2 rounded-t-sm transition-all ${item.expense > 0 ? 'bg-red-500/70 hover:bg-red-500 shadow-sm shadow-red-500/20' : 'bg-white/5'}`}
+                                                    ></div>
+                                                    <div
+                                                        style={{ height: `${hIncome}%` }}
+                                                        className={`w-1/2 rounded-t-sm transition-all ${item.income > 0 ? 'bg-green-500 hover:bg-green-400 shadow-sm shadow-green-500/20' : 'bg-white/5'}`}
+                                                    ></div>
                                                 </div>
-                                                <span className="text-[10px] text-muted mt-2 uppercase font-bold">{item.day}</span>
+                                                <span className="text-[10px] sm:text-[11px] text-muted mt-2 uppercase font-bold text-center leading-tight">
+                                                    {item.shortDay ? (
+                                                        <>
+                                                            <span>{item.shortDay}</span>
+                                                            <span className="block text-[9px] font-normal text-slate-500">{item.day.split(' ')[1] || ''}</span>
+                                                        </>
+                                                    ) : (
+                                                        item.day
+                                                    )}
+                                                </span>
                                             </div>
                                         );
                                     })}
@@ -287,10 +321,10 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
 
                             {/* REVENUE BREAKDOWN & PAYMENT METHODS */}
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                {/* Peak Hours - New Request */}
+                                {/* Peak Hours Card */}
                                 <Card className="flex flex-col">
                                     <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
-                                        <Clock size={16} className="text-amber-400" /> Horarios Pico
+                                        <Clock size={16} className="text-amber-400" /> Horarios Más Demandados
                                     </h4>
                                     <div className="flex-1 space-y-3 flex flex-col justify-center">
                                          {stats.peak_hours && stats.peak_hours.length > 0 ? (
@@ -419,6 +453,229 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
 
                         </div>
                     </div>
+
+                    {/* HEATMAP SECTION: DEMAND & OCCUPANCY */}
+                    <Card className="bg-card/90 border-white/10 overflow-hidden mt-6">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 pb-4 border-b border-white/10">
+                            <div>
+                                <h3 className="font-bold text-white flex items-center gap-2 text-base">
+                                    <Flame className="text-amber-400" size={20} /> Mapas de Calor y Ocupación de Canchas
+                                </h3>
+                                <p className="text-xs text-muted mt-0.5">
+                                    Identifica las franjas horarias de mayor demanda y los días con más alquileres en el club.
+                                </p>
+                            </div>
+
+                            {/* View Switcher Tabs */}
+                            <div className="flex bg-black/40 p-1 rounded-xl border border-white/10 text-xs font-semibold">
+                                <button
+                                    onClick={() => setHeatmapTab('matrix')}
+                                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${heatmapTab === 'matrix' ? 'bg-primary text-white shadow font-bold' : 'text-muted hover:text-white'}`}
+                                >
+                                    <Grid size={14} /> Matriz Día × Hora
+                                </button>
+                                <button
+                                    onClick={() => setHeatmapTab('hours')}
+                                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${heatmapTab === 'hours' ? 'bg-primary text-white shadow font-bold' : 'text-muted hover:text-white'}`}
+                                >
+                                    <Clock size={14} /> Por Horarios
+                                </button>
+                                <button
+                                    onClick={() => setHeatmapTab('days')}
+                                    className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${heatmapTab === 'days' ? 'bg-primary text-white shadow font-bold' : 'text-muted hover:text-white'}`}
+                                >
+                                    <CalendarDays size={14} /> Por Días
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* TAB 1: 2D MATRIX (DAY X HOUR) */}
+                        {heatmapTab === 'matrix' && stats.matrix_heatmap && (
+                            <div className="space-y-4">
+                                <div className="overflow-x-auto custom-scrollbar pb-2">
+                                    <div className="min-w-[720px]">
+                                        {/* Header Row with Hours */}
+                                        <div className="grid grid-cols-[80px_repeat(16,1fr)] gap-1 mb-1 text-[11px] text-muted font-bold text-center">
+                                            <div className="text-left pl-2">Día / Hora</div>
+                                            {['08','09','10','11','12','13','14','15','16','17','18','19','20','21','22','23'].map(h => (
+                                                <div key={h} className="text-slate-400">{h}h</div>
+                                            ))}
+                                        </div>
+
+                                        {/* Matrix Rows */}
+                                        <div className="space-y-1.5">
+                                            {stats.matrix_heatmap.map((row: any, rIdx: number) => {
+                                                const dayName = row[0]?.day_short || `D${rIdx}`;
+                                                const fullDay = row[0]?.day || '';
+                                                return (
+                                                    <div key={rIdx} className="grid grid-cols-[80px_repeat(16,1fr)] gap-1 items-center">
+                                                        <div className="text-xs font-bold text-slate-300 pl-2 flex items-center gap-1.5">
+                                                            <span className="w-1.5 h-1.5 rounded-full bg-primary/60"></span>
+                                                            {dayName}
+                                                        </div>
+                                                        {row.map((cell: any, cIdx: number) => {
+                                                            let bgClass = 'bg-white/5 hover:bg-white/15 text-transparent';
+                                                            if (cell.count > 0) {
+                                                                if (cell.intensity >= 75) bgClass = 'bg-amber-500 text-black font-black shadow-sm shadow-amber-500/30 ring-1 ring-amber-400 hover:bg-amber-400';
+                                                                else if (cell.intensity >= 50) bgClass = 'bg-emerald-500 text-black font-bold shadow-sm shadow-emerald-500/20 hover:bg-emerald-400';
+                                                                else if (cell.intensity >= 25) bgClass = 'bg-emerald-700/80 text-white font-medium hover:bg-emerald-600';
+                                                                else bgClass = 'bg-emerald-950/80 border border-emerald-800/40 text-emerald-300 hover:bg-emerald-900';
+                                                            }
+
+                                                            return (
+                                                                <div
+                                                                    key={cIdx}
+                                                                    className={`h-9 rounded-md flex items-center justify-center text-[11px] transition-all cursor-pointer group relative ${bgClass}`}
+                                                                >
+                                                                    {cell.count > 0 ? cell.count : ''}
+
+                                                                    {/* Hover Tooltip */}
+                                                                    <div className="absolute bottom-full mb-1.5 hidden group-hover:flex flex-col items-center z-30 pointer-events-none whitespace-nowrap">
+                                                                        <div className="bg-black/95 text-white border border-white/15 text-[10px] px-2.5 py-1.5 rounded-md shadow-2xl">
+                                                                            <div className="font-bold text-amber-300">{fullDay} a las {cell.hour} hs</div>
+                                                                            <div className="text-slate-300">{cell.count} {cell.count === 1 ? 'reserva' : 'reservas'} ({cell.intensity}% afluencia)</div>
+                                                                        </div>
+                                                                        <div className="w-2 h-2 bg-black/95 rotate-45 -mt-1 border-r border-b border-white/15"></div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Matrix Legend */}
+                                <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-white/5 text-xs text-muted">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-semibold text-slate-400">Escala de demanda:</span>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="w-3 h-3 rounded-sm bg-white/5 border border-white/10 inline-block"></span>
+                                            <span className="text-[10px]">Sin reservas</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="w-3 h-3 rounded-sm bg-emerald-950 border border-emerald-800/40 inline-block"></span>
+                                            <span className="text-[10px]">Baja</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="w-3 h-3 rounded-sm bg-emerald-700 inline-block"></span>
+                                            <span className="text-[10px]">Media</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block"></span>
+                                            <span className="text-[10px]">Alta</span>
+                                        </div>
+                                        <div className="flex items-center gap-1.5">
+                                            <span className="w-3 h-3 rounded-sm bg-amber-500 inline-block"></span>
+                                            <span className="text-[10px] font-bold text-amber-400">Pico 🔥</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-[11px] text-slate-400 italic">
+                                        * El número dentro de cada casilla indica la cantidad de turnos registrados.
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB 2: POR HORARIO */}
+                        {heatmapTab === 'hours' && stats.hours_heatmap && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2.5">
+                                    {stats.hours_heatmap.map((slot: any, i: number) => {
+                                        const isPeak = slot.intensity >= 80 && slot.count > 0;
+                                        return (
+                                            <div
+                                                key={i}
+                                                className={`p-3.5 rounded-xl border flex flex-col justify-between transition-all ${
+                                                    isPeak
+                                                        ? 'bg-gradient-to-b from-amber-500/20 to-card border-amber-500/40 shadow-lg shadow-amber-500/10'
+                                                        : slot.count > 0
+                                                        ? 'bg-card border-emerald-500/30'
+                                                        : 'bg-card/40 border-white/5 opacity-60'
+                                                }`}
+                                            >
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <span className="text-xs font-bold text-white">{slot.hour}</span>
+                                                    {isPeak && <Flame size={14} className="text-amber-400 animate-pulse" />}
+                                                </div>
+                                                <div className="text-xl font-black text-white mb-2">
+                                                    {slot.count} <span className="text-[10px] font-normal text-muted">turnos</span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between text-[9px] text-muted font-medium">
+                                                        <span>Afluencia</span>
+                                                        <span>{slot.intensity}%</span>
+                                                    </div>
+                                                    <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full transition-all ${isPeak ? 'bg-amber-500' : 'bg-emerald-400'}`}
+                                                            style={{ width: `${Math.max(slot.intensity, slot.count > 0 ? 10 : 0)}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB 3: POR DÍA DE SEMANA */}
+                        {heatmapTab === 'days' && stats.days_heatmap && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                                    {stats.days_heatmap.map((d: any, i: number) => {
+                                        const isTopDay = d.intensity === 100 && d.count > 0;
+                                        return (
+                                            <div
+                                                key={i}
+                                                className={`p-4 rounded-2xl border flex flex-col justify-between relative overflow-hidden transition-all ${
+                                                    isTopDay
+                                                        ? 'bg-gradient-to-b from-emerald-500/20 via-card to-card border-emerald-500/40 shadow-lg shadow-emerald-500/10'
+                                                        : 'bg-card border-white/10'
+                                                }`}
+                                            >
+                                                {isTopDay && (
+                                                    <div className="absolute top-2 right-2 px-2 py-0.5 bg-emerald-500/20 border border-emerald-500/40 rounded-full text-[9px] font-bold text-emerald-400 uppercase tracking-wider">
+                                                        Top Día
+                                                    </div>
+                                                )}
+                                                <div>
+                                                    <div className="text-sm font-bold text-white mb-0.5">{d.day}</div>
+                                                    <div className="text-[10px] text-muted uppercase font-semibold">{d.short}</div>
+                                                </div>
+
+                                                <div className="my-3">
+                                                    <div className="text-2xl font-black text-white">
+                                                        {d.count} <span className="text-xs font-normal text-muted">turnos</span>
+                                                    </div>
+                                                    <div className="text-xs font-semibold text-emerald-400 mt-0.5">
+                                                        {formatCurrency(d.revenue)}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1">
+                                                    <div className="flex justify-between text-[10px] text-muted">
+                                                        <span>Demanda</span>
+                                                        <span className="font-bold text-white">{d.intensity}%</span>
+                                                    </div>
+                                                    <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                                                        <div
+                                                            className={`h-full rounded-full transition-all ${isTopDay ? 'bg-emerald-400' : 'bg-primary'}`}
+                                                            style={{ width: `${Math.max(d.intensity, d.count > 0 ? 10 : 0)}%` }}
+                                                        ></div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+                    </Card>
+
                 </>
             )}
 

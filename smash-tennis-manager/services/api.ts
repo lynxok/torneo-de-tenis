@@ -900,100 +900,257 @@ export const api = {
     },
     reports: {
         async getStats(institutionId: string, period: 'day' | 'week' | 'month') {
-            console.log("📊 Calculando estadísticas financieras (Front-end Aggregation)...");
-            // Semi-real implementation: Aggregating transactions
-            // Calculate real date range
+            console.log(`📊 Calculando estadísticas financieras (${period})...`);
+            
             const now = new Date();
             let startDate = new Date();
-            if (period === 'day') startDate.setHours(0, 0, 0, 0);
-            if (period === 'week') startDate.setDate(now.getDate() - 7);
-            if (period === 'month') startDate.setMonth(now.getMonth() - 1);
+            let endDate = new Date();
+
+            if (period === 'day') {
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
+                endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+            } else if (period === 'week') {
+                const dayOfWeek = (now.getDay() + 6) % 7; // 0 = Lunes, 6 = Domingo
+                startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek, 0, 0, 0, 0);
+                endDate = new Date(startDate);
+                endDate.setDate(startDate.getDate() + 6);
+                endDate.setHours(23, 59, 59, 999);
+            } else if (period === 'month') {
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+            }
 
             let txQuery = supabase
                 .from('transactions')
                 .select('*')
-                .gte('date', startDate.toISOString());
+                .gte('date', startDate.toISOString())
+                .lte('date', endDate.toISOString());
 
             let bookingQuery = supabase
                 .from('bookings')
                 .select('*')
-                .gte('date', startDate.toISOString().split('T')[0]);
+                .gte('date', startDate.toISOString().split('T')[0])
+                .lte('date', endDate.toISOString().split('T')[0]);
+
+            let allHeatmapBookingsQuery = supabase
+                .from('bookings')
+                .select('*');
 
             if (institutionId && institutionId !== 'all') {
                 txQuery = txQuery.eq('institution_id', institutionId);
                 bookingQuery = bookingQuery.eq('institution_id', institutionId);
+                allHeatmapBookingsQuery = allHeatmapBookingsQuery.eq('institution_id', institutionId);
             }
 
-            const [{ data: txs, error: txErr }, { data: bookingsData, error: bookingErr }] = await Promise.all([
+            const [
+                { data: txs, error: txErr },
+                { data: bookingsData, error: bookingErr },
+                { data: allHeatmapData, error: heatmapErr }
+            ] = await Promise.all([
                 txQuery,
-                bookingQuery
+                bookingQuery,
+                allHeatmapBookingsQuery
             ]);
 
             if (txErr) console.error("Error transactions:", txErr);
             if (bookingErr) console.error("Error bookings:", bookingErr);
+            if (heatmapErr) console.error("Error heatmap bookings:", heatmapErr);
 
             const allTxs = txs || [];
-            const allBookings = bookingsData || [];
+            const periodBookings = bookingsData || [];
+            const heatmapBookings = (allHeatmapData && allHeatmapData.length > 0) ? allHeatmapData : periodBookings;
 
             const income = allTxs.filter(t => t.type === 'income');
             const expense = allTxs.filter(t => t.type === 'expense');
 
-            const totalIncome = income.reduce((sum, t) => sum + Number(t.amount), 0);
-            const totalExpenses = expense.reduce((sum, t) => sum + Number(t.amount), 0);
+            const totalIncome = income.reduce((sum, t) => sum + Number(t.amount || 0), 0);
+            const totalExpenses = expense.reduce((sum, t) => sum + Number(t.amount || 0), 0);
 
-            // Calculate Cash Flow by Day (real or zeroed out)
-            const daysMap: { [key: string]: { income: number; expense: number } } = {
-                'Lun': { income: 0, expense: 0 },
-                'Mar': { income: 0, expense: 0 },
-                'Mie': { income: 0, expense: 0 },
-                'Jue': { income: 0, expense: 0 },
-                'Vie': { income: 0, expense: 0 },
-                'Sab': { income: 0, expense: 0 },
-                'Dom': { income: 0, expense: 0 }
-            };
+            // --- 1. DYNAMIC CASH FLOW CHART DATA ---
+            let chartData: { day: string; shortDay?: string; income: number; expense: number }[] = [];
 
-            const dayNames = ['Dom', 'Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab'];
+            if (period === 'day') {
+                // 8 franjas horarias de 2 horas (08:00 a 22:00)
+                const slots = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+                const daySlotMap = slots.map(s => ({ label: s, income: 0, expense: 0 }));
 
-            allTxs.forEach(t => {
-                const d = new Date(t.date);
-                const dayName = dayNames[d.getDay()];
-                if (daysMap[dayName]) {
-                    if (t.type === 'income') daysMap[dayName].income += Number(t.amount);
-                    else daysMap[dayName].expense += Number(t.amount);
-                }
-            });
+                allTxs.forEach(t => {
+                    const d = new Date(t.date);
+                    const h = d.getHours();
+                    let slotIdx = Math.floor((h - 8) / 2);
+                    if (slotIdx < 0) slotIdx = 0;
+                    if (slotIdx >= slots.length) slotIdx = slots.length - 1;
 
-            const chartData = ['Lun', 'Mar', 'Mie', 'Jue', 'Vie', 'Sab', 'Dom'].map(d => ({
-                day: d,
-                income: daysMap[d].income,
-                expense: daysMap[d].expense
-            }));
+                    if (t.type === 'income') daySlotMap[slotIdx].income += Number(t.amount || 0);
+                    else daySlotMap[slotIdx].expense += Number(t.amount || 0);
+                });
 
-            // Calculate Real Peak Hours from Bookings
-            const hoursMap: { [key: string]: number } = {};
-            allBookings.forEach(b => {
+                chartData = daySlotMap.map(s => ({ day: s.label, income: s.income, expense: s.expense }));
+            } else if (period === 'week') {
+                // 7 días de la semana: Lun a Dom con número de día
+                const weekDayNames = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+                const weekMap = weekDayNames.map((name, i) => {
+                    const d = new Date(startDate);
+                    d.setDate(startDate.getDate() + i);
+                    const dateStr = d.toISOString().split('T')[0];
+                    return {
+                        day: `${name} ${d.getDate()}`,
+                        shortDay: name,
+                        dateStr: dateStr,
+                        income: 0,
+                        expense: 0
+                    };
+                });
+
+                allTxs.forEach(t => {
+                    const tDate = new Date(t.date).toISOString().split('T')[0];
+                    const match = weekMap.find(w => w.dateStr === tDate);
+                    if (match) {
+                        if (t.type === 'income') match.income += Number(t.amount || 0);
+                        else match.expense += Number(t.amount || 0);
+                    }
+                });
+
+                chartData = weekMap.map(w => ({ day: w.day, shortDay: w.shortDay, income: w.income, expense: w.expense }));
+            } else if (period === 'month') {
+                // Semanas del mes en curso
+                const lastDayOfMonth = endDate.getDate();
+                const monthWeeks = [
+                    { day: 'Sem 1 (1-7)', minDay: 1, maxDay: 7, income: 0, expense: 0 },
+                    { day: 'Sem 2 (8-14)', minDay: 8, maxDay: 14, income: 0, expense: 0 },
+                    { day: 'Sem 3 (15-21)', minDay: 15, maxDay: 21, income: 0, expense: 0 },
+                    { day: 'Sem 4 (22-28)', minDay: 22, maxDay: 28, income: 0, expense: 0 },
+                    { day: `Sem 5 (29-${lastDayOfMonth})`, minDay: 29, maxDay: lastDayOfMonth, income: 0, expense: 0 },
+                ];
+
+                allTxs.forEach(t => {
+                    const d = new Date(t.date);
+                    const dayNum = d.getDate();
+                    const match = monthWeeks.find(w => dayNum >= w.minDay && dayNum <= w.maxDay);
+                    if (match) {
+                        if (t.type === 'income') match.income += Number(t.amount || 0);
+                        else match.expense += Number(t.amount || 0);
+                    }
+                });
+
+                chartData = monthWeeks.map(w => ({ day: w.day, income: w.income, expense: w.expense }));
+            }
+
+            // --- 2. HEATMAP HORARIOS (08:00 a 23:00) ---
+            const operatingHours = [
+                '08:00', '09:00', '10:00', '11:00', '12:00', '13:00',
+                '14:00', '15:00', '16:00', '17:00', '18:00', '19:00',
+                '20:00', '21:00', '22:00', '23:00'
+            ];
+
+            const hoursCountMap: { [key: string]: number } = {};
+            operatingHours.forEach(h => { hoursCountMap[h] = 0; });
+
+            heatmapBookings.forEach(b => {
                 if (b.start_time) {
-                    const hourKey = b.start_time.substring(0, 5);
-                    hoursMap[hourKey] = (hoursMap[hourKey] || 0) + 1;
+                    const rawHour = b.start_time.substring(0, 2);
+                    const hourKey = `${rawHour}:00`;
+                    if (hoursCountMap[hourKey] !== undefined) {
+                        hoursCountMap[hourKey]++;
+                    }
                 }
             });
 
-            const sortedHours = Object.entries(hoursMap).sort((a, b) => b[1] - a[1]);
-            const maxBookingsCount = sortedHours.length > 0 ? sortedHours[0][1] : 1;
-
-            const peakHours = sortedHours.slice(0, 5).map(([hour, count]) => ({
+            const maxHourBookings = Math.max(...Object.values(hoursCountMap), 1);
+            const hoursHeatmap = operatingHours.map(hour => ({
                 hour,
-                count,
-                intensity: Math.round((count / maxBookingsCount) * 100)
+                count: hoursCountMap[hour] || 0,
+                intensity: Math.round(((hoursCountMap[hour] || 0) / maxHourBookings) * 100)
             }));
 
-            // Calculate Real Payment Methods
-            const cashVal = income.filter(t => t.payment_method === 'cash').reduce((sum, t) => sum + Number(t.amount), 0);
-            const transferVal = income.filter(t => t.payment_method === 'transfer').reduce((sum, t) => sum + Number(t.amount), 0);
-            const mpVal = income.filter(t => t.payment_method === 'mercadopago').reduce((sum, t) => sum + Number(t.amount), 0);
+            // Top peak hours
+            const sortedPeakHours = [...hoursHeatmap].sort((a, b) => b.count - a.count);
+            const peakHours = sortedPeakHours.slice(0, 5);
 
-            // Calculate Pending Income from pending bookings
-            const pendingBookingsIncome = allBookings
+            // --- 3. HEATMAP DÍAS DE LA SEMANA (Lunes a Domingo) ---
+            const dayDefs = [
+                { day: 'Lunes', short: 'Lun', dayNum: 1 },
+                { day: 'Martes', short: 'Mar', dayNum: 2 },
+                { day: 'Miércoles', short: 'Mié', dayNum: 3 },
+                { day: 'Jueves', short: 'Jue', dayNum: 4 },
+                { day: 'Viernes', short: 'Vie', dayNum: 5 },
+                { day: 'Sábado', short: 'Sáb', dayNum: 6 },
+                { day: 'Domingo', short: 'Dom', dayNum: 0 }
+            ];
+
+            const daysStats = dayDefs.map(def => ({
+                day: def.day,
+                short: def.short,
+                day_number: def.dayNum,
+                count: 0,
+                revenue: 0,
+                intensity: 0
+            }));
+
+            heatmapBookings.forEach(b => {
+                if (b.date) {
+                    const [y, m, d] = b.date.split('-').map(Number);
+                    const dateObj = new Date(y, m - 1, d);
+                    const dayOfWeek = dateObj.getDay(); // 0 = Dom, 1 = Lun, ...
+                    const dayItem = daysStats.find(d => d.day_number === dayOfWeek);
+                    if (dayItem) {
+                        dayItem.count++;
+                        dayItem.revenue += Number(b.total_price || 0);
+                    }
+                }
+            });
+
+            const maxDayBookings = Math.max(...daysStats.map(d => d.count), 1);
+            daysStats.forEach(d => {
+                d.intensity = Math.round((d.count / maxDayBookings) * 100);
+            });
+
+            // --- 4. HEATMAP MATRIZ 2D (Día x Horario) ---
+            const matrixHeatmap = dayDefs.map(def => {
+                return operatingHours.map(hour => {
+                    let cellCount = 0;
+                    heatmapBookings.forEach(b => {
+                        if (b.date && b.start_time) {
+                            const [y, m, d] = b.date.split('-').map(Number);
+                            const dateObj = new Date(y, m - 1, d);
+                            if (dateObj.getDay() === def.dayNum) {
+                                const rawHour = b.start_time.substring(0, 2);
+                                const hKey = `${rawHour}:00`;
+                                if (hKey === hour) {
+                                    cellCount++;
+                                }
+                            }
+                        }
+                    });
+                    return {
+                        day: def.day,
+                        day_short: def.short,
+                        day_number: def.dayNum,
+                        hour: hour,
+                        count: cellCount,
+                        intensity: 0
+                    };
+                });
+            });
+
+            let maxCellCount = 1;
+            matrixHeatmap.forEach(row => {
+                row.forEach(cell => {
+                    if (cell.count > maxCellCount) maxCellCount = cell.count;
+                });
+            });
+            matrixHeatmap.forEach(row => {
+                row.forEach(cell => {
+                    cell.intensity = Math.round((cell.count / maxCellCount) * 100);
+                });
+            });
+
+            // --- 5. PAYMENT METHODS & PENDING ---
+            const cashVal = income.filter(t => t.payment_method === 'cash').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+            const transferVal = income.filter(t => t.payment_method === 'transfer').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+            const mpVal = income.filter(t => t.payment_method === 'mercadopago').reduce((sum, t) => sum + Number(t.amount || 0), 0);
+
+            const pendingBookingsIncome = periodBookings
                 .filter(b => b.payment_status === 'pending' || b.status === 'pending')
                 .reduce((sum, b) => sum + Number(b.total_price || 0), 0);
 
@@ -1003,16 +1160,16 @@ export const api = {
                 net_income: totalIncome - totalExpenses,
                 profit_margin: totalIncome > 0 ? Math.round(((totalIncome - totalExpenses) / totalIncome) * 100) : 0,
 
-                income_bookings: income.filter(t => t.category === 'booking').reduce((sum, t) => sum + Number(t.amount), 0),
-                income_tournaments: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount), 0),
-                income_shop: income.filter(t => t.category === 'shop').reduce((sum, t) => sum + Number(t.amount), 0),
+                income_bookings: income.filter(t => t.category === 'booking').reduce((sum, t) => sum + Number(t.amount || 0), 0),
+                income_tournaments: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount || 0), 0),
+                income_shop: income.filter(t => t.category === 'shop').reduce((sum, t) => sum + Number(t.amount || 0), 0),
 
                 pending_income: pendingBookingsIncome,
                 occupancy_rate: 0,
 
                 revenue_sources: [
-                    { name: 'Alquiler Canchas', value: income.filter(t => t.category === 'booking').reduce((sum, t) => sum + Number(t.amount), 0), color: '#38bdf8' },
-                    { name: 'Inscripción Torneos', value: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount), 0), color: '#f59e0b' },
+                    { name: 'Alquiler Canchas', value: income.filter(t => t.category === 'booking').reduce((sum, t) => sum + Number(t.amount || 0), 0), color: '#38bdf8' },
+                    { name: 'Inscripción Torneos', value: income.filter(t => t.category === 'tournament_fee').reduce((sum, t) => sum + Number(t.amount || 0), 0), color: '#f59e0b' },
                 ],
                 payment_methods: [
                     { name: 'Efectivo', value: cashVal, color: '#22c55e' },
@@ -1020,7 +1177,11 @@ export const api = {
                     { name: 'Mercado Pago', value: mpVal, color: '#009ee3' }
                 ],
                 peak_hours: peakHours,
+                days_heatmap: daysStats,
+                hours_heatmap: hoursHeatmap,
+                matrix_heatmap: matrixHeatmap,
                 chart_data: chartData,
+                period_type: period,
                 top_bookers: []
             };
         },
@@ -1144,13 +1305,19 @@ export const api = {
             }
             return true;
         },
-        async searchUsersForMention(query: string) {
-            if (!query.trim()) return [];
-            const { data, error } = await supabase
+        async searchUsersForMention(query: string = '') {
+            let req = supabase
                 .from('profiles')
-                .select('id, name, lastname, profile_picture_url, role')
-                .or(`name.ilike.%${query}%,lastname.ilike.%${query}%`)
-                .limit(8);
+                .select('id, name, lastname, profile_picture_url, role, category');
+
+            const cleanQuery = query.trim();
+            if (cleanQuery) {
+                req = req.or(`name.ilike.%${cleanQuery}%,lastname.ilike.%${cleanQuery}%,email.ilike.%${cleanQuery}%`);
+            }
+
+            const { data, error } = await req
+                .order('name', { ascending: true })
+                .limit(20);
 
             if (error) {
                 console.error("Error searching players for mention:", error);
