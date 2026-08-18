@@ -1,9 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { UserProfile, Institution } from '../types';
+import { UserProfile, Institution, UserClubMembership } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { User, Mail, Award, MapPin, Phone, Edit2, Shield, CreditCard, Calendar, X, Check, Save, AlertTriangle, Camera, UploadCloud, Loader2 } from 'lucide-react';
+import { 
+    User, Mail, Award, MapPin, Phone, Edit2, Shield, CreditCard, Calendar, X, Check, Save, 
+    AlertTriangle, Camera, UploadCloud, Loader2, Star, Plus, Trash2, Sparkles, Building as BuildingIcon, CheckCircle2, Smartphone 
+} from 'lucide-react';
 import ImageCropper from '../components/ImageCropper';
 import imageCompression from 'browser-image-compression';
 
@@ -18,6 +21,13 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
     const [institutions, setInstitutions] = useState<Institution[]>([]);
     const { addToast } = useToast();
 
+    // Memberships Modal State
+    const [showAddMembershipModal, setShowAddMembershipModal] = useState(false);
+    const [newInstId, setNewInstId] = useState('');
+    const [newMemberNumber, setNewMemberNumber] = useState('');
+    const [newIsPrimary, setNewIsPrimary] = useState(false);
+    const [savingMembership, setSavingMembership] = useState(false);
+
     // Form State
     const [formData, setFormData] = useState({
         name: user.name || '',
@@ -27,6 +37,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         category: user.category || '',
         gender: user.gender || '',
         institution_id: user.institution_id || '',
+        show_whatsapp: user.show_whatsapp !== false,
         newPassword: '',
         confirmPassword: ''
     });
@@ -54,6 +65,60 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         });
     }, []);
 
+    const userMemberships = api.memberships.getUserMemberships(user);
+
+    const handleSetPrimaryClub = async (institutionId: string) => {
+        try {
+            await api.memberships.setPrimary(user, institutionId);
+            addToast("Club principal actualizado.", "success");
+            onProfileUpdate();
+        } catch (e: any) {
+            addToast("Error al definir club principal: " + e.message, "error");
+        }
+    };
+
+    const handleRemoveClub = async (institutionId: string) => {
+        if (!confirm("¿Deseas desvincularte de este club?")) return;
+        try {
+            await api.memberships.removeMembership(user, institutionId);
+            addToast("Membresía eliminada.", "info");
+            onProfileUpdate();
+        } catch (e: any) {
+            addToast("Error al eliminar membresía: " + e.message, "error");
+        }
+    };
+
+    const handleAddMembershipSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newInstId) {
+            addToast("Selecciona un club para sumar la membresía.", "warning");
+            return;
+        }
+
+        setSavingMembership(true);
+        try {
+            const instObj = institutions.find(i => i.id === newInstId);
+            await api.memberships.addMembership(user, {
+                institution_id: newInstId,
+                institution_name: instObj?.name || '',
+                member_number: newMemberNumber.trim() || undefined,
+                is_primary: newIsPrimary,
+                status: 'pending'
+            });
+
+            addToast("Membresía solicitada con éxito. Pendiente de validación.", "success");
+            setShowAddMembershipModal(false);
+            setNewInstId('');
+            setNewMemberNumber('');
+            setNewIsPrimary(false);
+            onProfileUpdate();
+        } catch (e: any) {
+            addToast(e.message || "Error al agregar membresía", "error");
+        } finally {
+            setSavingMembership(false);
+        }
+    };
+
     // Update form data when user prop changes or modal opens
     useEffect(() => {
         setFormData({
@@ -64,6 +129,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             category: user.category || '',
             gender: user.gender || '',
             institution_id: user.institution_id || '',
+            show_whatsapp: user.show_whatsapp !== false,
             newPassword: '',
             confirmPassword: ''
         });
@@ -132,7 +198,8 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             dni: formData.dni,
             category: formData.category,
             gender: formData.gender,
-            institution_id: formData.institution_id
+            institution_id: formData.institution_id,
+            show_whatsapp: formData.show_whatsapp
         };
 
         // Fix: Convert empty string UUIDs to null to avoid Postgres error
@@ -281,10 +348,112 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                             <InfoField label="Email" value={user.email} icon={Mail} />
                             <InfoField label="Teléfono" value={user.phone || 'No registrado'} icon={Phone} />
                             <InfoField label="DNI / Documento" value={user.dni || 'No registrado'} icon={CreditCard} />
-                            <InfoField label="Club / Institución" value={user.institution || 'Sin club asignado'} icon={MapPin} />
+                            <InfoField label="Club Principal" value={user.institution || 'Sin club principal'} icon={MapPin} />
                             <InfoField label="Rol en Sistema" value={user.role} icon={Shield} className="capitalize" />
+                            <InfoField
+                                label="Condición General"
+                                value={user.is_member ? `Socio Oficial ${user.member_number ? `(#${user.member_number})` : ''}` : 'Invitado / No Socio'}
+                                icon={Award}
+                                className={user.is_member ? 'text-primary font-bold' : 'text-slate-400'}
+                            />
+                            <InfoField 
+                                label="Disponibilidad Desafíos" 
+                                value={user.show_whatsapp === false ? 'Desactivado (Sin retos)' : 'Activo (Recibe y envía retos)'} 
+                                icon={Smartphone} 
+                                className={user.show_whatsapp === false ? 'text-slate-400' : 'text-green-400 font-semibold'}
+                            />
                             <InfoField label="Estado" value={memberSince} icon={Check} className={user.is_approved ? "text-green-400" : "text-yellow-400"} />
                         </div>
+                    </Card>
+
+                    {/* CLUB MEMBERSHIPS SECTION */}
+                    <Card className="space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <BuildingIcon className="text-primary" size={20} /> Mis Membresías de Clubes
+                                </h3>
+                                <p className="text-xs text-muted mt-0.5">
+                                    Define tu club principal y suma todos los clubes de los que seas socio para acceder a tarifas preferenciales.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setNewInstId('');
+                                    setNewMemberNumber('');
+                                    setNewIsPrimary(userMemberships.length === 0);
+                                    setShowAddMembershipModal(true);
+                                }}
+                                className="px-3 py-1.5 bg-primary/10 hover:bg-primary/20 text-primary border border-primary/20 hover:border-primary/40 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0"
+                            >
+                                <Plus size={14} /> Sumar Club
+                            </button>
+                        </div>
+
+                        {userMemberships.length === 0 ? (
+                            <div className="text-center py-6 text-muted text-xs border border-dashed border-white/10 rounded-xl">
+                                No tienes membresías registradas. Haz clic en "Sumar Club" para registrarte como socio.
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {userMemberships.map((m, idx) => {
+                                    const instObj = institutions.find(i => i.id === m.institution_id);
+                                    const clubName = instObj?.name || m.institution_name || 'Club';
+                                    const isPrimary = m.is_primary || (user.institution_id === m.institution_id && !userMemberships.some(other => other.is_primary && other.institution_id !== m.institution_id));
+                                    const isActive = m.status === 'active' || m.status === undefined;
+
+                                    return (
+                                        <div key={idx} className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${
+                                            isPrimary ? 'bg-primary/10 border-primary/40' : 'bg-sidebar/50 border-white/5'
+                                        }`}>
+                                            <div className="space-y-1">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-white text-sm">{clubName}</span>
+                                                    {isPrimary ? (
+                                                        <span className="text-[10px] bg-primary text-dark font-black px-2 py-0.5 rounded-md flex items-center gap-1 shadow-sm">
+                                                            <Star size={10} className="fill-dark" /> Club Principal
+                                                        </span>
+                                                    ) : (
+                                                        <button
+                                                            onClick={() => handleSetPrimaryClub(m.institution_id)}
+                                                            className="text-[10px] bg-white/5 hover:bg-white/10 text-muted hover:text-white px-2 py-0.5 rounded-md border border-white/10 transition-colors"
+                                                            title="Establecer como mi club principal de representación"
+                                                        >
+                                                            Hacer Principal
+                                                        </button>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+                                                    {instObj?.city && <span>{instObj.city}</span>}
+                                                    {m.member_number ? (
+                                                        <span className="text-slate-300">N° Socio: <strong className="text-white">{m.member_number}</strong></span>
+                                                    ) : (
+                                                        <span className="text-slate-500 italic">Sin N° de carnet</span>
+                                                    )}
+                                                    <span>•</span>
+                                                    <span className={`font-semibold ${isActive ? 'text-green-400' : 'text-yellow-400'}`}>
+                                                        {isActive ? '✓ Tarifa Socio Activa' : '⏳ Pendiente de Aprobación'}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+                                                {userMemberships.length > 1 && (
+                                                    <button
+                                                        onClick={() => handleRemoveClub(m.institution_id)}
+                                                        className="p-1.5 text-muted hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                        title="Eliminar vinculación con este club"
+                                                    >
+                                                        <Trash2 size={14} />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
                     </Card>
                 </div>
 
@@ -364,6 +533,22 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                     <label className="text-xs text-muted uppercase font-bold">Teléfono</label>
                                     <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors" value={formData.phone} onChange={e => setFormData({ ...formData, phone: e.target.value })} placeholder="+54 9 ..." />
                                 </div>
+                                <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex items-center justify-between">
+                                    <div className="space-y-0.5 pr-3">
+                                        <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <Smartphone size={14} className="text-green-400" /> Activar Desafíos y WhatsApp
+                                        </span>
+                                        <p className="text-[10px] text-muted">
+                                            Al estar activo, podrás enviar y recibir desafíos de partidos por WhatsApp y mensajes internos con otros miembros de la comunidad.
+                                        </p>
+                                    </div>
+                                    <input 
+                                        type="checkbox"
+                                        className="w-4 h-4 accent-primary cursor-pointer shrink-0"
+                                        checked={formData.show_whatsapp}
+                                        onChange={e => setFormData({ ...formData, show_whatsapp: e.target.checked })}
+                                    />
+                                </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1">
                                         <label className="text-xs text-muted uppercase font-bold">DNI (Requerido para foto)</label>
@@ -392,18 +577,35 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                         <p className="text-xs text-yellow-200"><span className="font-bold">Atención:</span> Al cambiar de institución, tu perfil deberá ser validado nuevamente.</p>
                                     </div>
                                 )}
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Categoría</label>
-                                    <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
-                                        <option value="">Seleccionar Categoría</option>
-                                        <option value="1ra">1ra</option>
-                                        <option value="2da">2da</option>
-                                        <option value="3ra">3ra</option>
-                                        <option value="4ta">4ta</option>
-                                        <option value="5ta">5ta</option>
-                                        <option value="Open">Open</option>
-                                    </select>
-                                </div>
+                                {user.role === 'player' ? (
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                            <span>Categoría Oficial</span>
+                                            <span className="text-[10px] text-primary lowercase font-normal">(Homologada por el Club)</span>
+                                        </label>
+                                        <div className="w-full bg-sidebar/50 border border-white/10 rounded-xl p-3 text-white flex items-center justify-between">
+                                            <span className="font-bold text-sm text-primary">{user.category ? `${user.category} Categoría` : 'Pendiente de Asignación'}</span>
+                                            <span className="text-[10px] text-muted">Solo editable por tu Profesor/Club</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold">Categoría</label>
+                                        <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm" value={formData.category} onChange={e => setFormData({ ...formData, category: e.target.value })}>
+                                            <option value="">Seleccionar Categoría</option>
+                                            <optgroup label="Sistema Estándar">
+                                                <option value="1ra">1ra</option>
+                                                <option value="2da">2da</option>
+                                                <option value="3ra">3ra</option>
+                                                <option value="4ta">4ta</option>
+                                                <option value="5ta">5ta</option>
+                                                <option value="6ta">6ta</option>
+                                                <option value="7ma">7ma</option>
+                                                <option value="Open">Open</option>
+                                            </optgroup>
+                                        </select>
+                                    </div>
+                                )}
 
                                 {/* Password Change Section for Users */}
                                 <div className="pt-3 border-t border-white/10 space-y-3">
@@ -446,6 +648,91 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                     </div>
                 </div>
             )}
+            {/* ADD MEMBERSHIP MODAL */}
+            {showAddMembershipModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col">
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                <Plus size={18} className="text-primary" /> Sumar Membresía de Club
+                            </h3>
+                            <button onClick={() => setShowAddMembershipModal(false)} className="text-muted hover:text-white transition-colors">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleAddMembershipSubmit} className="p-6 space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-muted uppercase font-bold">Seleccionar Club / Institución</label>
+                                <select 
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-xs font-semibold focus:outline-none focus:border-primary transition-colors"
+                                    value={newInstId}
+                                    onChange={e => setNewInstId(e.target.value)}
+                                    required
+                                >
+                                    <option value="">Selecciona un club</option>
+                                    {institutions
+                                        .filter(inst => !userMemberships.some(m => m.institution_id === inst.id))
+                                        .map(inst => (
+                                            <option key={inst.id} value={inst.id}>
+                                                {inst.name} {inst.city ? `(${inst.city})` : ''}
+                                            </option>
+                                        ))
+                                    }
+                                </select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-muted uppercase font-bold">Número de Socio / Carnet (Opcional)</label>
+                                <input 
+                                    type="text"
+                                    placeholder="Ej: 45892"
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-primary transition-colors"
+                                    value={newMemberNumber}
+                                    onChange={e => setNewMemberNumber(e.target.value)}
+                                />
+                            </div>
+
+                            <div className="bg-white/5 p-3 rounded-xl border border-white/10 flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <span className="text-xs font-bold text-white flex items-center gap-1">
+                                        <Star size={12} className="text-primary" /> Club Principal
+                                    </span>
+                                    <p className="text-[10px] text-muted">Aparecerá en tu perfil público y torneos como tu club de cabecera.</p>
+                                </div>
+                                <input 
+                                    type="checkbox"
+                                    className="w-4 h-4 accent-primary cursor-pointer"
+                                    checked={newIsPrimary}
+                                    onChange={e => setNewIsPrimary(e.target.checked)}
+                                />
+                            </div>
+
+                            <div className="bg-primary/5 p-3 rounded-xl border border-primary/20 text-[11px] text-slate-300">
+                                ℹ️ Una vez enviada, los administradores de la institución podrán validar tu condición de socio oficial para aplicar las tarifas preferenciales.
+                            </div>
+
+                            <div className="pt-3 border-t border-white/10 flex justify-end gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddMembershipModal(false)}
+                                    className="px-4 py-2 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={savingMembership}
+                                    className="px-6 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
+                                >
+                                    {savingMembership ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Enviar Solicitud
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* Crop Modal */}
             {cropModalOpen && tempImageSrc && (
                 <ImageCropper

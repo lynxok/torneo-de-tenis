@@ -5,8 +5,10 @@ import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { 
     Building, MapPin, Plus, Lightbulb, Sun, X, Save, 
-    Instagram, Globe, Phone, Mail, Car, Wifi, Utensils, Droplets, ShoppingBag, Clock, ShieldCheck 
+    Instagram, Globe, Phone, Mail, Car, Wifi, Utensils, Droplets, ShoppingBag, Clock, ShieldCheck,
+    ArrowRightLeft, Layers, Info, Award
 } from 'lucide-react';
+import { CATEGORY_EQUIVALENCES } from '../utils/categories';
 
 interface AdminInstitutionsProps {
     user?: UserProfile;
@@ -373,19 +375,41 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                             </div>
 
                             <div className="border-t border-white/10 pt-4">
-                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">Valores y Extras</h4>
-                                <div className="grid grid-cols-2 gap-4 mb-4">
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-3 text-muted text-xs">$</span>
-                                        <input type="number" className="w-full bg-sidebar border border-white/10 rounded-xl pl-6 p-3 text-white focus:outline-none focus:border-primary" 
-                                            value={formData.price_day || ''} onChange={e => setFormData({...formData, price_day: parseInt(e.target.value)})} placeholder="Precio Día" />
-                                        <div className="text-[10px] text-muted mt-1 text-center">Hora Diurna</div>
+                                <h4 className="text-sm font-bold text-white mb-3 flex items-center gap-2">Tarifas y Valores de Cancha</h4>
+                                
+                                <div className="space-y-3 mb-4">
+                                    <div className="text-xs font-bold text-muted uppercase">Tarifa General (Invitados / No Socios)</div>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-3 text-muted text-xs">$</span>
+                                            <input type="number" className="w-full bg-sidebar border border-white/10 rounded-xl pl-6 p-3 text-white focus:outline-none focus:border-primary text-sm" 
+                                                value={formData.price_day || ''} onChange={e => setFormData({...formData, price_day: parseInt(e.target.value)})} placeholder="Precio Día" />
+                                            <div className="text-[10px] text-muted mt-1 text-center">Hora Diurna (Invitado)</div>
+                                        </div>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-3 text-muted text-xs">$</span>
+                                            <input type="number" className="w-full bg-sidebar border border-white/10 rounded-xl pl-6 p-3 text-white focus:outline-none focus:border-primary text-sm" 
+                                                value={formData.price_night || ''} onChange={e => setFormData({...formData, price_night: parseInt(e.target.value)})} placeholder="Precio Noche" />
+                                            <div className="text-[10px] text-muted mt-1 text-center">Hora Nocturna (Invitado)</div>
+                                        </div>
                                     </div>
-                                    <div className="relative">
-                                        <span className="absolute left-3 top-3 text-muted text-xs">$</span>
-                                        <input type="number" className="w-full bg-sidebar border border-white/10 rounded-xl pl-6 p-3 text-white focus:outline-none focus:border-primary" 
-                                            value={formData.price_night || ''} onChange={e => setFormData({...formData, price_night: parseInt(e.target.value)})} placeholder="Precio Noche" />
-                                        <div className="text-[10px] text-muted mt-1 text-center">Hora Nocturna</div>
+
+                                    <div className="text-xs font-bold text-primary uppercase pt-2 flex items-center gap-1.5">
+                                        <Award size={14} /> Tarifa Preferencial para Socios Oficiales
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-4 bg-primary/5 p-3 rounded-xl border border-primary/20">
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-3 text-primary text-xs">$</span>
+                                            <input type="number" className="w-full bg-sidebar border border-primary/30 rounded-xl pl-6 p-3 text-white focus:outline-none focus:border-primary text-sm font-semibold" 
+                                                value={formData.price_member_day || ''} onChange={e => setFormData({...formData, price_member_day: parseInt(e.target.value)})} placeholder="Precio Socio Día" />
+                                            <div className="text-[10px] text-primary mt-1 text-center">Hora Diurna (Socio)</div>
+                                        </div>
+                                        <div className="relative">
+                                            <span className="absolute left-3 top-3 text-primary text-xs">$</span>
+                                            <input type="number" className="w-full bg-sidebar border border-primary/30 rounded-xl pl-6 p-3 text-white focus:outline-none focus:border-primary text-sm font-semibold" 
+                                                value={formData.price_member_night || ''} onChange={e => setFormData({...formData, price_member_night: parseInt(e.target.value)})} placeholder="Precio Socio Noche" />
+                                            <div className="text-[10px] text-primary mt-1 text-center">Hora Nocturna (Socio)</div>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -449,6 +473,85 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                                 <label className="text-xs text-muted uppercase font-bold flex items-center gap-2"><Instagram size={12}/> Instagram</label>
                                 <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm" 
                                     value={formData.instagram || ''} onChange={e => setFormData({...formData, instagram: e.target.value})} placeholder="https://instagram.com/..." />
+                            </div>
+
+                            <div className="border-t border-white/10 pt-4 space-y-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
+                                        <Layers size={14} className="text-primary" /> Sistema de Categorías del Club
+                                    </label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm font-medium"
+                                        value={formData.category_system || 'numeric'}
+                                        onChange={e => setFormData({...formData, category_system: e.target.value as any})}
+                                    >
+                                        <option value="numeric">Tradicional / Numérico (1ra, 2da, 3ra, 4ta, 5ta, 6ta, 7ma, Open)</option>
+                                        <option value="letters">Por Letras y Subniveles (A1, A2, B1, B2, C1, C2, D1, D2, Open)</option>
+                                    </select>
+                                    <p className="text-[11px] text-muted">Define cómo se etiquetan y muestran las categorías de torneos y jugadores para este club.</p>
+                                </div>
+
+                                {/* TABLA DE EQUIVALENCIAS VISUAL */}
+                                <div className="bg-black/30 border border-white/10 rounded-xl p-4 space-y-3 mt-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <ArrowRightLeft size={16} className="text-primary" />
+                                            <span className="text-xs font-bold text-white uppercase tracking-wider">Matriz de Equivalencias de Categorías</span>
+                                        </div>
+                                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/20 text-primary font-bold">
+                                            Modo activo: {(formData.category_system || 'numeric') === 'numeric' ? 'Numérico' : 'Letras'}
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-400">
+                                        Esta tabla permite que jugadores y torneos de diferentes clubes compitan y rankeen de forma estandarizada:
+                                    </p>
+                                    <div className="overflow-x-auto rounded-lg border border-white/5">
+                                        <table className="w-full text-left text-xs">
+                                            <thead className="bg-white/5 text-muted uppercase font-bold text-[10px]">
+                                                <tr>
+                                                    <th className="py-2.5 px-3">Nivel</th>
+                                                    <th className={`py-2.5 px-3 ${(formData.category_system || 'numeric') === 'numeric' ? 'text-primary bg-primary/10 font-black' : ''}`}>
+                                                        Sistema Numérico {(formData.category_system || 'numeric') === 'numeric' && '✓'}
+                                                    </th>
+                                                    <th className={`py-2.5 px-3 ${(formData.category_system || 'numeric') === 'letters' ? 'text-primary bg-primary/10 font-black' : ''}`}>
+                                                        Sistema por Letras {(formData.category_system || 'numeric') === 'letters' && '✓'}
+                                                    </th>
+                                                    <th className="py-2.5 px-3 text-right">Referencia</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5 text-slate-300">
+                                                {CATEGORY_EQUIVALENCES.map((eq) => {
+                                                    const isNumActive = (formData.category_system || 'numeric') === 'numeric';
+                                                    const isLetActive = (formData.category_system || 'numeric') === 'letters';
+                                                    return (
+                                                        <tr key={eq.rank} className="hover:bg-white/5 transition-colors">
+                                                            <td className="py-2 px-3 font-mono font-bold text-slate-400">
+                                                                {eq.rank === 99 ? 'OPEN' : `#${eq.rank}`}
+                                                            </td>
+                                                            <td className={`py-2 px-3 ${isNumActive ? 'bg-primary/5 font-bold text-white' : ''}`}>
+                                                                <span className="inline-flex items-center px-2 py-0.5 rounded bg-white/10 text-white font-medium">
+                                                                    {eq.numeric}
+                                                                </span>
+                                                            </td>
+                                                            <td className={`py-2 px-3 ${isLetActive ? 'bg-primary/5 font-bold text-white' : ''}`}>
+                                                                <div className="flex gap-1 flex-wrap">
+                                                                    {eq.letters.map((l, i) => (
+                                                                        <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded bg-white/5 text-slate-200">
+                                                                            {l}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </td>
+                                                            <td className="py-2 px-3 text-right text-muted text-[11px]">
+                                                                {eq.label}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
                             </div>
                             
                             {/* RESTRICTED SECTION: ONLY SUPERADMIN CAN SEE/EDIT MP TOKEN */}

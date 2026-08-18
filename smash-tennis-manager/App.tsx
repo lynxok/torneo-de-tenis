@@ -305,7 +305,7 @@ const AppContent = () => {
               />
             )}
             {activeView === 'rankings' && <Rankings user={effectiveUser} />}
-            {activeView === 'players' && <Players user={effectiveUser} />}
+            {activeView === 'players' && <Players user={effectiveUser} onNavigate={handleNavigate} />}
             {activeView === 'bookings' && <Bookings user={effectiveUser} />}
             {activeView === 'messages' && (
               <Messages

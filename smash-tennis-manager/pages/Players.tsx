@@ -3,16 +3,24 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { UserProfile, Match, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
-import { Search, MapPin, Award, UserPlus, X, Activity, Trophy, Calendar, MessageCircle, Send, Clock, CheckCircle2, LayoutList, LayoutGrid, ChevronRight, MoreHorizontal, Building, Sparkles, Zap } from 'lucide-react';
+import { useToast } from '../components/ui/Toast';
+import { 
+    Search, MapPin, Award, UserPlus, X, Activity, Trophy, Calendar, MessageCircle, Send, 
+    Clock, CheckCircle2, LayoutList, LayoutGrid, ChevronRight, MoreHorizontal, Building, 
+    Sparkles, Zap, Smartphone, Loader2, Lock, AlertTriangle 
+} from 'lucide-react';
+import { getCategoryRank, NUMERIC_CATEGORIES } from '../utils/categories';
 
 interface PlayersProps {
     user: UserProfile;
+    onNavigate?: (view: string, data?: any) => void;
 }
 
-export const Players: React.FC<PlayersProps> = ({ user }) => {
+export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   const [players, setPlayers] = useState<UserProfile[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [loading, setLoading] = useState(true);
+  const { addToast } = useToast();
   
   // Filters
   const [filter, setFilter] = useState('');
@@ -24,6 +32,10 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
   // Modals
   const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showMustActivateModal, setShowMustActivateModal] = useState(false);
+  const [showTargetDisabledModal, setShowTargetDisabledModal] = useState<{ show: boolean; playerName: string }>({ show: false, playerName: '' });
+
+  const isCurrentUserChallengesActive = Boolean(user.phone && user.show_whatsapp !== false);
 
   useEffect(() => {
     const loadData = async () => {
@@ -45,10 +57,11 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
 
   // --- SMART SUGGESTION ALGORITHM (UPDATED) ---
   const suggestions = useMemo(() => {
-      if (!user || players.length === 0) return [];
+      // If current user has challenges disabled, do not show recommendations
+      if (!user || user.show_whatsapp === false || players.length === 0) return [];
 
       return players
-        .filter(p => p.id !== user.id && p.role !== 'admin' && p.role !== 'superadmin') // Exclude self and admins
+        .filter(p => p.id !== user.id && p.role !== 'admin' && p.role !== 'superadmin' && p.show_whatsapp !== false) // Exclude self, admins and users with challenges off
         .map(p => {
             let score = 0;
             let reasons = [];
@@ -58,16 +71,14 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
                 reasons.push('Mismo Club');
             }
 
-            if (user.category && p.category === user.category) {
+            const uRank = getCategoryRank(user.category);
+            const pRank = getCategoryRank(p.category);
+
+            if (uRank !== 99 && pRank !== 99 && uRank === pRank) {
                 score += 30;
                 reasons.push('Misma Categoría');
-            } else if (user.category && p.category) {
-                const cats = ['1ra', '2da', '3ra', '4ta', '5ta'];
-                const uIdx = cats.indexOf(user.category);
-                const pIdx = cats.indexOf(p.category);
-                if (uIdx !== -1 && pIdx !== -1 && Math.abs(uIdx - pIdx) === 1) {
-                    score += 10; // Close category
-                }
+            } else if (uRank !== 99 && pRank !== 99 && Math.abs(uRank - pRank) === 1) {
+                score += 10; // Close category
             }
 
             const myWins = user.matches_won || 0;
@@ -89,18 +100,62 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
   }, [players, user]);
 
 
-  const filteredPlayers = players.filter(p => {
-    const matchesName = p.name.toLowerCase().includes(filter.toLowerCase()) || 
-                        (p.lastname && p.lastname.toLowerCase().includes(filter.toLowerCase()));
-    
-    const matchesCategory = categoryFilter ? p.category === categoryFilter : true;
-    
-    const matchesInstitution = institutionFilter 
-        ? (p.institution_id === institutionFilter) 
-        : true;
+  const filteredPlayers = useMemo(() => {
+    // 1. Base Filter (by search name, category dropdown, institution dropdown)
+    let result = players.filter(p => {
+      // If viewer is player, exclude admins/coordinators/professors
+      if (user.role === 'player' && (p.role === 'admin' || p.role === 'superadmin' || p.role === 'coordinator' || p.role === 'professor')) {
+        return false;
+      }
 
-    return matchesName && matchesCategory && matchesInstitution;
-  });
+      const matchesName = p.name.toLowerCase().includes(filter.toLowerCase()) || 
+                          (p.lastname && p.lastname.toLowerCase().includes(filter.toLowerCase()));
+      
+      const matchesCategory = categoryFilter ? p.category === categoryFilter : true;
+      
+      const matchesInstitution = institutionFilter 
+          ? (p.institution_id === institutionFilter) 
+          : true;
+
+      return matchesName && matchesCategory && matchesInstitution;
+    });
+
+    // 2. Custom Category Sorting Order (uses global category rank)
+    const userRank = getCategoryRank(user.category);
+
+    result.sort((a, b) => {
+        // Exclude self or keep self on top if desired (keep self at top of list)
+        if (a.id === user.id) return -1;
+        if (b.id === user.id) return 1;
+
+        const aRank = getCategoryRank(a.category);
+        const bRank = getCategoryRank(b.category);
+
+        const getDistanceScore = (rank: number) => {
+            if (userRank === 99 || rank === 99) return 100 + rank;
+            if (rank === userRank) return 0; // Same category first
+            if (rank > userRank) {
+                // Lower categories below
+                return rank - userRank; 
+            } else {
+                // Higher categories at the very end
+                return 100 + (userRank - rank);
+            }
+        };
+
+        const scoreA = getDistanceScore(aRank);
+        const scoreB = getDistanceScore(bRank);
+
+        if (scoreA !== scoreB) {
+            return scoreA - scoreB;
+        }
+
+        // Secondary sort: Most wins first
+        return (b.matches_won || 0) - (a.matches_won || 0);
+    });
+
+    return result;
+  }, [players, user, filter, categoryFilter, institutionFilter]);
 
   const handleOpenProfile = (player: UserProfile) => {
     setSelectedPlayer(player);
@@ -108,12 +163,34 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
 
   const handleContact = (e: React.MouseEvent, player: UserProfile) => {
     e.stopPropagation();
+    if (!isCurrentUserChallengesActive) {
+        setShowMustActivateModal(true);
+        return;
+    }
+    const isTargetEligible = Boolean(player.phone && player.show_whatsapp !== false);
+    if (!isTargetEligible) {
+        setShowTargetDisabledModal({
+            show: true,
+            playerName: `${player.name} ${player.lastname || ''}`.trim()
+        });
+        return;
+    }
     if (selectedPlayer?.id !== player.id) setSelectedPlayer(player);
     setShowContactModal(true);
   };
 
   return (
     <div className="space-y-8 animate-fade-up">
+
+      {!isCurrentUserChallengesActive && (
+          <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl flex items-center gap-3 animate-fade-up">
+              <AlertTriangle className="text-yellow-400 shrink-0" size={20} />
+              <div>
+                  <h4 className="text-sm font-bold text-white">Desafíos de Jugadores Desactivados</h4>
+                  <p className="text-xs text-slate-300">Has configurado tu perfil como no disponible para desafíos. Para enviar o recibir retos de partidos de otros jugadores, activa la opción en tu Perfil.</p>
+              </div>
+          </div>
+      )}
       
       {!loading && suggestions.length > 0 && !filter && !categoryFilter && !institutionFilter && (
           <div className="space-y-4">
@@ -212,12 +289,9 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
                     onChange={(e) => setCategoryFilter(e.target.value)}
                 >
                     <option value="">Todas las Categorías</option>
-                    <option value="1ra">1ra Categoría</option>
-                    <option value="2da">2da Categoría</option>
-                    <option value="3ra">3ra Categoría</option>
-                    <option value="4ta">4ta Categoría</option>
-                    <option value="5ta">5ta Categoría</option>
-                    <option value="Open">Open</option>
+                    {NUMERIC_CATEGORIES.map(c => (
+                        <option key={c} value={c}>{c === 'Open' ? 'Open' : `${c} Categoría`}</option>
+                    ))}
                 </select>
                 
                 <div className="relative flex-1 sm:w-64 min-w-[200px]">
@@ -302,13 +376,23 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
                                             <td className="p-4 pr-6 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     {player.id !== user.id && (
-                                                        <button 
-                                                            onClick={(e) => handleContact(e, player)}
-                                                            className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
-                                                            title="Desafiar / Contactar"
-                                                        >
-                                                            <MessageCircle size={16} />
-                                                        </button>
+                                                        !player.phone || player.show_whatsapp === false ? (
+                                                            <button 
+                                                                onClick={(e) => handleContact(e, player)}
+                                                                className="p-2 rounded-lg bg-white/5 text-slate-500 hover:bg-white/10 hover:text-slate-300 border border-white/5 text-xs flex items-center gap-1 transition-all" 
+                                                                title="Este usuario no está habilitado a ser desafiado (falta registro de WhatsApp)"
+                                                            >
+                                                                <Lock size={14} /> <span className="hidden xl:inline text-[10px]">Sin WhatsApp</span>
+                                                            </button>
+                                                        ) : (
+                                                            <button 
+                                                                onClick={(e) => handleContact(e, player)}
+                                                                className="p-2 rounded-lg bg-primary/10 text-primary hover:bg-primary hover:text-white transition-all"
+                                                                title="Desafiar / Contactar"
+                                                            >
+                                                                <MessageCircle size={16} />
+                                                            </button>
+                                                        )
                                                     )}
                                                     <button className="p-2 rounded-lg hover:bg-white/10 text-muted hover:text-white transition-all">
                                                         <ChevronRight size={18} />
@@ -326,59 +410,147 @@ export const Players: React.FC<PlayersProps> = ({ user }) => {
                 {/* GRID VIEW */}
                 {viewMode === 'grid' && (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {filteredPlayers.map(player => (
-                            <Card 
-                                key={player.id} 
-                                className="flex flex-col gap-4 hover:border-primary/50 group cursor-pointer transition-all hover:bg-white/5 relative overflow-hidden"
-                                onClick={() => handleOpenProfile(player)}
-                            >
-                                <div className="absolute top-0 right-0 p-3 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <ArrowUpRightIcon className="text-muted group-hover:text-primary" size={16} />
-                                </div>
-                                <div className="flex items-center gap-4">
-                                    <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-slate-700 to-slate-800 flex items-center justify-center text-2xl font-bold text-white shadow-inner relative">
-                                        {player.name.charAt(0)}
-                                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-4 border-card ${player.is_approved ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                        {filteredPlayers.map(player => {
+                            const isEligible = Boolean(player.phone && player.show_whatsapp !== false);
+                            return (
+                                <Card 
+                                    key={player.id} 
+                                    className="flex flex-col gap-4 hover:border-primary/50 group cursor-pointer transition-all hover:bg-white/5 relative overflow-hidden"
+                                    onClick={() => handleOpenProfile(player)}
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-slate-700 to-slate-800 flex items-center justify-center text-2xl font-bold text-white shadow-inner relative">
+                                            {player.name.charAt(0)}
+                                            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-4 border-card ${player.is_approved ? 'bg-green-500' : 'bg-gray-500'}`}></div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-white text-lg leading-tight group-hover:text-primary transition-colors">
+                                                {player.name} {player.lastname}
+                                            </h4>
+                                            <span className="text-xs text-muted">{player.id === user.id ? 'Tú' : 'Jugador'}</span>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <h4 className="font-bold text-white text-lg leading-tight group-hover:text-primary transition-colors">
-                                            {player.name} {player.lastname}
-                                        </h4>
-                                        <span className="text-xs text-muted">{player.id === user.id ? 'Tú' : 'Jugador'}</span>
+                                    <div className="space-y-2 border-t border-white/5 pt-3">
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted flex items-center gap-2"><MapPin size={14} /> Club</span>
+                                            <span className="text-slate-200 truncate max-w-[120px]">{player.institution || 'Sin club'}</span>
+                                        </div>
+                                        <div className="flex items-center justify-between text-sm">
+                                            <span className="text-muted flex items-center gap-2"><Award size={14} /> Categoría</span>
+                                            <span className="text-slate-200">{player.category || '-'}</span>
+                                        </div>
                                     </div>
-                                </div>
-                                <div className="space-y-2 border-t border-white/5 pt-3">
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-muted flex items-center gap-2"><MapPin size={14} /> Club</span>
-                                        <span className="text-slate-200 truncate max-w-[120px]">{player.institution || 'Sin club'}</span>
-                                    </div>
-                                    <div className="flex items-center justify-between text-sm">
-                                        <span className="text-muted flex items-center gap-2"><Award size={14} /> Categoría</span>
-                                        <span className="text-slate-200">{player.category || '-'}</span>
-                                    </div>
-                                </div>
-                                {player.id !== user.id && (
-                                    <button 
-                                        onClick={(e) => handleContact(e, player)}
-                                        className="mt-2 w-full py-2 rounded-lg bg-white/5 hover:bg-primary hover:text-white text-muted text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                    >
-                                        <MessageCircle size={14} /> Contactar
-                                    </button>
-                                )}
-                            </Card>
-                        ))}
+                                    {player.id !== user.id && (
+                                        !isEligible ? (
+                                            <button 
+                                                onClick={(e) => handleContact(e, player)}
+                                                className="mt-2 w-full py-2 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 text-[11px] font-medium flex items-center justify-center gap-1.5 border border-white/5 transition-all text-center leading-tight"
+                                                title="Este usuario no está habilitado a ser desafiado (falta registro de WhatsApp)"
+                                            >
+                                                <Lock size={12} className="shrink-0 text-yellow-500/80" /> No habilitado a ser desafiado (falta WhatsApp)
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={(e) => handleContact(e, player)}
+                                                className="mt-2 w-full py-2 rounded-lg bg-white/5 hover:bg-primary hover:text-white text-muted text-sm font-medium transition-colors flex items-center justify-center gap-2"
+                                            >
+                                                <MessageCircle size={14} /> Contactar / Desafiar
+                                            </button>
+                                        )
+                                    )}
+                                </Card>
+                            );
+                        })}
                     </div>
                 )}
             </div>
         )}
       </div>
 
+      {/* MUST ACTIVATE WHATSAPP MODAL FOR CURRENT USER */}
+      {showMustActivateModal && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 text-center">
+                  <div className="w-14 h-14 bg-green-500/10 text-green-400 border border-green-500/20 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                      <Smartphone size={28} />
+                  </div>
+                  <div className="space-y-1.5">
+                      <h3 className="text-lg font-bold text-white">Activa tu WhatsApp primero</h3>
+                      <p className="text-xs text-muted leading-relaxed">
+                          Para poder desafiar a otros jugadores y coordinar partidos, primero debes ingresar tu número y activar la opción de WhatsApp en tu Perfil.
+                      </p>
+                  </div>
+                  <div className="flex gap-3 justify-center pt-2">
+                      <button
+                          onClick={() => setShowMustActivateModal(false)}
+                          className="px-4 py-2 rounded-xl text-xs text-muted hover:text-white bg-white/5 transition-colors"
+                      >
+                          Cancelar
+                      </button>
+                      {onNavigate && (
+                          <button
+                              onClick={() => {
+                                  setShowMustActivateModal(false);
+                                  onNavigate('profile');
+                              }}
+                              className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-primary hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all flex items-center gap-1.5"
+                          >
+                              Ir a mi Perfil
+                          </button>
+                      )}
+                  </div>
+              </div>
+          </div>
+      )}
+
+      {/* TARGET NOT ELIGIBLE MODAL */}
+      {showTargetDisabledModal.show && (
+          <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+              <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 text-center">
+                  <div className="w-14 h-14 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-2xl flex items-center justify-center mx-auto shadow-inner">
+                      <Lock size={28} />
+                  </div>
+                  <div className="space-y-2">
+                      <h3 className="text-base font-bold text-white">Usuario no habilitado</h3>
+                      <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-xs text-yellow-200 font-semibold leading-snug">
+                          Este usuario no está habilitado a ser desafiado (falta registro de WhatsApp).
+                      </div>
+                      <p className="text-[11px] text-muted leading-relaxed">
+                          El jugador <strong className="text-white">{showTargetDisabledModal.playerName}</strong> aún no ha completado su número de teléfono o ha desactivado los desafíos en su cuenta.
+                      </p>
+                  </div>
+                  <div className="pt-2 flex justify-center">
+                      <button
+                          onClick={() => setShowTargetDisabledModal({ show: false, playerName: '' })}
+                          className="px-6 py-2 rounded-xl text-xs font-bold text-white bg-white/10 hover:bg-white/20 transition-colors"
+                      >
+                          Entendido
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
+
       {selectedPlayer && (
           <PlayerProfileModal 
             player={selectedPlayer} 
             currentUser={user}
             onClose={() => setSelectedPlayer(null)} 
-            onContact={() => setShowContactModal(true)}
+            onContact={() => {
+                if (!isCurrentUserChallengesActive) {
+                    setShowMustActivateModal(true);
+                    return;
+                }
+                const isTargetEligible = Boolean(selectedPlayer.phone && selectedPlayer.show_whatsapp !== false);
+                if (!isTargetEligible) {
+                    setShowTargetDisabledModal({
+                        show: true,
+                        playerName: `${selectedPlayer.name} ${selectedPlayer.lastname || ''}`.trim()
+                    });
+                    return;
+                }
+                setShowContactModal(true);
+            }}
           />
       )}
 
@@ -434,9 +606,18 @@ const PlayerProfileModal = ({ player, currentUser, onClose, onContact }: { playe
                                 </p>
                              </div>
                              {!isMe && (
-                                 <button onClick={onContact} className="hidden md:flex bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold items-center gap-2 transition-all shadow-lg shadow-primary/20">
-                                    <MessageCircle size={18} /> Desafiar
-                                 </button>
+                                 !player.phone || player.show_whatsapp === false ? (
+                                     <button 
+                                         onClick={onContact} 
+                                         className="hidden md:flex bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10 px-4 py-2 rounded-xl text-xs font-semibold items-center gap-2 transition-colors"
+                                     >
+                                         <Lock size={14} className="text-yellow-500/80" /> No habilitado (falta WhatsApp)
+                                     </button>
+                                 ) : (
+                                     <button onClick={onContact} className="hidden md:flex bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold items-center gap-2 transition-all shadow-lg shadow-primary/20">
+                                         <MessageCircle size={18} /> Desafiar
+                                     </button>
+                                 )
                              )}
                         </div>
                     </div>
@@ -466,16 +647,130 @@ const PlayerProfileModal = ({ player, currentUser, onClose, onContact }: { playe
 };
 
 const ContactModal = ({ toPlayer, currentUser, onClose }: { toPlayer: UserProfile, currentUser: UserProfile, onClose: () => void }) => {
-    const [message, setMessage] = useState(`Hola ${toPlayer.name}, te desafío a un partido.`);
-    const handleSend = (e: React.FormEvent) => { e.preventDefault(); alert("Desafío enviado"); onClose(); };
+    const [message, setMessage] = useState(`¡Hola ${toPlayer.name}! Te encontré en Smash Tennis (${toPlayer.institution || 'Comunidad'}) y vi que jugamos en la misma categoría. ¿Te gustaría armar un partido este fin de semana? 🎾`);
+    const [sending, setSending] = useState(false);
+    const { addToast } = useToast();
+
+    const templates = [
+        { label: "🎾 Desafío Single", text: `¡Hola ${toPlayer.name}! Te desafío a un partido de single amistoso. ¿Qué día y horario te queda cómodo?` },
+        { label: "⚡ Peloteo / Práctica", text: `¡Hola ${toPlayer.name}! ¿Te prendes a un peloteo de práctica y ritmo esta semana en ${toPlayer.institution || 'el club'}?` },
+        { label: "👥 Sumar a Dobles", text: `¡Hola ${toPlayer.name}! Estamos armando un dobles y buscamos un jugador de tu nivel. ¿Te gustaría sumarte?` },
+    ];
+
+    const cleanPhone = toPlayer.phone ? toPlayer.phone.replace(/[^0-9]/g, '') : '';
+    const isWhatsAppAllowed = toPlayer.show_whatsapp !== false;
+    const hasPhone = isWhatsAppAllowed && cleanPhone.length >= 8;
+    // Format Argentina phone if starts with 0 or 15 or lacks country code
+    const formattedPhone = cleanPhone.startsWith('54') ? cleanPhone : `549${cleanPhone.replace(/^0+/, '').replace(/^15/, '')}`;
+    const whatsappUrl = hasPhone ? `https://wa.me/${formattedPhone}?text=${encodeURIComponent(message)}` : null;
+
+    const handleSendAppMessage = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSending(true);
+        try {
+            await api.messages.send({
+                sender_id: currentUser.id,
+                receiver_id: toPlayer.id,
+                content: message,
+                type: 'direct'
+            });
+            addToast(`¡Desafío enviado a ${toPlayer.name}!`, 'success');
+            onClose();
+        } catch (err: any) {
+            addToast(`Error al enviar mensaje: ${err.message}`, 'error');
+        } finally {
+            setSending(false);
+        }
+    };
+
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-            <div className="bg-card border border-white/10 rounded-2xl w-full max-w-lg p-5 shadow-2xl">
-                <h3 className="text-lg font-bold text-white mb-4">Desafiar a {toPlayer.name}</h3>
-                <textarea className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white mb-4" value={message} onChange={e => setMessage(e.target.value)}></textarea>
-                <div className="flex gap-2 justify-end">
-                    <button onClick={onClose} className="px-4 py-2 text-white">Cancelar</button>
-                    <button onClick={handleSend} className="px-4 py-2 bg-primary text-white rounded-xl">Enviar</button>
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-card border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+                <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold">
+                            {toPlayer.name[0]}
+                        </div>
+                        <div>
+                            <h3 className="text-base font-bold text-white leading-none">Desafiar a {toPlayer.name} {toPlayer.lastname || ''}</h3>
+                            <p className="text-xs text-muted mt-1">{toPlayer.institution || 'Sin club'} • Cat. {toPlayer.category || 'Open'}</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-muted hover:text-white transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                <div className="p-6 space-y-4">
+                    {/* Quick templates */}
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] text-muted uppercase font-bold tracking-wider">Plantillas Rápidas</label>
+                        <div className="flex flex-wrap gap-1.5">
+                            {templates.map((tpl, i) => (
+                                <button
+                                    key={i}
+                                    type="button"
+                                    onClick={() => setMessage(tpl.text)}
+                                    className="text-xs bg-white/5 hover:bg-white/10 text-slate-300 px-2.5 py-1 rounded-lg border border-white/10 transition-colors"
+                                >
+                                    {tpl.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-[11px] text-muted uppercase font-bold tracking-wider">Mensaje del Desafío</label>
+                        <textarea 
+                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-primary transition-colors min-h-[100px]" 
+                            value={message} 
+                            onChange={e => setMessage(e.target.value)}
+                        />
+                    </div>
+
+                    {hasPhone ? (
+                        <div className="bg-green-500/10 border border-green-500/20 p-3 rounded-xl flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <span className="text-xs font-bold text-green-300 flex items-center gap-1.5">
+                                    <Smartphone size={14} /> WhatsApp Disponible
+                                </span>
+                                <p className="text-[11px] text-muted">Abre un chat directo con el jugador en WhatsApp con este mensaje.</p>
+                            </div>
+                            <a
+                                href={whatsappUrl || '#'}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={() => {
+                                    addToast("Abriendo WhatsApp...", "info");
+                                    setTimeout(onClose, 500);
+                                }}
+                                className="px-3.5 py-2 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-green-600/20 transition-all shrink-0"
+                            >
+                                <MessageCircle size={14} /> Desafiar por WhatsApp
+                            </a>
+                        </div>
+                    ) : !isWhatsAppAllowed ? (
+                        <div className="bg-white/5 p-3 rounded-xl border border-white/10 text-[11px] text-slate-400">
+                            🔒 Este jugador ha configurado su WhatsApp como privado. Puedes comunicarte directamente enviando un mensaje interno.
+                        </div>
+                    ) : (
+                        <div className="bg-white/5 p-3 rounded-xl border border-white/10 text-[11px] text-slate-400">
+                            ℹ️ Este jugador no tiene teléfono registrado, pero recibirá tu notificación en su buzón interno de Smash Tennis.
+                        </div>
+                    )}
+                </div>
+
+                <div className="p-4 border-t border-white/10 bg-white/5 flex justify-end gap-2">
+                    <button onClick={onClose} className="px-4 py-2 text-xs text-muted hover:text-white transition-colors">
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleSendAppMessage} 
+                        disabled={sending || !message.trim()}
+                        className="px-5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
+                    >
+                        {sending ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Enviar Mensaje en la App
+                    </button>
                 </div>
             </div>
         </div>

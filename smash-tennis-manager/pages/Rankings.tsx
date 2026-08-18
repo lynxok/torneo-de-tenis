@@ -3,6 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { UserProfile } from '../types';
 import { api } from '../services/api';
 import { Medal, Trophy, Search, User, Info, X, Zap, Target, Star, ChevronDown, ChevronUp, History, TrendingUp, Calculator } from 'lucide-react';
+import { getEquivalentCategory, NUMERIC_CATEGORIES } from '../utils/categories';
 
 interface RankingsProps {
     user: UserProfile;
@@ -46,20 +47,22 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
     const [showRulesSummary, setShowRulesSummary] = useState(false);
     const [selectedPlayerForPoints, setSelectedPlayerForPoints] = useState<UserProfile | null>(null);
 
-    const categories = ['Global', '1ra', '2da', '3ra', '4ta', '5ta', 'Open'];
+    const categories = ['Global', ...NUMERIC_CATEGORIES];
 
     const normalizeCategory = (cat?: string): string => {
         if (!cat) return 'Unassigned';
         const c = cat.toLowerCase().trim();
         // Standard variations mapping
-        if (['1ra', 'primera', '1', '1ª'].some(v => c.includes(v))) return '1ra';
-        if (['2da', 'segunda', '2', '2ª'].some(v => c.includes(v))) return '2da';
-        if (['3ra', 'tercera', '3', '3ª'].some(v => c.includes(v))) return '3ra';
-        if (['4ta', 'cuarta', '4', '4ª'].some(v => c.includes(v))) return '4ta';
-        if (['5ta', 'quinta', '5', '5ª'].some(v => c.includes(v))) return '5ta';
+        if (['1ra', 'primera', '1', '1ª', 'a1', 'a'].some(v => c === v || c.includes(v))) return '1ra';
+        if (['2da', 'segunda', '2', '2ª', 'a2'].some(v => c === v || c.includes(v))) return '2da';
+        if (['3ra', 'tercera', '3', '3ª', 'b1', 'b'].some(v => c === v || c.includes(v))) return '3ra';
+        if (['4ta', 'cuarta', '4', '4ª', 'b2'].some(v => c === v || c.includes(v))) return '4ta';
+        if (['5ta', 'quinta', '5', '5ª', 'c1', 'c'].some(v => c === v || c.includes(v))) return '5ta';
+        if (['6ta', 'sexta', '6', '6ª', 'c2'].some(v => c === v || c.includes(v))) return '6ta';
+        if (['7ma', 'septima', '7', '7ª', 'd1', 'd2', 'd'].some(v => c === v || c.includes(v))) return '7ma';
         if (['open', 'libre'].includes(c)) return 'Open';
 
-        return cat; // Fallback for unknown categories
+        return getEquivalentCategory(cat, 'numeric') || cat; // Fallback with equivalence helper
     };
 
     useEffect(() => {

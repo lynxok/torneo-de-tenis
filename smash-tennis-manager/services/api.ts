@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord } from '../types';
+import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership } from '../types';
 
 export const api = {
     settings: {
@@ -199,6 +199,78 @@ export const api = {
         },
         async signOut() {
             return await supabase.auth.signOut();
+        }
+    },
+    memberships: {
+        getUserMemberships(user: UserProfile): UserClubMembership[] {
+            if (user.memberships && Array.isArray(user.memberships) && user.memberships.length > 0) {
+                return user.memberships;
+            }
+            if (user.institution_id) {
+                return [{
+                    institution_id: user.institution_id,
+                    institution_name: user.institution,
+                    member_number: user.member_number,
+                    is_primary: true,
+                    status: user.member_status || (user.is_member ? 'active' : 'pending'),
+                    joined_date: new Date().toISOString()
+                }];
+            }
+            return [];
+        },
+        async saveUserMemberships(userId: string, memberships: UserClubMembership[]) {
+            const primary = memberships.find(m => m.is_primary) || (memberships.length > 0 ? memberships[0] : null);
+            const updates: Partial<UserProfile> = {
+                memberships,
+                institution_id: primary ? primary.institution_id : null as any,
+                member_number: primary ? primary.member_number : '',
+                is_member: primary ? primary.status === 'active' : false,
+                member_status: primary ? primary.status : 'inactive'
+            };
+            return await api.auth.updateProfile(userId, updates);
+        },
+        async addMembership(user: UserProfile, newMembership: UserClubMembership) {
+            const current = this.getUserMemberships(user);
+            const exists = current.some(m => m.institution_id === newMembership.institution_id);
+            if (exists) {
+                throw new Error("Ya tienes una membresía registrada o solicitada en este club.");
+            }
+            const isFirst = current.length === 0;
+            const updated: UserClubMembership[] = [
+                ...current.map(m => newMembership.is_primary ? { ...m, is_primary: false } : m),
+                {
+                    ...newMembership,
+                    is_primary: isFirst ? true : !!newMembership.is_primary,
+                    status: newMembership.status || 'pending',
+                    joined_date: new Date().toISOString()
+                }
+            ];
+            return await this.saveUserMemberships(user.id, updated);
+        },
+        async setPrimary(user: UserProfile, institutionId: string) {
+            const current = this.getUserMemberships(user);
+            const updated = current.map(m => ({
+                ...m,
+                is_primary: m.institution_id === institutionId
+            }));
+            return await this.saveUserMemberships(user.id, updated);
+        },
+        async removeMembership(user: UserProfile, institutionId: string) {
+            const current = this.getUserMemberships(user);
+            const filtered = current.filter(m => m.institution_id !== institutionId);
+            if (filtered.length > 0 && !filtered.some(m => m.is_primary)) {
+                filtered[0].is_primary = true;
+            }
+            return await this.saveUserMemberships(user.id, filtered);
+        },
+        isMemberOf(user: UserProfile, institutionId?: string): boolean {
+            if (!institutionId) return false;
+            const list = this.getUserMemberships(user);
+            const match = list.find(m => m.institution_id === institutionId);
+            if (match) {
+                return match.status === 'active' || match.status === undefined;
+            }
+            return !!(user.is_member && user.institution_id === institutionId);
         }
     },
     tournaments: {
@@ -475,12 +547,38 @@ export const api = {
         }
     },
     matches: {
-        async updateScore(matchId: string, score: any[], winnerId: string) {
+        async updateScore(matchId: string, score: any, winnerId: string) {
+            const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+
             const { error } = await supabase.from('matches').update({
                 score,
                 winner_id: winnerId,
+                scheduling_status: 'finished'
             }).eq('id', matchId);
             if (error) throw error;
+
+            if (winnerId) {
+                try {
+                    // 1. Increment matches_won for the winner
+                    const { data: winnerProfile } = await supabase.from('profiles').select('matches_won').eq('id', winnerId).single();
+                    if (winnerProfile) {
+                        await supabase.from('profiles').update({
+                            matches_won: (winnerProfile.matches_won || 0) + 1
+                        }).eq('id', winnerId);
+                    }
+
+                    // 2. Add ranking point record (50 points per tournament win)
+                    await supabase.from('ranking_history').insert({
+                        player_id: winnerId,
+                        points: 50,
+                        reason: `Victoria en partido de torneo`,
+                        tournament_id: matchData?.tournament_id || null,
+                        date_obtained: new Date().toISOString()
+                    });
+                } catch (rankingErr) {
+                    console.log("Ranking point auto-update fallback (non-blocking):", rankingErr);
+                }
+            }
         },
         async getByUser(userId: string) {
             const { data, error } = await supabase
@@ -577,6 +675,11 @@ export const api = {
             const { data, error } = await supabase.from('institutions').select('*').order('name');
             if (error) throw error;
             return data as Institution[];
+        },
+        async getById(id: string) {
+            const { data, error } = await supabase.from('institutions').select('*').eq('id', id).single();
+            if (error) throw error;
+            return data as Institution;
         },
         async create(data: Partial<Institution>) {
             const { data: res, error } = await supabase.from('institutions').insert(data).select().single();

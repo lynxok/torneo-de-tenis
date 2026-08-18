@@ -2,6 +2,15 @@
 
 export type UserRole = 'player' | 'admin' | 'superadmin' | 'coordinator' | 'professor';
 
+export interface UserClubMembership {
+  institution_id: string;
+  institution_name?: string;
+  member_number?: string;
+  is_primary?: boolean;
+  status?: 'active' | 'pending' | 'inactive';
+  joined_date?: string;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -15,9 +24,14 @@ export interface UserProfile {
   phone?: string;
   dni?: string;
   is_approved?: boolean;
+  is_member?: boolean;
+  member_number?: string;
+  member_status?: 'active' | 'pending' | 'inactive';
+  memberships?: UserClubMembership[];
   matches_won?: number;
   tournaments_won?: number;
   profile_picture_url?: string; // New field for Drive Image
+  show_whatsapp?: boolean; // Privacy setting: allow others to contact via WhatsApp
 }
 
 export interface SystemConfig {
@@ -75,6 +89,8 @@ export interface Institution {
   // Commercial & Configuration
   price_day?: number;
   price_night?: number;
+  price_member_day?: number; // Special price for members
+  price_member_night?: number; // Special night price for members
   
   allow_racket_rental?: boolean; // Toggle for racket rental
   price_racket?: number; // Rental price for rackets
@@ -100,6 +116,7 @@ export interface Institution {
   payment_link?: string;
   mp_access_token?: string; // MercadoPago
   
+  category_system?: 'numeric' | 'letters'; // Configuration for category nomenclature
   is_active?: boolean;
 }
 
@@ -121,7 +138,7 @@ export interface Tournament {
   
   // Legacy fields kept for backward compatibility or default display
   type: 'singles' | 'doubles';
-  gender?: 'M' | 'F' | 'X'; 
+  gender?: 'M' | 'F' | 'X' | 'Mixto' | 'Caballeros' | 'Damas'; 
   category: string; 
 
   // NEW: Multi-competition support

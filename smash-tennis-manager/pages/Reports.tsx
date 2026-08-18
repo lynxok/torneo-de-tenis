@@ -292,21 +292,24 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
                                     <h4 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
                                         <Clock size={16} className="text-amber-400" /> Horarios Pico
                                     </h4>
-                                    <div className="flex-1 space-y-3">
-                                        {stats.peak_hours?.slice(0, 5).map((slot: any, i: number) => (
-                                            <div key={i} className="flex items-center gap-3">
-                                                <div className="w-12 text-right text-xs font-bold text-slate-300">{slot.hour}</div>
-                                                <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
-                                                    <div
-                                                        className={`h-full rounded-full ${i === 0 ? 'bg-amber-500' : 'bg-primary'}`}
-                                                        style={{ width: `${slot.intensity}%` }}
-                                                    ></div>
-                                                </div>
-                                                <div className="text-[10px] text-muted w-12 text-right">{slot.count} Res.</div>
-                                            </div>
-                                        ))}
-                                        {!stats.peak_hours && <div className="text-center text-muted text-xs py-4">Sin datos suficientes</div>}
-                                    </div>
+                                    <div className="flex-1 space-y-3 flex flex-col justify-center">
+                                         {stats.peak_hours && stats.peak_hours.length > 0 ? (
+                                             stats.peak_hours.slice(0, 5).map((slot: any, i: number) => (
+                                                 <div key={i} className="flex items-center gap-3">
+                                                     <div className="w-12 text-right text-xs font-bold text-slate-300">{slot.hour}</div>
+                                                     <div className="flex-1 h-2 bg-slate-800 rounded-full overflow-hidden">
+                                                         <div
+                                                             className={`h-full rounded-full ${i === 0 ? 'bg-amber-500' : 'bg-primary'}`}
+                                                             style={{ width: `${slot.intensity}%` }}
+                                                         ></div>
+                                                     </div>
+                                                     <div className="text-[10px] text-muted w-12 text-right">{slot.count} Res.</div>
+                                                 </div>
+                                             ))
+                                         ) : (
+                                             <div className="text-center text-muted text-xs py-8">Sin datos suficientes de reservas</div>
+                                         )}
+                                     </div>
                                 </Card>
 
                                 {/* Payment Methods Donut */}

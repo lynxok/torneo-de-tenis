@@ -2,7 +2,8 @@
 import React, { useEffect, useState } from 'react';
 import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
-import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2 } from 'lucide-react';
+import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard } from 'lucide-react';
+import { NUMERIC_CATEGORIES } from '../utils/categories';
 
 interface AdminUsersProps {
     user?: UserProfile;
@@ -13,6 +14,14 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     const [institutions, setInstitutions] = useState<Institution[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
+    const [activeTab, setActiveTab] = useState<'members' | 'pending'>('members');
+
+    // Quick Approval State
+    const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
+    const [approvalCategory, setApprovalCategory] = useState<string>('4ta');
+    const [approvalIsMember, setApprovalIsMember] = useState<boolean>(true);
+    const [approvalMemberNumber, setApprovalMemberNumber] = useState<string>('');
+    const [processingApproval, setProcessingApproval] = useState(false);
 
     // Create User Modal State
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -24,7 +33,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         lastname: '',
         role: 'player' as UserRole,
         phone: '',
-        dni: ''
+        dni: '',
+        category: '4ta',
+        is_member: true,
+        member_number: ''
     });
 
     // Edit User Modal State (Super Admin & Admin)
@@ -41,7 +53,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         category: '',
         gender: '',
         role: 'player' as UserRole,
-        institution_id: ''
+        institution_id: '',
+        is_member: false,
+        member_number: '',
+        member_status: 'active' as 'active' | 'pending' | 'inactive'
     });
 
     const isSuperAdmin = user?.role === 'superadmin';
@@ -68,7 +83,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             category: u.category || '',
             gender: u.gender || '',
             role: u.role || 'player',
-            institution_id: u.institution_id || ''
+            institution_id: u.institution_id || '',
+            is_member: !!u.is_member,
+            member_number: u.member_number || '',
+            member_status: u.member_status || 'active'
         });
         setShowEditModal(true);
     };
@@ -88,7 +106,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 category: editFormData.category || null,
                 gender: editFormData.gender || null,
                 role: editFormData.role,
-                institution_id: editFormData.institution_id || null
+                institution_id: editFormData.institution_id || null,
+                is_member: editFormData.is_member,
+                member_number: editFormData.member_number || null,
+                member_status: editFormData.member_status
             };
 
             await api.auth.updateProfile(editingUser.id, updates);
@@ -106,7 +127,6 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 try {
                     await api.auth.updateUserPassword(editingUser.id, editFormData.password.trim());
                 } catch (pwErr: any) {
-                    // If Supabase returns 'New password should be different from the old password', treat as OK
                     if (!pwErr.message?.toLowerCase().includes('should be different')) {
                         throw pwErr;
                     }
@@ -146,18 +166,56 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         }
     };
 
+    const handleQuickApprove = async (targetUser: UserProfile) => {
+        setProcessingApproval(true);
+        try {
+            await api.auth.updateProfile(targetUser.id, {
+                is_approved: true,
+                category: approvalCategory,
+                is_member: approvalIsMember,
+                member_number: approvalMemberNumber || targetUser.member_number || null,
+                member_status: 'active'
+            });
+            alert(`¡${targetUser.name} ha sido aprobado con categoría ${approvalCategory}!`);
+            setApprovingUserId(null);
+            loadUsers();
+        } catch (e: any) {
+            alert('Error al aprobar usuario: ' + e.message);
+        } finally {
+            setProcessingApproval(false);
+        }
+    };
+
+    const handleRejectRequest = async (userId: string) => {
+        if (!confirm('¿Estás seguro de rechazar y desvincular esta solicitud?')) return;
+        try {
+            await api.auth.updateProfile(userId, {
+                institution_id: null,
+                is_approved: false,
+                member_status: 'inactive'
+            });
+            loadUsers();
+        } catch (e: any) {
+            alert('Error: ' + e.message);
+        }
+    };
+
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
         setCreating(true);
 
         try {
-            // If admin creates a user, assign to their institution automatically
             const userPayload: any = {
                 name: newUser.name,
                 lastname: newUser.lastname,
                 role: newUser.role,
                 phone: newUser.phone,
-                dni: newUser.dni
+                dni: newUser.dni,
+                category: newUser.category,
+                is_approved: true,
+                is_member: newUser.is_member,
+                member_number: newUser.member_number || null,
+                member_status: 'active'
             };
 
             if (!isSuperAdmin && user?.institution_id) {
@@ -168,7 +226,18 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
 
             alert('Usuario creado exitosamente.');
             setShowCreateModal(false);
-            setNewUser({ email: '', password: '', name: '', lastname: '', role: 'player', phone: '', dni: '' });
+            setNewUser({
+                email: '',
+                password: '',
+                name: '',
+                lastname: '',
+                role: 'player',
+                phone: '',
+                dni: '',
+                category: '4ta',
+                is_member: true,
+                member_number: ''
+            });
             loadUsers();
         } catch (error: any) {
             console.error(error);
@@ -179,31 +248,37 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     };
 
     // Filter Logic:
-    // 1. Search text match
-    // 2. Institution Scope (Strict: Only see own institution)
-    const filteredUsers = users.filter(u => {
-        const matchesSearch = u.name.toLowerCase().includes(filter.toLowerCase()) ||
-            u.email.toLowerCase().includes(filter.toLowerCase());
-
-        let matchesScope = true;
+    const scopedUsers = users.filter(u => {
         if (!isSuperAdmin && user?.institution_id) {
-            // STRICT: Only show users explicitly assigned to this institution.
-            // Prevents seeing "Global" or "Unassigned" users.
-            matchesScope = u.institution_id === user.institution_id;
+            return u.institution_id === user.institution_id;
         }
+        return true;
+    });
 
-        return matchesSearch && matchesScope;
+    const pendingUsers = scopedUsers.filter(u => !u.is_approved || u.member_status === 'pending');
+    const activeMembers = scopedUsers.filter(u => u.is_approved && u.member_status !== 'pending');
+
+    const displayedUsers = (activeTab === 'pending' ? pendingUsers : activeMembers).filter(u => {
+        return (
+            u.name.toLowerCase().includes(filter.toLowerCase()) ||
+            (u.lastname && u.lastname.toLowerCase().includes(filter.toLowerCase())) ||
+            u.email.toLowerCase().includes(filter.toLowerCase()) ||
+            (u.dni && u.dni.includes(filter)) ||
+            (u.member_number && u.member_number.includes(filter))
+        );
     });
 
     return (
         <div className="space-y-6 animate-fade-up">
-            <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-white">Administración de Usuarios</h2>
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2">
+                        <Users className="text-primary" /> Administración de Socios y Usuarios
+                    </h2>
                     <p className="text-muted text-sm">
                         {isSuperAdmin
-                            ? 'Gestión global de permisos y roles.'
-                            : `Gestionando miembros de ${user?.institution || 'tu institución'}.`}
+                            ? 'Gestión global de permisos, roles y clubes.'
+                            : `Gestión de socios y jugadores de ${user?.institution || 'tu club'}.`}
                     </p>
                 </div>
 
@@ -212,8 +287,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={18} />
                         <input
                             type="text"
-                            placeholder="Buscar por nombre o email..."
-                            className="w-full bg-card border border-white/10 rounded-xl pl-10 pr-4 py-2 text-white focus:outline-none focus:border-primary transition-colors"
+                            placeholder="Buscar nombre, DNI, socio..."
+                            className="w-full bg-card border border-white/10 rounded-xl pl-10 pr-4 py-2 text-white focus:outline-none focus:border-primary transition-colors text-sm"
                             value={filter}
                             onChange={(e) => setFilter(e.target.value)}
                         />
@@ -221,126 +296,280 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                     <button
                         id="btn-create-user"
                         onClick={() => setShowCreateModal(true)}
-                        className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20 whitespace-nowrap"
+                        className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-primary/20 whitespace-nowrap text-sm"
                     >
-                        <UserPlus size={18} /> Nuevo Usuario
+                        <UserPlus size={18} /> Nuevo Socio / Usuario
                     </button>
                 </div>
             </div>
 
-            <div className="bg-card/50 backdrop-blur border border-white/10 rounded-2xl overflow-hidden min-h-[300px]" id="users-table">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-white/5 border-b border-white/10 text-muted text-sm uppercase tracking-wider">
-                                <th className="p-4">Usuario</th>
-                                <th className="p-4">Rol Actual</th>
-                                <th className="p-4 hidden md:table-cell">Institución</th>
-                                <th className="p-4 hidden sm:table-cell">Categoría</th>
-                                <th className="p-4 text-right">Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-white/5">
-                            {loading ? (
-                                <tr><td colSpan={5} className="p-8 text-center text-muted">Cargando usuarios...</td></tr>
-                            ) : filteredUsers.length === 0 ? (
-                                <tr>
-                                    <td colSpan={5} className="p-12 text-center text-muted">
-                                        <div className="flex flex-col items-center gap-2">
-                                            <AlertCircle size={32} className="opacity-50" />
-                                            <p>No se encontraron usuarios bajo tu gestión.</p>
-                                            {!isSuperAdmin && (
-                                                <p className="text-xs max-w-md mx-auto">
-                                                    Solo puedes ver usuarios asignados a <strong>{user?.institution}</strong>.
-                                                    Crea un nuevo usuario para agregarlo a tu lista.
-                                                </p>
-                                            )}
-                                        </div>
-                                    </td>
-                                </tr>
-                            ) : filteredUsers.map((u, index) => (
-                                <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                                    <td className="p-4">
+            {/* TABS HEADER */}
+            <div className="flex border-b border-white/10 gap-4">
+                <button
+                    onClick={() => setActiveTab('members')}
+                    className={`pb-3 font-semibold text-sm flex items-center gap-2 transition-colors relative ${
+                        activeTab === 'members'
+                            ? 'text-primary border-b-2 border-primary'
+                            : 'text-muted hover:text-white'
+                    }`}
+                >
+                    <UserCheck size={18} />
+                    Socios y Jugadores Activos
+                    <span className="bg-white/10 px-2 py-0.5 rounded-full text-xs font-bold text-white">
+                        {activeMembers.length}
+                    </span>
+                </button>
+
+                <button
+                    onClick={() => setActiveTab('pending')}
+                    className={`pb-3 font-semibold text-sm flex items-center gap-2 transition-colors relative ${
+                        activeTab === 'pending'
+                            ? 'text-yellow-400 border-b-2 border-yellow-400'
+                            : 'text-muted hover:text-white'
+                    }`}
+                >
+                    <Clock size={18} />
+                    Solicitudes Pendientes
+                    {pendingUsers.length > 0 && (
+                        <span className="bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 px-2 py-0.5 rounded-full text-xs font-bold animate-pulse">
+                            {pendingUsers.length} nuevas
+                        </span>
+                    )}
+                </button>
+            </div>
+
+            {/* TAB: SOLICITUDES PENDIENTES */}
+            {activeTab === 'pending' && (
+                <div className="space-y-4">
+                    {displayedUsers.length === 0 ? (
+                        <div className="bg-card/40 border border-white/10 rounded-2xl p-12 text-center text-muted">
+                            <CheckCheck size={40} className="mx-auto text-green-400 mb-3 opacity-80" />
+                            <h3 className="text-lg font-bold text-white mb-1">¡Al día! No hay solicitudes pendientes</h3>
+                            <p className="text-sm">Todos los jugadores registrados en tu club han sido verificados.</p>
+                        </div>
+                    ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            {displayedUsers.map(u => (
+                                <div key={u.id} className="bg-card/70 border border-yellow-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between">
+                                    <div className="flex items-start justify-between gap-3 mb-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white">
+                                            <div className="w-12 h-12 rounded-2xl bg-slate-700 flex items-center justify-center font-bold text-lg text-white border border-white/10">
                                                 {u.name.charAt(0)}
                                             </div>
                                             <div>
-                                                <div className="font-bold text-white">{u.name} {u.lastname}</div>
-                                                <div className="text-xs text-muted">{u.email}</div>
+                                                <h4 className="font-bold text-white text-base">{u.name} {u.lastname}</h4>
+                                                <p className="text-xs text-muted">{u.email}</p>
+                                                <div className="flex items-center gap-3 mt-1 text-xs text-slate-300">
+                                                    {u.phone && <span className="flex items-center gap-1"><Phone size={12} className="text-green-400" /> {u.phone}</span>}
+                                                    {u.dni && <span className="flex items-center gap-1"><CreditCard size={12} className="text-blue-400" /> DNI: {u.dni}</span>}
+                                                </div>
                                             </div>
                                         </div>
-                                    </td>
-                                    <td className="p-4">
-                                        <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold uppercase ${u.role === 'admin' ? 'bg-purple-500/20 text-purple-400' :
-                                            u.role === 'superadmin' ? 'bg-red-500/20 text-red-400' :
-                                                u.role === 'professor' ? 'bg-green-500/20 text-green-400' :
-                                                    'bg-blue-500/20 text-blue-400'
-                                            }`}>
-                                            <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role}
+                                        <span className="bg-yellow-500/20 text-yellow-300 text-xs px-2.5 py-1 rounded-full font-bold uppercase border border-yellow-500/30 flex items-center gap-1">
+                                            <Clock size={12} /> Pendiente
                                         </span>
-                                    </td>
-                                    <td className="p-4 text-sm text-slate-300 hidden md:table-cell">
-                                        {u.institution || <span className="text-muted italic">Sin asignar</span>}
-                                    </td>
-                                    <td className="p-4 text-sm text-slate-300 hidden sm:table-cell">
-                                        {u.category || 'N/A'}
-                                    </td>
-                                    <td className="p-4 text-right">
-                                        <div className="flex justify-end gap-2">
-                                            {/* Styled Select with Dark Options */}
-                                            <select
-                                                id={index === 0 ? "user-role-select" : undefined}
-                                                className="bg-slate-800 text-white text-xs py-1.5 px-2 rounded-lg border border-white/10 outline-none cursor-pointer hover:border-white/30 focus:border-primary transition-all shadow-sm appearance-none pr-8 relative"
-                                                style={{ backgroundImage: 'url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22292.4%22%20height%3D%22292.4%22%3E%3Cpath%20fill%3D%22%23FFFFFF%22%20d%3D%22M287%2069.4a17.6%2017.6%200%200%200-13-5.4H18.4c-5%200-9.3%201.8-12.9%205.4A17.6%2017.6%200%200%200%200%2082.2c0%205%201.8%209.3%205.4%2012.9l128%20127.9c3.6%203.6%207.8%205.4%2012.8%205.4s9.2-1.8%2012.8-5.4L287%2095c3.5-3.5%205.4-7.8%205.4-12.8%200-5-1.9-9.2-5.5-12.8z%22%2F%3E%3C%2Fsvg%3E")', backgroundRepeat: 'no-repeat', backgroundPosition: 'right .7em top 50%', backgroundSize: '.65em auto' }}
-                                                value={u.role}
-                                                onChange={(e) => handleRoleUpdate(u.id, e.target.value as UserRole)}
-                                                disabled={!isSuperAdmin && (u.role === 'superadmin' || u.role === 'admin')}
-                                            >
-                                                <option value="player" className="bg-slate-800 text-white">Jugador</option>
-                                                <option value="professor" className="bg-slate-800 text-white">Profesor (Sin Caja)</option>
+                                    </div>
 
-                                                {isSuperAdmin && (
-                                                    <>
-                                                        <option value="admin" className="bg-slate-800 text-white">Admin (Inst)</option>
-                                                        <option value="coordinator" className="bg-slate-800 text-white">Coordinador</option>
-                                                        <option value="superadmin" className="bg-slate-800 text-white">Super Admin</option>
-                                                    </>
-                                                )}
+                                    {/* QUICK APPROVAL BOX */}
+                                    {approvingUserId === u.id ? (
+                                        <div className="bg-slate-900/90 border border-primary/40 rounded-xl p-4 space-y-3 animate-fade-up">
+                                            <h5 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1">
+                                                <Award size={14} /> Homologar Categoría y Membresía
+                                            </h5>
 
-                                                {!isSuperAdmin && (u.role === 'admin' || u.role === 'superadmin' || u.role === 'coordinator') && (
-                                                    <option value={u.role} disabled hidden className="bg-slate-800 text-white">{u.role}</option>
-                                                )}
-                                            </select>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <div>
+                                                    <label className="text-[11px] text-muted font-bold block mb-1">Categoría Oficial</label>
+                                                    <select
+                                                        className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white text-xs focus:border-primary outline-none"
+                                                        value={approvalCategory}
+                                                        onChange={e => setApprovalCategory(e.target.value)}
+                                                    >
+                                                        {NUMERIC_CATEGORIES.map(cat => (
+                                                            <option key={cat} value={cat}>{cat} Categoría</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
 
-                                            {/* Approval Toggle */}
+                                                <div>
+                                                    <label className="text-[11px] text-muted font-bold block mb-1">N° de Socio (Opcional)</label>
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Ej: 1450"
+                                                        className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white text-xs focus:border-primary outline-none"
+                                                        value={approvalMemberNumber}
+                                                        onChange={e => setApprovalMemberNumber(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 p-2 bg-slate-800/50 rounded-lg border border-white/5">
+                                                <input
+                                                    type="checkbox"
+                                                    id={`is-member-check-${u.id}`}
+                                                    className="accent-primary w-4 h-4 cursor-pointer"
+                                                    checked={approvalIsMember}
+                                                    onChange={e => setApprovalIsMember(e.target.checked)}
+                                                />
+                                                <label htmlFor={`is-member-check-${u.id}`} className="text-xs text-slate-300 cursor-pointer select-none">
+                                                    Es Socio Oficial del Club (Tarifa preferencial)
+                                                </label>
+                                            </div>
+
+                                            <div className="flex justify-end gap-2 pt-2">
+                                                <button
+                                                    onClick={() => setApprovingUserId(null)}
+                                                    className="px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white transition-colors"
+                                                >
+                                                    Cancelar
+                                                </button>
+                                                <button
+                                                    onClick={() => handleQuickApprove(u)}
+                                                    disabled={processingApproval}
+                                                    className="px-4 py-1.5 bg-green-500 hover:bg-green-600 text-white font-bold text-xs rounded-lg flex items-center gap-1 shadow-lg shadow-green-500/20"
+                                                >
+                                                    {processingApproval ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Confirmar y Habilitar
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/10">
                                             <button
-                                                onClick={() => handleToggleApproval(u.id, u.is_approved)}
-                                                className={`p-2 rounded-lg transition-all ${u.is_approved
-                                                    ? 'bg-green-500/10 text-green-400 hover:bg-green-500/20'
-                                                    : 'bg-yellow-500/10 text-yellow-400 hover:bg-yellow-500/20 animate-pulse'
-                                                    }`}
-                                                title={u.is_approved ? "Usuario Verificado (Click para desactivar)" : "Usuario Pendiente (Click para aprobar)"}
+                                                onClick={() => handleRejectRequest(u.id)}
+                                                className="px-3 py-1.5 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 text-xs font-semibold transition-colors"
                                             >
-                                                {u.is_approved ? <CheckCheck size={18} /> : <AlertCircle size={18} />}
+                                                Rechazar
                                             </button>
-
-                                            {/* Edit Profile Button (Super Admin & Admin) */}
                                             <button
-                                                onClick={() => openEditModal(u)}
-                                                className="p-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all"
-                                                title="Editar datos del usuario"
+                                                onClick={() => {
+                                                    setApprovingUserId(u.id);
+                                                    setApprovalCategory(u.category || '4ta');
+                                                    setApprovalMemberNumber(u.member_number || '');
+                                                    setApprovalIsMember(true);
+                                                }}
+                                                className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-lg shadow-primary/20 transition-all"
                                             >
-                                                <Edit2 size={18} />
+                                                <CheckCheck size={14} /> Revisar y Aprobar
                                             </button>
                                         </div>
-                                    </td>
-                                </tr>
+                                    )}
+                                </div>
                             ))}
-                        </tbody>
-                    </table>
+                        </div>
+                    )}
                 </div>
-            </div>
+            )}
+
+            {/* TAB: SOCIOS Y JUGADORES ACTIVOS */}
+            {activeTab === 'members' && (
+                <div className="bg-card/50 backdrop-blur border border-white/10 rounded-2xl overflow-hidden min-h-[300px]" id="users-table">
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-left border-collapse">
+                            <thead>
+                                <tr className="bg-white/5 border-b border-white/10 text-muted text-xs uppercase tracking-wider">
+                                    <th className="p-4">Usuario / Socio</th>
+                                    <th className="p-4">Tipo & Rol</th>
+                                    <th className="p-4 hidden md:table-cell">Institución</th>
+                                    <th className="p-4 hidden sm:table-cell">Categoría</th>
+                                    <th className="p-4 hidden lg:table-cell">Contacto</th>
+                                    <th className="p-4 text-right">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/5">
+                                {loading ? (
+                                    <tr><td colSpan={6} className="p-8 text-center text-muted">Cargando usuarios...</td></tr>
+                                ) : displayedUsers.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={6} className="p-12 text-center text-muted">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <AlertCircle size={32} className="opacity-50" />
+                                                <p>No se encontraron socios bajo tu gestión.</p>
+                                                {!isSuperAdmin && (
+                                                    <p className="text-xs max-w-md mx-auto">
+                                                        Solo puedes ver usuarios asignados a <strong>{user?.institution}</strong>.
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ) : displayedUsers.map((u, index) => (
+                                    <tr key={u.id} className="hover:bg-white/5 transition-colors text-sm">
+                                        <td className="p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white border border-white/10">
+                                                    {u.name.charAt(0)}
+                                                </div>
+                                                <div>
+                                                    <div className="font-bold text-white flex items-center gap-1.5">
+                                                        {u.name} {u.lastname}
+                                                        {u.is_member && (
+                                                            <span className="bg-primary/20 text-primary border border-primary/30 text-[10px] px-1.5 py-0.2 rounded font-bold uppercase">
+                                                                Socio {u.member_number ? `#${u.member_number}` : ''}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="text-xs text-muted">{u.email}</div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="p-4">
+                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                                                u.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                                                u.role === 'superadmin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                                                u.role === 'professor' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                                                'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                                            }`}>
+                                                <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-xs text-slate-300 hidden md:table-cell">
+                                            {u.institution || <span className="text-muted italic">Sin asignar</span>}
+                                        </td>
+                                        <td className="p-4 text-xs font-semibold text-primary hidden sm:table-cell">
+                                            {u.category ? `${u.category} Categoría` : <span className="text-muted font-normal">Sin Asignar</span>}
+                                        </td>
+                                        <td className="p-4 text-xs text-muted hidden lg:table-cell">
+                                            <div>{u.phone || '-'}</div>
+                                            {u.dni && <div className="text-[11px] text-slate-400">DNI: {u.dni}</div>}
+                                        </td>
+                                        <td className="p-4 text-right">
+                                            <div className="flex justify-end gap-2">
+                                                {/* Role Select */}
+                                                <select
+                                                    className="bg-slate-800 text-white text-xs py-1.5 px-2 rounded-lg border border-white/10 outline-none cursor-pointer hover:border-white/30 focus:border-primary transition-all shadow-sm"
+                                                    value={u.role}
+                                                    onChange={(e) => handleRoleUpdate(u.id, e.target.value as UserRole)}
+                                                    disabled={!isSuperAdmin && (u.role === 'superadmin' || u.role === 'admin')}
+                                                >
+                                                    <option value="player" className="bg-slate-800 text-white">Jugador</option>
+                                                    <option value="professor" className="bg-slate-800 text-white">Profesor (Sin Caja)</option>
+
+                                                    {isSuperAdmin && (
+                                                        <>
+                                                            <option value="admin" className="bg-slate-800 text-white">Admin (Inst)</option>
+                                                            <option value="coordinator" className="bg-slate-800 text-white">Coordinador</option>
+                                                            <option value="superadmin" className="bg-slate-800 text-white">Super Admin</option>
+                                                        </>
+                                                    )}
+                                                </select>
+
+                                                {/* Edit Profile Button */}
+                                                <button
+                                                    onClick={() => openEditModal(u)}
+                                                    className="p-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all border border-blue-500/20"
+                                                    title="Editar datos del usuario"
+                                                >
+                                                    <Edit2 size={16} />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
 
             {/* EDIT USER MODAL */}
             {showEditModal && editingUser && (
@@ -423,40 +652,54 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Categoría</label>
-                                    <select
-                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
-                                        value={editFormData.category}
-                                        onChange={e => setEditFormData({ ...editFormData, category: e.target.value })}
-                                    >
-                                        <option value="">Sin Categoría</option>
-                                        <option value="1ra">1ra Categoría</option>
-                                        <option value="2da">2da Categoría</option>
-                                        <option value="3ra">3ra Categoría</option>
-                                        <option value="4ta">4ta Categoría</option>
-                                        <option value="5ta">5ta Categoría</option>
-                                        <option value="Open">Open</option>
-                                    </select>
+                            {/* SOCIO & CATEGORIA CONFIG */}
+                            <div className="p-4 bg-slate-900/80 border border-white/10 rounded-xl space-y-3">
+                                <h4 className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                                    <Award size={14} /> Membresía y Nivel en el Club
+                                </h4>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted font-semibold">Categoría Oficial</label>
+                                        <select
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                            value={editFormData.category}
+                                            onChange={e => setEditFormData({ ...editFormData, category: e.target.value })}
+                                        >
+                                            <option value="">Sin Categoría</option>
+                                            {NUMERIC_CATEGORIES.map(cat => (
+                                                <option key={cat} value={cat}>{cat} Categoría</option>
+                                            ))}
+                                            <option value="Open">Open</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted font-semibold">N° de Carnet / Socio</label>
+                                        <input
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                            placeholder="Ej: 00482"
+                                            value={editFormData.member_number}
+                                            onChange={e => setEditFormData({ ...editFormData, member_number: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Género / Rama</label>
-                                    <select
-                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
-                                        value={editFormData.gender}
-                                        onChange={e => setEditFormData({ ...editFormData, gender: e.target.value })}
-                                    >
-                                        <option value="M">Masculino (Caballeros)</option>
-                                        <option value="F">Femenino (Damas)</option>
-                                        <option value="X">Mixto</option>
-                                    </select>
+                                <div className="flex items-center gap-3 pt-1">
+                                    <label className="flex items-center gap-2 text-xs text-white cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4 accent-primary rounded cursor-pointer"
+                                            checked={editFormData.is_member}
+                                            onChange={e => setEditFormData({ ...editFormData, is_member: e.target.checked })}
+                                        />
+                                        <span>Es Socio Activo del Club (Tarifa preferencial)</span>
+                                    </label>
                                 </div>
                             </div>
 
                             {/* Super Admin Specific Controls: Role & Institution */}
-                            {isSuperAdmin ? (
+                            {isSuperAdmin && (
                                 <div className="grid grid-cols-2 gap-4 pt-2 border-t border-white/10">
                                     <div className="space-y-1">
                                         <label className="text-xs text-muted uppercase font-bold">Rol en Sistema</label>
@@ -487,7 +730,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         </select>
                                     </div>
                                 </div>
-                            ) : null}
+                            )}
 
                             <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
                                 <button
@@ -515,7 +758,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
                     <div id="create-user-modal" className="bg-card border border-white/10 rounded-2xl w-full max-w-lg p-0 shadow-2xl relative flex flex-col max-h-[90vh]">
                         <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <h3 className="text-lg font-bold text-white flex items-center gap-2"><UserPlus size={18} /> Crear Nuevo Usuario</h3>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2"><UserPlus size={18} /> Crear Nuevo Socio / Usuario</h3>
                             <button onClick={() => setShowCreateModal(false)} className="text-muted hover:text-white"><X size={20} /></button>
                         </div>
 
@@ -576,26 +819,15 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Rol</label>
-                                    <select
+                                    <label className="text-xs text-muted uppercase font-bold">DNI / Documento</label>
+                                    <input
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
-                                        value={newUser.role}
-                                        onChange={e => setNewUser({ ...newUser, role: e.target.value as UserRole })}
-                                    >
-                                        <option value="player" className="bg-sidebar">Jugador</option>
-                                        <option value="professor" className="bg-sidebar">Profesor (Sin Caja)</option>
-
-                                        {isSuperAdmin && (
-                                            <>
-                                                <option value="admin" className="bg-sidebar">Administrador (Club)</option>
-                                                <option value="coordinator" className="bg-sidebar">Coordinador</option>
-                                                <option value="superadmin" className="bg-sidebar">Super Admin</option>
-                                            </>
-                                        )}
-                                    </select>
+                                        value={newUser.dni}
+                                        onChange={e => setNewUser({ ...newUser, dni: e.target.value })}
+                                    />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Teléfono</label>
+                                    <label className="text-xs text-muted uppercase font-bold">Teléfono / WhatsApp</label>
                                     <input
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
                                         value={newUser.phone}
@@ -604,20 +836,46 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                 </div>
                             </div>
 
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Categoría Inicial</label>
+                                    <select
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={newUser.category}
+                                        onChange={e => setNewUser({ ...newUser, category: e.target.value })}
+                                    >
+                                        {NUMERIC_CATEGORIES.map(cat => (
+                                            <option key={cat} value={cat}>{cat} Categoría</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">N° de Carnet (Opcional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: 00482"
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                        value={newUser.member_number}
+                                        onChange={e => setNewUser({ ...newUser, member_number: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
                             <div className="pt-4 flex justify-end gap-3">
                                 <button
                                     type="button"
                                     onClick={() => setShowCreateModal(false)}
-                                    className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors"
+                                    className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors text-sm"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={creating}
-                                    className="px-6 py-2 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                                    className="px-6 py-2 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-primary/20 disabled:opacity-50 text-sm"
                                 >
-                                    {creating ? <><Loader2 className="animate-spin" size={18} /> Creando...</> : <><Save size={18} /> Crear Usuario</>}
+                                    {creating ? <><Loader2 className="animate-spin" size={18} /> Creando...</> : <><Save size={18} /> Crear Socio</>}
                                 </button>
                             </div>
                         </form>

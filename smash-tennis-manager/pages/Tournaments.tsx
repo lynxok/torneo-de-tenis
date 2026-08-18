@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Tournament, UserProfile } from '../types';
+import { Tournament, UserProfile, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
+import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 
 interface TournamentsProps {
     user: UserProfile;
@@ -16,13 +17,14 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
     const [loading, setLoading] = useState(true);
     const [warningTournament, setWarningTournament] = useState<Tournament | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false); // For admins
+    const [currentInstitution, setCurrentInstitution] = useState<Institution | null>(null);
 
     // Create Modal State
     const [newTournament, setNewTournament] = useState<Partial<Tournament>>({
         name: '',
         type: 'singles',
-        gender: 'M',
-        category: 'Open',
+        gender: 'Caballeros',
+        category: '4ta',
         start_date: '',
         registration_price: 0,
         status: 'draft'
@@ -32,7 +34,12 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
 
     useEffect(() => {
         loadTournaments();
-    }, []);
+        if (user.institution_id) {
+            api.institutions.getById(user.institution_id).then(inst => {
+                if (inst) setCurrentInstitution(inst);
+            }).catch(() => {});
+        }
+    }, [user.institution_id]);
 
     const loadTournaments = async () => {
         setLoading(true);
@@ -44,11 +51,6 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
         } finally {
             setLoading(false);
         }
-    };
-
-    const getCategoryRank = (cat: string) => {
-        const ranks: { [key: string]: number } = { '1ra': 1, '2da': 2, '3ra': 3, '4ta': 4, '5ta': 5, 'Open': 6 };
-        return ranks[cat] || 99;
     };
 
     const handleTournamentClick = (t: Tournament) => {
@@ -110,8 +112,9 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
             addToast("Torneo creado exitosamente", 'success');
             setShowCreateModal(false);
             loadTournaments();
-        } catch (e) {
-            addToast("Error al crear torneo", 'error');
+        } catch (e: any) {
+            console.error("Error al crear torneo:", e);
+            addToast(e?.message ? `Error al crear torneo: ${e.message}` : "Error al crear torneo", 'error');
         }
     };
 
@@ -236,18 +239,30 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                 <label className="text-xs text-muted uppercase font-bold">Nombre del Torneo</label>
                                 <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.name} onChange={e => setNewTournament({ ...newTournament, name: e.target.value })} required />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Categoría</label>
-                                    <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.category} onChange={e => setNewTournament({ ...newTournament, category: e.target.value })}>
-                                        {['1ra', '2da', '3ra', '4ta', '5ta', 'Open'].map(c => <option key={c} value={c}>{c}</option>)}
-                                    </select>
-                                </div>
+                            <div className="grid grid-cols-3 gap-3">
                                 <div className="space-y-1">
                                     <label className="text-xs text-muted uppercase font-bold">Modalidad</label>
                                     <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.type} onChange={e => setNewTournament({ ...newTournament, type: e.target.value as any })}>
                                         <option value="singles">Singles</option>
                                         <option value="doubles">Dobles</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Cuadro / Rama</label>
+                                    <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.gender || 'Caballeros'} onChange={e => setNewTournament({ ...newTournament, gender: e.target.value as any })}>
+                                        <option value="Caballeros">Caballeros</option>
+                                        <option value="Damas">Damas</option>
+                                        <option value="Mixto">Mixto</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Categoría</label>
+                                    <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.category} onChange={e => setNewTournament({ ...newTournament, category: e.target.value })}>
+                                        {getCategoriesForInstitution(
+                                            user.role === 'superadmin' && newTournament.institution_id 
+                                                ? institutions.find(i => i.id === newTournament.institution_id) 
+                                                : currentInstitution
+                                        ).map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
                                 </div>
                             </div>

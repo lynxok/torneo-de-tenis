@@ -4,7 +4,11 @@ import { Booking, UserProfile, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Calendar, Clock, MapPin, X, Loader2, CheckCircle2, DollarSign, Lock, ChevronLeft, ChevronRight, Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet } from 'lucide-react';
+import { 
+    Calendar, Clock, MapPin, X, Loader2, CheckCircle2, DollarSign, Lock, ChevronLeft, ChevronRight, 
+    Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
+    ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, Sparkles, ShieldCheck, Star
+} from 'lucide-react';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   if (user.role === 'admin' || user.role === 'superadmin' || user.role === 'professor') {
@@ -15,20 +19,28 @@ export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
 
 const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'my_bookings' | 'clubs_catalog'>('my_bookings');
+  const [clubSearch, setClubSearch] = useState('');
   const [showNewBooking, setShowNewBooking] = useState(false);
+  const [selectedClubIdForBooking, setSelectedClubIdForBooking] = useState<string | undefined>(undefined);
   const [bookingToReschedule, setBookingToReschedule] = useState<Booking | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
-    loadBookings();
+    loadData();
   }, [user.id]);
 
-  const loadBookings = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
-        const data = await api.bookings.getByUser(user.id);
-        setBookings(data || []);
+        const [bookingsData, instData] = await Promise.all([
+            api.bookings.getByUser(user.id),
+            api.institutions.getAll()
+        ]);
+        setBookings(bookingsData || []);
+        setInstitutions(instData || []);
     } catch (e) {
         console.error(e);
     } finally {
@@ -52,7 +64,7 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
       try {
           await api.bookings.update(booking.id, { status: 'cancelled' });
           addToast('Reserva cancelada correctamente.', 'info');
-          loadBookings();
+          loadData();
       } catch (e) {
           addToast('Error al cancelar la reserva.', 'error');
       }
@@ -60,108 +72,315 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
 
   const handleRescheduleClick = (booking: Booking) => {
       setBookingToReschedule(booking);
+      setSelectedClubIdForBooking(booking.institution_id);
       setShowNewBooking(true);
   };
 
+  const handleBookAtClub = (clubId: string) => {
+      setBookingToReschedule(null);
+      setSelectedClubIdForBooking(clubId);
+      setShowNewBooking(true);
+  };
+
+  const filteredClubs = institutions.filter(inst => 
+      inst.name.toLowerCase().includes(clubSearch.toLowerCase()) ||
+      (inst.city && inst.city.toLowerCase().includes(clubSearch.toLowerCase()))
+  );
+
   return (
     <div className="space-y-6 animate-fade-up">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      {/* Header & Tabs */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-white/10 pb-4">
         <div>
-            <h2 className="text-2xl font-bold text-white">Mis Reservas</h2>
-            <p className="text-muted text-sm">Gestiona tus próximos partidos y turnos.</p>
+            <h2 className="text-2xl font-black text-white tracking-tight">Reservas de Canchas</h2>
+            <p className="text-muted text-sm">Gestiona tus partidos y consulta los clubes disponibles con sus tarifas.</p>
         </div>
-        <button 
-            id="btn-player-book"
-            onClick={() => { setBookingToReschedule(null); setShowNewBooking(true); }}
-            className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
-        >
-            <Plus size={18} /> Hacer una Reserva
-        </button>
+
+        <div className="flex flex-wrap items-center gap-3 w-full md:w-auto">
+            {/* View Switcher */}
+            <div className="flex bg-slate-900/80 p-1 rounded-xl border border-white/10 text-xs">
+                <button
+                    onClick={() => setActiveTab('my_bookings')}
+                    className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
+                        activeTab === 'my_bookings' 
+                            ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                            : 'text-muted hover:text-white'
+                    }`}
+                >
+                    <Calendar size={14} /> Mis Turnos ({bookings.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab('clubs_catalog')}
+                    className={`px-4 py-2 rounded-lg font-bold transition-all flex items-center gap-2 ${
+                        activeTab === 'clubs_catalog' 
+                            ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                            : 'text-muted hover:text-white'
+                    }`}
+                >
+                    <BuildingIcon size={14} /> Ver Clubes y Tarifas ({institutions.length})
+                </button>
+            </div>
+
+            <button 
+                id="btn-player-book"
+                onClick={() => { setBookingToReschedule(null); setSelectedClubIdForBooking(undefined); setShowNewBooking(true); }}
+                className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20 text-xs"
+            >
+                <Plus size={16} /> Reservar Ahora
+            </button>
+        </div>
       </div>
 
       {loading ? (
-        <div className="text-center py-20 text-muted">Cargando reservas...</div>
-      ) : bookings.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
-            <Calendar size={48} className="mb-4 opacity-50" />
-            <p>No tienes reservas registradas.</p>
-            <button onClick={() => { setBookingToReschedule(null); setShowNewBooking(true); }} className="mt-4 text-primary hover:underline text-sm">
-                ¡Reserva tu primera cancha ahora!
-            </button>
-        </div>
+        <div className="text-center py-20 text-muted">Cargando información...</div>
+      ) : activeTab === 'my_bookings' ? (
+        /* MY BOOKINGS TAB */
+        bookings.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
+                <Calendar size={48} className="mb-4 opacity-50 text-primary" />
+                <p className="font-semibold text-white">No tienes turnos reservados.</p>
+                <p className="text-xs text-muted mt-1">Explora los clubes y reserva tu cancha en el horario que prefieras.</p>
+                <div className="flex gap-3 mt-4">
+                    <button onClick={() => setActiveTab('clubs_catalog')} className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-colors">
+                        Ver Tarifario de Clubes
+                    </button>
+                    <button onClick={() => { setBookingToReschedule(null); setSelectedClubIdForBooking(undefined); setShowNewBooking(true); }} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-colors">
+                        Hacer una Reserva
+                    </button>
+                </div>
+            </div>
+        ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {bookings.map(booking => {
+                    const canModify = isModifiable(booking);
+                    const isCancelled = booking.status === 'cancelled';
+
+                    return (
+                        <Card key={booking.id} className={`relative overflow-hidden group hover:border-white/20 transition-all ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
+                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${isCancelled ? 'bg-red-500' : booking.status === 'confirmed' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                            <div className="pl-2">
+                                <div className="flex justify-between items-start mb-2">
+                                    <div className="text-xs font-bold uppercase text-muted flex items-center gap-1">
+                                        <Calendar size={12} /> {new Date(booking.date).toLocaleDateString()}
+                                    </div>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${
+                                        isCancelled ? 'bg-red-500/20 text-red-400' :
+                                        booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
+                                    }`}>
+                                        {isCancelled ? 'Cancelada' : booking.status === 'confirmed' ? 'Confirmada' : 'Pendiente'}
+                                    </span>
+                                </div>
+                                
+                                <h3 className="font-bold text-white text-xl leading-none mb-1">
+                                    {booking.start_time} <span className="text-sm text-muted font-normal">- {booking.end_time}</span>
+                                </h3>
+                                <div className="text-sm text-primary font-bold mb-2">{booking.institutions?.name}</div>
+                                
+                                <div className="flex items-center gap-2 text-xs text-slate-300 bg-white/5 p-2 rounded-lg">
+                                    <MapPin size={12} /> {booking.court_name}
+                                </div>
+
+                                {booking.total_price > 0 && (
+                                    <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
+                                        <span className="text-xs text-muted">Total abonado / estimado</span>
+                                        <span className="text-sm font-bold text-white">${booking.total_price}</span>
+                                    </div>
+                                )}
+                                {booking.extras && (
+                                    <div className="mt-2 text-[10px] text-muted flex flex-wrap gap-2">
+                                        {booking.extras.rackets > 0 && <span className="bg-white/5 px-1.5 py-0.5 rounded">Raquetas: {booking.extras.rackets}</span>}
+                                        {booking.extras.balls && <span className="bg-white/5 px-1.5 py-0.5 rounded">Pelotas: Sí</span>}
+                                    </div>
+                                )}
+
+                                {!isCancelled && (
+                                    <div className="mt-4 pt-3 border-t border-white/10 flex gap-2">
+                                        {canModify ? (
+                                            <>
+                                                <button 
+                                                    onClick={() => handleRescheduleClick(booking)}
+                                                    className="flex-1 py-2 bg-white/5 hover:bg-primary/20 hover:text-primary text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
+                                                >
+                                                    <Edit size={14} /> Reprogramar
+                                                </button>
+                                                <button 
+                                                    onClick={() => handleCancel(booking)}
+                                                    className="py-2 px-3 bg-white/5 hover:bg-red-500/20 hover:text-red-400 text-white text-xs font-bold rounded-lg transition-colors"
+                                                    title="Cancelar Reserva"
+                                                >
+                                                    <CalendarX size={14} />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <div className="w-full py-2 text-[10px] text-center text-muted bg-white/5 rounded-lg flex items-center justify-center gap-1 opacity-70">
+                                                <AlertTriangle size={12} /> Cambios cerrados (24h)
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </Card>
+                    );
+                })}
+            </div>
+        )
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {bookings.map(booking => {
-                const canModify = isModifiable(booking);
-                const isCancelled = booking.status === 'cancelled';
+        /* ALL CLUBS & TARIFFS CATALOG TAB */
+        <div className="space-y-6">
+            {/* Search & Info Banner */}
+            <div className="bg-gradient-to-r from-blue-950/40 via-purple-950/20 to-slate-900 border border-primary/20 p-5 rounded-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-xl">
+                <div className="space-y-1">
+                    <div className="flex items-center gap-2 text-primary font-bold text-sm">
+                        <Award size={18} /> Tarifario y Beneficios Exclusivos de Socios
+                    </div>
+                    <p className="text-xs text-slate-300 max-w-2xl">
+                        A los <strong>socios oficiales</strong> de cada institución se les aplica automáticamente una <strong>tarifa preferencial</strong> en todos los turnos. Si aún no eres socio de una sede, podrás reservar igualmente con la tarifa de invitado.
+                    </p>
+                </div>
 
-                return (
-                    <Card key={booking.id} className={`relative overflow-hidden group hover:border-white/20 transition-all ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
-                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${isCancelled ? 'bg-red-500' : booking.status === 'confirmed' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                        <div className="pl-2">
-                            <div className="flex justify-between items-start mb-2">
-                                <div className="text-xs font-bold uppercase text-muted flex items-center gap-1">
-                                    <Calendar size={12} /> {new Date(booking.date).toLocaleDateString()}
-                                </div>
-                                <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${
-                                    isCancelled ? 'bg-red-500/20 text-red-400' :
-                                    booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                                }`}>
-                                    {isCancelled ? 'Cancelada' : booking.status === 'confirmed' ? 'Confirmada' : 'Pendiente'}
-                                </span>
-                            </div>
-                            
-                            <h3 className="font-bold text-white text-xl leading-none mb-1">
-                                {booking.start_time} <span className="text-sm text-muted font-normal">- {booking.end_time}</span>
-                            </h3>
-                            <div className="text-sm text-primary font-bold mb-2">{booking.institutions?.name}</div>
-                            
-                            <div className="flex items-center gap-2 text-xs text-slate-300 bg-white/5 p-2 rounded-lg">
-                                <MapPin size={12} /> {booking.court_name}
-                            </div>
+                <div className="relative w-full md:w-64 shrink-0">
+                    <Search className="absolute left-3 top-2.5 text-muted" size={16} />
+                    <input 
+                        type="text" 
+                        placeholder="Buscar club o ciudad..." 
+                        className="w-full bg-sidebar border border-white/10 rounded-xl pl-9 pr-3 py-2 text-xs text-white focus:outline-none focus:border-primary transition-colors"
+                        value={clubSearch}
+                        onChange={e => setClubSearch(e.target.value)}
+                    />
+                </div>
+            </div>
 
-                            {booking.total_price > 0 && (
-                                <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
-                                    <span className="text-xs text-muted">Total</span>
-                                    <span className="text-sm font-bold text-white">${booking.total_price}</span>
-                                </div>
-                            )}
-                            {booking.extras && (
-                                <div className="mt-2 text-[10px] text-muted flex flex-wrap gap-2">
-                                    {booking.extras.rackets > 0 && <span className="bg-white/5 px-1.5 py-0.5 rounded">Raquetas: {booking.extras.rackets}</span>}
-                                    {booking.extras.balls && <span className="bg-white/5 px-1.5 py-0.5 rounded">Pelotas: Sí</span>}
-                                </div>
-                            )}
+            {/* Clubs Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {filteredClubs.map(inst => {
+                    const isMemberOfThisClub = api.memberships.isMemberOf(user, inst.id);
+                    const isPrimaryClub = user.institution_id === inst.id || user.memberships?.some(m => m.institution_id === inst.id && m.is_primary);
+                    const hasMemberPricing = Boolean(inst.price_member_day || inst.price_member_night);
+                    const minSlotDuration = inst.config_booking_min_duration || 60;
 
-                            {!isCancelled && (
-                                <div className="mt-4 pt-3 border-t border-white/10 flex gap-2">
-                                    {canModify ? (
-                                        <>
-                                            <button 
-                                                onClick={() => handleRescheduleClick(booking)}
-                                                className="flex-1 py-2 bg-white/5 hover:bg-primary/20 hover:text-primary text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
-                                            >
-                                                <Edit size={14} /> Reprogramar
-                                            </button>
-                                            <button 
-                                                onClick={() => handleCancel(booking)}
-                                                className="py-2 px-3 bg-white/5 hover:bg-red-500/20 hover:text-red-400 text-white text-xs font-bold rounded-lg transition-colors"
-                                                title="Cancelar Reserva"
-                                            >
-                                                <CalendarX size={14} />
-                                            </button>
-                                        </>
-                                    ) : (
-                                        <div className="w-full py-2 text-[10px] text-center text-muted bg-white/5 rounded-lg flex items-center justify-center gap-1 opacity-70">
-                                            <AlertTriangle size={12} /> Cambios cerrados (24h)
+                    return (
+                        <Card key={inst.id} className="p-5 flex flex-col justify-between border-white/10 hover:border-primary/40 transition-all bg-card shadow-lg">
+                            <div className="space-y-4">
+                                {/* Club Header */}
+                                <div className="flex justify-between items-start gap-2">
+                                    <div>
+                                        <div className="flex items-center gap-2">
+                                            <h3 className="text-lg font-bold text-white tracking-tight">{inst.name}</h3>
+                                            {isPrimaryClub ? (
+                                                <span className="text-[10px] bg-primary text-dark px-2 py-0.5 rounded-full font-black flex items-center gap-1 shadow-sm">
+                                                    <Star size={10} className="fill-dark" /> Club Principal
+                                                </span>
+                                            ) : isMemberOfThisClub ? (
+                                                <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                    <Award size={10} /> Socio Activo
+                                                </span>
+                                            ) : null}
                                         </div>
+                                        {inst.city && (
+                                            <div className="text-xs text-muted flex items-center gap-1 mt-0.5">
+                                                <MapPin size={12} /> {inst.city} {inst.address ? `• ${inst.address}` : ''}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {hasMemberPricing ? (
+                                        <span className="text-[10px] bg-primary/10 text-primary border border-primary/20 px-2.5 py-1 rounded-lg font-bold flex items-center gap-1">
+                                            <Sparkles size={12} /> Tarifa de Socio Disponible
+                                        </span>
+                                    ) : (
+                                        <span className="text-[10px] bg-white/5 text-muted px-2 py-1 rounded-lg font-medium">
+                                            Tarifa Única
+                                        </span>
                                     )}
                                 </div>
-                            )}
-                        </div>
-                    </Card>
-                );
-            })}
+
+                                {/* Court & Shift Info */}
+                                <div className="flex items-center gap-3 text-xs text-slate-300 bg-white/5 p-2.5 rounded-xl">
+                                    <div className="flex items-center gap-1">
+                                        <Sun size={14} className="text-amber-400" />
+                                        <span>{inst.courts_without_light || 0} canchas sin luz</span>
+                                    </div>
+                                    <div className="w-px h-3 bg-white/10"></div>
+                                    <div className="flex items-center gap-1">
+                                        <Moon size={14} className="text-blue-400" />
+                                        <span>{inst.courts_with_light || 0} con luz artificial</span>
+                                    </div>
+                                    <div className="w-px h-3 bg-white/10"></div>
+                                    <div className="text-muted text-[11px]">
+                                        Turno: {minSlotDuration}m
+                                    </div>
+                                </div>
+
+                                {/* Explicit Notice for Members */}
+                                <div className="bg-primary/5 border border-primary/20 p-3 rounded-xl space-y-2">
+                                    <div className="text-[11px] text-primary font-bold flex items-center gap-1.5">
+                                        <Info size={14} /> Tarifa Preferencial para Socios
+                                    </div>
+                                    <p className="text-[11px] text-slate-300">
+                                        A los socios oficiales de <strong>{inst.name}</strong> se les otorga un descuento preferencial en cada turno reservado.
+                                    </p>
+
+                                    {/* Comparative Pricing Table */}
+                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                        {/* Member Rate Box */}
+                                        <div className={`p-2.5 rounded-lg border ${isMemberOfThisClub ? 'bg-primary/20 border-primary shadow-sm' : 'bg-black/30 border-white/5'}`}>
+                                            <div className="text-[10px] font-bold text-primary uppercase flex items-center justify-between">
+                                                <span>Tarifa Socios</span>
+                                                {isMemberOfThisClub && <span className="text-[9px] text-green-300 font-bold">✓ Tu Tarifa</span>}
+                                            </div>
+                                            <div className="mt-1 space-y-0.5">
+                                                <div className="text-xs font-bold text-white flex justify-between">
+                                                    <span className="text-muted font-normal">Diurno:</span> 
+                                                    <span>${inst.price_member_day || inst.price_day || 0}</span>
+                                                </div>
+                                                <div className="text-xs font-bold text-white flex justify-between">
+                                                    <span className="text-muted font-normal">Nocturno:</span> 
+                                                    <span>${inst.price_member_night || inst.price_night || inst.price_member_day || inst.price_day || 0}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-[9px] text-muted mt-1">Costo por turno ({minSlotDuration} min)</div>
+                                        </div>
+
+                                        {/* General / Guest Rate Box */}
+                                        <div className={`p-2.5 rounded-lg border ${!isMemberOfThisClub ? 'bg-white/5 border-white/20 shadow-sm' : 'bg-black/30 border-white/5'}`}>
+                                            <div className="text-[10px] font-bold text-muted uppercase flex items-center justify-between">
+                                                <span>Invitados / No Socios</span>
+                                                {!isMemberOfThisClub && <span className="text-[9px] text-amber-300 font-bold">✓ Tu Tarifa</span>}
+                                            </div>
+                                            <div className="mt-1 space-y-0.5">
+                                                <div className="text-xs font-bold text-white flex justify-between">
+                                                    <span className="text-muted font-normal">Diurno:</span> 
+                                                    <span>${inst.price_day || 0}</span>
+                                                </div>
+                                                <div className="text-xs font-bold text-white flex justify-between">
+                                                    <span className="text-muted font-normal">Nocturno:</span> 
+                                                    <span>${inst.price_night || inst.price_day || 0}</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-[9px] text-muted mt-1">Costo por turno ({minSlotDuration} min)</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Book Action Button */}
+                            <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
+                                <span className="text-[11px] text-muted">
+                                    {isMemberOfThisClub 
+                                        ? 'Beneficio de socio activo' 
+                                        : 'Disponible para reservas públicas'}
+                                </span>
+                                <button
+                                    onClick={() => handleBookAtClub(inst.id)}
+                                    className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-primary/20 flex items-center gap-1.5"
+                                >
+                                    Reservar Cancha <ArrowRight size={14} />
+                                </button>
+                            </div>
+                        </Card>
+                    );
+                })}
+            </div>
         </div>
       )}
 
@@ -170,11 +389,12 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
           <PlayerNewBookingModal 
             user={user} 
             existingBooking={bookingToReschedule || undefined}
+            initialInstitutionId={selectedClubIdForBooking}
             onClose={() => { setShowNewBooking(false); setBookingToReschedule(null); }} 
             onSuccess={() => {
                 setShowNewBooking(false);
                 setBookingToReschedule(null);
-                loadBookings();
+                loadData();
             }}
           />
       )}
@@ -182,9 +402,21 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   );
 };
 
-const PlayerNewBookingModal = ({ user, existingBooking, onClose, onSuccess }: { user: UserProfile, existingBooking?: Booking, onClose: () => void, onSuccess: () => void }) => {
+const PlayerNewBookingModal = ({ 
+    user, 
+    existingBooking, 
+    initialInstitutionId,
+    onClose, 
+    onSuccess 
+}: { 
+    user: UserProfile, 
+    existingBooking?: Booking, 
+    initialInstitutionId?: string,
+    onClose: () => void, 
+    onSuccess: () => void 
+}) => {
     const [institutions, setInstitutions] = useState<Institution[]>([]);
-    const [selectedInstId, setSelectedInstId] = useState('');
+    const [selectedInstId, setSelectedInstId] = useState(initialInstitutionId || '');
     const [date, setDate] = useState('');
     const [slots, setSlots] = useState<any[]>([]);
     const [loadingSlots, setLoadingSlots] = useState(false);
@@ -208,6 +440,9 @@ const PlayerNewBookingModal = ({ user, existingBooking, onClose, onSuccess }: { 
                 setSelectedInstId(existingBooking.institution_id);
                 setDate(existingBooking.date);
                 if (existingBooking.extras) setExtras(existingBooking.extras as any);
+            } else if (initialInstitutionId) {
+                setSelectedInstId(initialInstitutionId);
+                setDate(new Date().toISOString().split('T')[0]);
             } else {
                 if (user.institution_id) {
                     const exists = data.find(i => i.id === user.institution_id);
@@ -222,7 +457,7 @@ const PlayerNewBookingModal = ({ user, existingBooking, onClose, onSuccess }: { 
                 setDate(new Date().toISOString().split('T')[0]);
             }
         });
-    }, [user.institution_id, existingBooking]);
+    }, [user.institution_id, existingBooking, initialInstitutionId]);
 
     useEffect(() => {
         if (selectedInstId && date) {
@@ -248,10 +483,34 @@ const PlayerNewBookingModal = ({ user, existingBooking, onClose, onSuccess }: { 
     const minDuration = selectedInst?.config_booking_min_duration || 60;
     const maxSlots = selectedInst?.config_max_booking_slots || 4;
 
+    const isUserMemberOfInst = api.memberships.isMemberOf(user, selectedInstId);
+
+    const isNightSlot = (timeStr?: string) => {
+        if (!timeStr || !selectedInst) return false;
+        const nightStart = selectedInst.schedule_night_start || '18:00';
+        return timeStr >= nightStart;
+    };
+
+    const getBaseHourlyPrice = () => {
+        if (!selectedInst) return 0;
+        const isNight = selectedSlot ? isNightSlot(selectedSlot.start_time) : false;
+
+        if (isUserMemberOfInst) {
+            if (isNight) {
+                return selectedInst.price_member_night ?? selectedInst.price_night ?? selectedInst.price_member_day ?? selectedInst.price_day ?? 0;
+            }
+            return selectedInst.price_member_day ?? selectedInst.price_day ?? 0;
+        } else {
+            if (isNight) {
+                return selectedInst.price_night ?? selectedInst.price_day ?? 0;
+            }
+            return selectedInst.price_day ?? 0;
+        }
+    };
+
     const calculateTotal = () => {
         if (!selectedInst) return 0;
-        let base = selectedInst.price_day || 0; 
-        
+        const base = getBaseHourlyPrice();
         let total = base * durationMultiplier;
         
         if (extras.rackets > 0 && selectedInst.price_racket) {
@@ -388,6 +647,63 @@ const PlayerNewBookingModal = ({ user, existingBooking, onClose, onSuccess }: { 
                                         </option>
                                     ))}
                                 </select>
+
+                                {selectedInst && (
+                                    <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl space-y-2.5 mt-2">
+                                        <div className="flex flex-wrap items-center justify-between gap-1">
+                                            <div className="text-xs font-bold text-primary flex items-center gap-1.5">
+                                                <Award size={14} /> Tarifario y Condiciones del Club
+                                            </div>
+                                            {isUserMemberOfInst ? (
+                                                <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-bold">
+                                                    ✓ Socio Oficial (Tarifa Preferencial)
+                                                </span>
+                                            ) : (
+                                                <span className="text-[10px] bg-white/10 text-muted px-2 py-0.5 rounded-full font-medium">
+                                                    Invitado (Tarifa General)
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        <p className="text-[11px] text-slate-300">
+                                            ℹ️ A los <strong>socios oficiales de {selectedInst.name}</strong> se les aplica una <strong>tarifa preferencial</strong> en todos los turnos.
+                                        </p>
+
+                                        <div className="grid grid-cols-2 gap-2 text-xs">
+                                            <div className={`p-2.5 rounded-lg border ${isUserMemberOfInst ? 'bg-primary/20 border-primary/40' : 'bg-black/30 border-white/5'}`}>
+                                                <div className="text-[10px] text-primary font-bold uppercase mb-1 flex justify-between">
+                                                    <span>Tarifa Socio</span>
+                                                    {isUserMemberOfInst && <span className="text-[9px] text-green-300">✓ Tu Tarifa</span>}
+                                                </div>
+                                                <div className="text-white flex justify-between text-[11px]">
+                                                    <span className="text-muted">Diurna:</span>
+                                                    <span className="font-bold">${selectedInst.price_member_day || selectedInst.price_day || 0}</span>
+                                                </div>
+                                                <div className="text-white flex justify-between text-[11px]">
+                                                    <span className="text-muted">Nocturna:</span>
+                                                    <span className="font-bold">${selectedInst.price_member_night || selectedInst.price_night || selectedInst.price_member_day || selectedInst.price_day || 0}</span>
+                                                </div>
+                                                <div className="text-[9px] text-muted mt-1">Costo por turno ({minDuration} min)</div>
+                                            </div>
+
+                                            <div className={`p-2.5 rounded-lg border ${!isUserMemberOfInst ? 'bg-white/10 border-white/20' : 'bg-black/30 border-white/5'}`}>
+                                                <div className="text-[10px] text-muted font-bold uppercase mb-1 flex justify-between">
+                                                    <span>Tarifa Invitado</span>
+                                                    {!isUserMemberOfInst && <span className="text-[9px] text-amber-300">✓ Tu Tarifa</span>}
+                                                </div>
+                                                <div className="text-white flex justify-between text-[11px]">
+                                                    <span className="text-muted">Diurna:</span>
+                                                    <span className="font-bold">${selectedInst.price_day || 0}</span>
+                                                </div>
+                                                <div className="text-white flex justify-between text-[11px]">
+                                                    <span className="text-muted">Nocturna:</span>
+                                                    <span className="font-bold">${selectedInst.price_night || selectedInst.price_day || 0}</span>
+                                                </div>
+                                                <div className="text-[9px] text-muted mt-1">Costo por turno ({minDuration} min)</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
 
                             <div className="space-y-2">
@@ -472,11 +788,24 @@ const PlayerNewBookingModal = ({ user, existingBooking, onClose, onSuccess }: { 
                                     {/* Order Summary */}
                                     <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex justify-between items-center">
                                         <div>
-                                            <div className="text-xs text-primary font-bold uppercase mb-1">
-                                                Total a Pagar
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <span className="text-xs text-primary font-bold uppercase">Total a Pagar</span>
+                                                {isUserMemberOfInst ? (
+                                                    <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-bold">
+                                                        ★ Tarifa Socio Aplicada
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[10px] bg-white/10 text-muted px-2 py-0.5 rounded-full font-medium">
+                                                        Tarifa General
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="text-white text-sm font-bold">{selectedSlot.court_name} • {selectedSlot.start_time}</div>
-                                            <div className="text-[10px] text-muted">Duración: {minDuration * durationMultiplier} min</div>
+                                            <div className="text-[10px] text-muted space-x-1">
+                                                <span>{durationMultiplier} {durationMultiplier === 1 ? 'turno' : 'turnos'} ({minDuration * durationMultiplier} min)</span>
+                                                <span>•</span>
+                                                <span className="text-slate-300">${getBaseHourlyPrice()}/turno ({isNightSlot(selectedSlot.start_time) ? 'Nocturno' : 'Diurno'})</span>
+                                            </div>
                                         </div>
                                         <div className="text-right">
                                             <div className="text-2xl font-bold text-white">
