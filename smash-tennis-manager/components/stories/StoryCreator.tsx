@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
     X, Type, Smile, AtSign, MapPin, Trash2, Send, 
     Sparkles, ChevronRight, Search, Image as ImageIcon,
-    Palette, ArrowLeft, Check
+    Camera, Upload, Palette, ArrowLeft, Check
 } from 'lucide-react';
 import { StoryLayer, StoryTextLayer, StoryEmojiLayer, StoryStickerLayer, StoryMentionLayer, StoryLocationLayer, UserProfile, Institution } from '../../types';
 import { api } from '../../services/api';
@@ -261,8 +261,6 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
 
     if (!isOpen) return null;
 
-    // Usamos createPortal para garantizar que el modal viva directamente en document.body
-    // evitando ser atrapado por filtros de CSS como backdrop-blur o transformaciones en padres
     return createPortal(
         <div className="fixed inset-0 z-[99999] w-screen h-[100dvh] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center select-none overflow-hidden touch-none p-0 sm:p-4 m-0">
             <input 
@@ -273,10 +271,17 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                 onChange={handleFileChange} 
             />
 
+            <input 
+                type="file" 
+                ref={cameraInputRef} 
+                accept="image/*" 
+                capture="environment"
+                className="hidden" 
+                onChange={handleFileChange} 
+            />
+
             {!imagePreview ? (
-                /* PANTALLA INICIAL DE SELECCIÓN DE FOTO O FONDO */
                 <div className="relative w-full h-[100dvh] sm:h-[92vh] sm:max-h-[820px] max-w-md flex flex-col justify-between p-6 bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white shadow-2xl sm:rounded-3xl border border-white/10 overflow-y-auto">
-                    {/* Header */}
                     <div className="flex justify-between items-center pt-2 pb-4">
                         <button 
                             type="button"
@@ -287,11 +292,10 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                             <X className="w-6 h-6" />
                         </button>
                         <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-lime-500/20 text-lime-400 border border-lime-500/30 text-xs font-bold uppercase tracking-wider">
-                            <Sparkles className="w-4 h-4" /> Modo SuperAdmin
+                            <Sparkles className="w-4 h-4" /> {currentUser?.role === 'superadmin' ? 'Modo SuperAdmin' : 'Comunidad Smash'}
                         </div>
                     </div>
 
-                    {/* Contenido Central */}
                     <div className="text-center space-y-4 my-auto px-2">
                         <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-lime-400 via-emerald-500 to-teal-500 flex items-center justify-center shadow-2xl shadow-lime-500/30 ring-4 ring-lime-400/20">
                             <Sparkles className="w-10 h-10 text-slate-950" />
@@ -299,14 +303,13 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                         <div>
                             <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2">Crear Historia Smash</h2>
                             <p className="text-sm text-slate-400 max-w-xs mx-auto leading-relaxed">
-                                Comparte novedades, fotos del torneo, resultados o anuncios con toda la comunidad. Activa por <span className="text-lime-400 font-bold">20 horas</span>.
+                                Comparte fotos de tus partidos, entrenamientos o momentos del torneo con la comunidad. Activa por <span className="text-lime-400 font-bold">20 horas</span>.
                             </p>
                         </div>
 
-                        {/* Presets de fondos de color / degradados para anuncios rápidos */}
-                        <div className="pt-3">
+                        <div className="pt-2">
                             <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center justify-center gap-1.5">
-                                <Palette className="w-3.5 h-3.5 text-lime-400" /> O elige un fondo para anuncio
+                                <Palette className="w-3.5 h-3.5 text-lime-400" /> O elige un fondo de color
                             </p>
                             <div className="grid grid-cols-5 gap-2 max-w-xs mx-auto">
                                 {GRADIENT_PRESETS.map((preset) => (
@@ -327,28 +330,37 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                         </div>
                     </div>
 
-                    {/* Botones Inferiores */}
-                    <div className="space-y-3 pt-4 pb-2">
+                    <div className="space-y-2.5 pt-4 pb-2">
                         <button 
                             type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-black text-base shadow-xl shadow-lime-500/25 hover:brightness-110 active:scale-[0.98] transition flex items-center justify-center gap-3"
+                            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-black text-base shadow-xl shadow-lime-500/25 hover:brightness-110 active:scale-[0.98] transition flex items-center justify-center gap-3 cursor-pointer"
                         >
-                            <ImageIcon className="w-5 h-5" />
-                            <span>Elegir Foto o Galería</span>
-                            <ChevronRight className="w-5 h-5 ml-auto" />
+                            <ImageIcon className="w-5 h-5 stroke-[2.5]" />
+                            <span>Subir Foto de Galería</span>
+                            <ChevronRight className="w-5 h-5 ml-auto opacity-70" />
                         </button>
+                        
+                        <button 
+                            type="button"
+                            onClick={() => cameraInputRef.current?.click()}
+                            className="w-full py-3.5 px-6 rounded-2xl bg-slate-800/90 hover:bg-slate-800 text-white font-bold text-sm border border-white/10 active:scale-[0.98] transition flex items-center justify-center gap-3 cursor-pointer"
+                        >
+                            <Camera className="w-5 h-5 text-lime-400" />
+                            <span>Tomar Foto con Cámara</span>
+                            <ChevronRight className="w-5 h-5 ml-auto text-slate-400" />
+                        </button>
+
                         <button 
                             type="button"
                             onClick={onClose}
-                            className="w-full py-2.5 text-slate-400 text-sm font-bold hover:text-white transition"
+                            className="w-full py-2 text-slate-400 text-sm font-bold hover:text-white transition"
                         >
                             Volver al Dashboard
                         </button>
                     </div>
                 </div>
             ) : (
-                /* CANVAS DE EDICIÓN DE HISTORIA */
                 <div 
                     ref={canvasRef}
                     onMouseMove={handleTouchMove}
