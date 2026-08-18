@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership } from '../types';
+import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, StoryLayer } from '../types';
 
 export const api = {
     settings: {
@@ -908,5 +908,119 @@ export const api = {
             if (error) throw error;
             return data as Transaction;
         }
+    },
+    stories: {
+        async getActive() {
+            const { data, error } = await supabase
+                .from('stories')
+                .select(`
+                    *,
+                    author:profiles!stories_user_id_fkey (
+                        name,
+                        lastname,
+                        profile_picture_url,
+                        role
+                    )
+                `)
+                .gt('expires_at', new Date().toISOString())
+                .order('created_at', { ascending: true });
+
+            if (error) {
+                console.error("Error fetching active stories:", error);
+                return [] as Story[];
+            }
+
+            return (data || []).map((story: any) => ({
+                ...story,
+                layers: (story.layers || []) as StoryLayer[]
+            })) as Story[];
+        },
+        async createStory(file: File, layers: StoryLayer[], userId: string) {
+            // 1. Subir archivo a Supabase Storage bucket 'stories'
+            const fileExt = file.name.split('.').pop() || 'jpg';
+            const fileName = `${userId}_${Date.now()}.${fileExt}`;
+            const filePath = `uploads/${fileName}`;
+
+            const { error: uploadError } = await supabase.storage
+                .from('stories')
+                .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            if (uploadError) {
+                console.error("Error uploading story media:", uploadError);
+                throw uploadError;
+            }
+
+            // 2. Obtener URL pública
+            const { data: { publicUrl } } = supabase.storage
+                .from('stories')
+                .getPublicUrl(filePath);
+
+            // 3. Crear registro en la tabla stories con expiración a 20 horas
+            const now = new Date();
+            const expiresAt = new Date(now.getTime() + 20 * 60 * 60 * 1000); // 20 horas exactas
+
+            const { data, error: insertError } = await supabase
+                .from('stories')
+                .insert({
+                    user_id: userId,
+                    media_url: publicUrl,
+                    storage_path: filePath,
+                    layers: layers,
+                    created_at: now.toISOString(),
+                    expires_at: expiresAt.toISOString()
+                })
+                .select(`
+                    *,
+                    author:profiles!stories_user_id_fkey (
+                        name,
+                        lastname,
+                        profile_picture_url,
+                        role
+                    )
+                `)
+                .single();
+
+            if (insertError) {
+                console.error("Error creating story record:", insertError);
+                throw insertError;
+            }
+
+            return data as Story;
+        },
+        async deleteStory(storyId: string, storagePath?: string) {
+            // 1. Borrar registro de DB
+            const { error: dbError } = await supabase
+                .from('stories')
+                .delete()
+                .eq('id', storyId);
+
+            if (dbError) throw dbError;
+
+            // 2. Borrar del bucket de storage si tenemos la ruta
+            if (storagePath) {
+                await supabase.storage
+                    .from('stories')
+                    .remove([storagePath]);
+            }
+            return true;
+        },
+        async searchUsersForMention(query: string) {
+            if (!query.trim()) return [];
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('id, name, lastname, profile_picture_url, role')
+                .or(`name.ilike.%${query}%,lastname.ilike.%${query}%`)
+                .limit(8);
+
+            if (error) {
+                console.error("Error searching players for mention:", error);
+                return [];
+            }
+            return data || [];
+        }
     }
 };
+

@@ -31,6 +31,8 @@ import {
     UserCircle
 } from 'lucide-react';
 import { WeatherWidget } from '../components/WeatherWidget';
+import { StoriesBar } from '../components/stories/StoriesBar';
+
 
 interface DashboardProps {
     user: UserProfile;
@@ -176,11 +178,19 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
     return (
         <div className="space-y-8 animate-fade-up">
+            {/* Historias Temporales Smash */}
+            <StoriesBar 
+                currentUser={user} 
+                institutions={[]} 
+                onSelectUser={(userId) => onNavigate('profile', { userId })} 
+            />
+
             <div id="dashboard-header" className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-1">Hola, {user.name}</h1>
                     <p className="text-muted">Panel de Gestión Operativa • <span className="text-primary font-bold">{user.institution || 'Vista General'}</span></p>
                 </div>
+
                 <div className="flex gap-3">
                     <button onClick={() => onNavigate('bookings')} className="bg-white/5 hover:bg-white/10 border border-white/10 text-white px-4 py-2 rounded-xl text-sm font-bold transition-all">
                         Ver Agenda Completa
@@ -450,6 +460,13 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
     return (
         <div className="space-y-8 animate-fade-up">
+            {/* Historias Temporales Smash */}
+            <StoriesBar 
+                currentUser={user} 
+                institutions={[]} 
+                onSelectUser={(userId) => onNavigate('profile', { userId })} 
+            />
+
             <div id="dashboard-header" className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-1">Hola, {user.name}</h1>
@@ -457,6 +474,7 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                         Bienvenido al panel general.
                     </p>
                 </div>
+
                 <div className="hidden md:block text-right">
                     <div className="text-xs font-bold text-muted uppercase tracking-wider">Fecha de hoy</div>
                     <div className="text-xl font-bold text-white">{new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' })}</div>

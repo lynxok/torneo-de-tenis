@@ -306,3 +306,68 @@ export interface RankingPointRecord {
     next_edition_id?: string; 
     next_edition_name?: string;
 }
+
+// STORIES TYPES
+export type StoryLayerType = 'text' | 'sticker' | 'mention' | 'location' | 'emoji';
+
+export interface StoryLayerBase {
+    id: string;
+    type: StoryLayerType;
+    x: number; // percentage (0 - 100)
+    y: number; // percentage (0 - 100)
+    scale?: number;
+    rotation?: number;
+}
+
+export interface StoryTextLayer extends StoryLayerBase {
+    type: 'text';
+    text: string;
+    color: string;
+    bgColor?: string;
+    fontSize?: number;
+}
+
+export interface StoryEmojiLayer extends StoryLayerBase {
+    type: 'emoji';
+    emoji: string;
+    size?: number;
+}
+
+export interface StoryStickerLayer extends StoryLayerBase {
+    type: 'sticker';
+    stickerId: string;
+    stickerUrl: string;
+    label?: string;
+}
+
+export interface StoryMentionLayer extends StoryLayerBase {
+    type: 'mention';
+    userId: string;
+    username: string;
+    fullName: string;
+    avatarUrl?: string;
+}
+
+export interface StoryLocationLayer extends StoryLayerBase {
+    type: 'location';
+    locationName: string;
+    institutionId?: string;
+}
+
+export type StoryLayer = StoryTextLayer | StoryEmojiLayer | StoryStickerLayer | StoryMentionLayer | StoryLocationLayer;
+
+export interface Story {
+    id: string;
+    user_id: string;
+    media_url: string;
+    storage_path?: string;
+    layers: StoryLayer[];
+    created_at: string;
+    expires_at: string;
+    author?: {
+        name: string;
+        lastname?: string;
+        profile_picture_url?: string;
+        role: UserRole;
+    };
+}
