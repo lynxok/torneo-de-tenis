@@ -226,7 +226,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black flex flex-col items-center justify-between select-none overflow-hidden touch-none">
+        <div className="fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center select-none overflow-hidden touch-none p-0 m-0">
             <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -236,42 +236,47 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
             />
 
             {!imagePreview ? (
-                <div className="w-full h-full max-w-md flex flex-col justify-between p-6 bg-gradient-to-b from-slate-900 via-black to-slate-950 text-white">
-                    <div className="flex justify-between items-center pt-4">
+                <div className="relative w-full h-[100dvh] max-w-md flex flex-col justify-between p-6 bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white shadow-2xl border-x border-white/5">
+                    {/* Header */}
+                    <div className="flex justify-between items-center pt-8 pb-4">
                         <button 
                             onClick={onClose}
                             className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white active:scale-95 transition"
                         >
                             <X className="w-6 h-6" />
                         </button>
-                        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-lime-500/20 text-lime-400 border border-lime-500/30 text-xs font-bold uppercase tracking-wider">
-                            <Sparkles className="w-3.5 h-3.5" /> Modo SuperAdmin
+                        <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-lime-500/20 text-lime-400 border border-lime-500/30 text-xs font-bold uppercase tracking-wider">
+                            <Sparkles className="w-4 h-4" /> Modo SuperAdmin
                         </div>
                     </div>
 
-                    <div className="text-center space-y-4 my-auto">
-                        <div className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-lime-500 to-emerald-600 flex items-center justify-center shadow-xl shadow-lime-500/20">
-                            <Sparkles className="w-12 h-12 text-slate-950 animate-pulse" />
+                    {/* Contenido Central */}
+                    <div className="text-center space-y-5 my-auto px-4">
+                        <div className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-lime-400 to-emerald-500 flex items-center justify-center shadow-2xl shadow-lime-500/30 ring-4 ring-lime-400/20">
+                            <Sparkles className="w-12 h-12 text-slate-950" />
                         </div>
-                        <h2 className="text-2xl font-black tracking-tight">Nueva Historia Smash</h2>
-                        <p className="text-sm text-slate-400 max-w-xs mx-auto">
-                            Visible para toda la comunidad por <span className="text-lime-400 font-bold">20 horas</span>. Al expirar se eliminará de la base de datos automáticamente.
-                        </p>
+                        <div>
+                            <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2">Crear Historia Smash</h2>
+                            <p className="text-sm text-slate-400 max-w-xs mx-auto leading-relaxed">
+                                Sube una foto, agrega stickers de tenis, menciones a jugadores y ubicaciones. Duración activa: <span className="text-lime-400 font-bold">20 horas</span>.
+                            </p>
+                        </div>
                     </div>
 
-                    <div className="space-y-3 pb-8">
+                    {/* Botones Inferiores */}
+                    <div className="space-y-3 pb-10">
                         <button 
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-bold text-base shadow-lg shadow-lime-500/25 active:scale-[0.98] transition flex items-center justify-center gap-3"
+                            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-black text-base shadow-xl shadow-lime-500/25 active:scale-[0.98] transition flex items-center justify-center gap-3"
                         >
                             <span>Elegir Foto o Tomar con Cámara</span>
                             <ChevronRight className="w-5 h-5" />
                         </button>
                         <button 
                             onClick={onClose}
-                            className="w-full py-3 text-slate-400 text-sm font-medium hover:text-white transition"
+                            className="w-full py-3 text-slate-400 text-sm font-bold hover:text-white transition"
                         >
-                            Cancelar
+                            Volver al Dashboard
                         </button>
                     </div>
                 </div>
@@ -282,7 +287,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                     onMouseUp={handleTouchEnd}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
-                    className="relative w-full h-[100dvh] max-w-md bg-black flex flex-col justify-between overflow-hidden"
+                    className="relative w-full h-[100dvh] max-w-md bg-black flex flex-col justify-between overflow-hidden shadow-2xl"
                 >
                     <img 
                         src={imagePreview} 
@@ -298,6 +303,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                 key={layer.id}
                                 onMouseDown={(e) => handleTouchStart(layer.id, e)}
                                 onTouchStart={(e) => handleTouchStart(layer.id, e)}
+
                                 style={{
                                     left: `${layer.x}%`,
                                     top: `${layer.y}%`,

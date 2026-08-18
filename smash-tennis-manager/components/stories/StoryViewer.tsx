@@ -158,15 +158,16 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
     if (!isOpen || !activeStory) return null;
 
     return (
-        <div className="fixed inset-0 z-50 bg-black flex items-center justify-center select-none touch-none overflow-hidden">
+        <div className="fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black/95 backdrop-blur-xl flex items-center justify-center select-none touch-none overflow-hidden p-0 m-0">
             {/* Contenedor Vertical 9:16 Mobile-First */}
             <div 
-                className="relative w-full h-[100dvh] max-w-md bg-slate-950 flex flex-col justify-between overflow-hidden shadow-2xl"
+                className="relative w-full h-[100dvh] max-w-md bg-slate-950 flex flex-col justify-between overflow-hidden shadow-2xl border-x border-white/5"
                 onMouseDown={handlePressStart}
                 onMouseUp={handlePressEnd}
                 onTouchStart={handlePressStart}
                 onTouchEnd={handlePressEnd}
             >
+
                 {/* Fondo: Imagen de la Historia */}
                 <img 
                     src={activeStory.media_url} 
