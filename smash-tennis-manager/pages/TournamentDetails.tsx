@@ -3,7 +3,8 @@ import { Tournament, UserProfile, TournamentPlayer, Match } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb } from 'lucide-react';
+import { Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, Search, DollarSign, UserCheck } from 'lucide-react';
+import { getCategoriesForInstitution } from '../utils/categories';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -22,6 +23,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [swapSource, setSwapSource] = useState<{ id: string; name: string } | null>(null);
     const [isSwapping, setIsSwapping] = useState(false);
+
+    // Manual Enroll Modal State
+    const [showManualEnrollModal, setShowManualEnrollModal] = useState(false);
+    const [enrollMode, setEnrollMode] = useState<'member' | 'guest'>('member');
+    const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
+    const [loadingProfiles, setLoadingProfiles] = useState(false);
+    const [searchUserQuery, setSearchUserQuery] = useState('');
+    const [selectedUserForEnroll, setSelectedUserForEnroll] = useState<UserProfile | null>(null);
+    const [guestName, setGuestName] = useState('');
+    const [guestCategory, setGuestCategory] = useState('');
+    const [manualFee, setManualFee] = useState<number>(0);
+    const [manualPaymentStatus, setManualPaymentStatus] = useState<'pending' | 'paid'>('paid');
+    const [submittingEnroll, setSubmittingEnroll] = useState(false);
+    const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
 
     // Score Modal State
     const [selectedMatchForScore, setSelectedMatchForScore] = useState<Match | null>(null);
@@ -50,6 +65,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             setTournament(data);
             if (data.tournament_players) setPlayers(data.tournament_players);
             if (data.matches) setMatches(data.matches);
+            if (data.registration_price !== undefined) {
+                setManualFee(data.registration_price);
+            }
+            if (data.category) {
+                setGuestCategory(data.category);
+            }
         } catch (e) {
             console.error(e);
             addToast("Error al cargar torneo", 'error');
@@ -111,6 +132,110 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             addToast("Error al guardar resultado: " + e.message, 'error');
         } finally {
             setSavingScore(false);
+        }
+    };
+
+    const openManualEnrollModal = async () => {
+        setShowManualEnrollModal(true);
+        setSelectedUserForEnroll(null);
+        setSearchUserQuery('');
+        setGuestName('');
+        setGuestCategory(tournament?.category || '4ta');
+        setManualFee(tournament?.registration_price || 0);
+        setManualPaymentStatus('paid');
+
+        if (allProfiles.length === 0) {
+            setLoadingProfiles(true);
+            try {
+                const profiles = await api.auth.getAllProfiles(1, 200);
+                // Exclude superadmin and purely staff if desired, keep player profiles
+                setAllProfiles(profiles);
+            } catch (e) {
+                console.error("Error loading profiles:", e);
+            } finally {
+                setLoadingProfiles(false);
+            }
+        }
+    };
+
+    const handleManualEnrollSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!tournament) return;
+
+        let pName = '';
+        let pId: string | undefined = undefined;
+        let pCat = '';
+
+        if (enrollMode === 'member') {
+            if (!selectedUserForEnroll) {
+                addToast("Por favor selecciona un socio del listado.", 'error');
+                return;
+            }
+            pId = selectedUserForEnroll.id;
+            pName = `${selectedUserForEnroll.name} ${selectedUserForEnroll.lastname || ''}`.trim();
+            pCat = selectedUserForEnroll.category || tournament.category || 'Open';
+
+            // Check if already enrolled
+            const alreadyEnrolled = players.some(p => p.player_id === pId);
+            if (alreadyEnrolled) {
+                addToast("Este socio ya se encuentra inscripto en el torneo.", 'error');
+                return;
+            }
+        } else {
+            if (!guestName.trim()) {
+                addToast("Por favor ingresa el nombre del jugador invitado.", 'error');
+                return;
+            }
+            pName = guestName.trim();
+            pCat = guestCategory || tournament.category || 'Open';
+        }
+
+        setSubmittingEnroll(true);
+        try {
+            await api.players.manualEnroll(tournament.id, {
+                playerId: pId,
+                playerName: pName,
+                category: pCat,
+                fee: manualFee,
+                paymentStatus: manualPaymentStatus
+            });
+
+            addToast(`¡${pName} fue inscripto correctamente!`, 'success');
+            setShowManualEnrollModal(false);
+            loadTournament();
+        } catch (e: any) {
+            addToast("Error al inscribir: " + (e.message || 'Intente nuevamente'), 'error');
+        } finally {
+            setSubmittingEnroll(false);
+        }
+    };
+
+    const handleUnenrollPlayer = async (player: TournamentPlayer) => {
+        const playerName = player.name || player.player_name || 'este jugador';
+        if (!confirm(`¿Estás seguro de dar de baja a ${playerName} del torneo?`)) return;
+
+        setDeletingPlayerId(player.id);
+        try {
+            await api.players.unenroll(player.id);
+            addToast(`Inscripción de ${playerName} eliminada.`, 'success');
+            loadTournament();
+        } catch (e: any) {
+            addToast("Error al eliminar inscripción: " + (e.message || 'Error de servidor'), 'error');
+        } finally {
+            setDeletingPlayerId(null);
+        }
+    };
+
+    const handleTogglePaymentStatus = async (player: TournamentPlayer) => {
+        const nextStatus: 'pending' | 'paid' = player.payment_status === 'paid' ? 'pending' : 'paid';
+        try {
+            await api.players.updatePaymentStatus(player.id, nextStatus);
+            addToast(`Estado de pago actualizado a ${nextStatus === 'paid' ? 'Pagado' : 'Pendiente'}.`, 'success');
+            // Optimistic update
+            setPlayers(prev => prev.map(p => p.id === player.id ? { ...p, payment_status: nextStatus } : p));
+        } catch (e: any) {
+            addToast("Error al actualizar pago", 'error');
+            loadTournament();
         }
     };
 
@@ -322,20 +447,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         )}
 
                                         <button
-                                            onClick={async () => {
-                                                if (matches.some(m => m.round === 'Cuartos de Final' || m.round === 'Semifinal')) {
-                                                    alert('Ya existen playoffs.');
-                                                    return;
-                                                }
-                                                try {
-                                                    await api.tournaments.generatePlayoffs(tournament.id);
-                                                    addToast('Bracket de playoffs generado!', 'success');
-                                                    loadTournament();
-                                                } catch (e: any) { addToast(e.message, 'error'); }
-                                            }}
-                                            className="px-4 py-2 bg-purple-500/10 border border-purple-500/20 text-purple-400 hover:bg-purple-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5"
+                                            onClick={openManualEnrollModal}
+                                            className="px-4 py-2 bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
                                         >
-                                            <Trophy size={14} /> Generar Playoffs
+                                            <UserPlus size={14} /> Inscribir Jugador
                                         </button>
                                     </>
                                 )}
@@ -526,34 +641,289 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 {/* Right: Players List */}
                 <div className="space-y-6">
                     <Card className="p-6">
-                        <h3 className="font-bold text-white mb-4 flex items-center gap-2 text-base">
-                            <Users size={18} className="text-primary" /> Jugadores Inscritos ({players.length})
-                        </h3>
-                        <div className="space-y-2 max-h-96 overflow-y-auto custom-scrollbar">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-bold text-white flex items-center gap-2 text-base">
+                                <Users size={18} className="text-primary" /> Inscritos ({players.length})
+                            </h3>
+                            {isClubAdmin && (
+                                <button
+                                    onClick={openManualEnrollModal}
+                                    className="p-1.5 px-2.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+                                    title="Inscribir jugador manualmente"
+                                >
+                                    <UserPlus size={13} /> + Inscribir
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="space-y-2 max-h-[460px] overflow-y-auto custom-scrollbar">
                             {players.length === 0 ? (
                                 <div className="text-muted text-sm text-center py-6">Aún no hay jugadores inscritos.</div>
                             ) : (
-                                players.map((p, i) => (
-                                    <div key={i} className="flex items-center gap-3 p-2.5 bg-sidebar/50 border border-white/5 rounded-xl hover:border-white/20 transition-all">
-                                        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                                            {(p.name || p.player_name || '?').charAt(0)}
+                                players.map((p, i) => {
+                                    const pDisplayName = p.name || p.player_name || 'Jugador';
+                                    const isPaid = p.payment_status === 'paid';
+
+                                    return (
+                                        <div key={p.id || i} className="flex items-center justify-between gap-2 p-2.5 bg-sidebar/50 border border-white/5 rounded-xl hover:border-white/20 transition-all">
+                                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                                    {pDisplayName.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-xs font-bold text-white truncate">{pDisplayName}</div>
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        <span className="text-[10px] text-muted">{p.category ? `${p.category} Cat.` : 'Sin Cat.'}</span>
+                                                        {p.fee_amount ? (
+                                                            <span className="text-[10px] text-slate-400 font-mono">${p.fee_amount}</span>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-1.5 shrink-0">
+                                                {/* Payment Status Badge / Button for Admin */}
+                                                {isClubAdmin ? (
+                                                    <button
+                                                        onClick={() => handleTogglePaymentStatus(p)}
+                                                        title="Click para cambiar estado de pago"
+                                                        className={`text-[10px] px-2 py-0.5 rounded-lg font-bold border transition-all ${
+                                                            isPaid
+                                                                ? 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30'
+                                                                : 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
+                                                        }`}
+                                                    >
+                                                        {isPaid ? 'Pagado' : 'Pendiente'}
+                                                    </button>
+                                                ) : (
+                                                    <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold border ${
+                                                        isPaid ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                                    }`}>
+                                                        {isPaid ? 'Pagado' : 'Pendiente'}
+                                                    </span>
+                                                )}
+
+                                                {(p.player_id === user.id || p.id === user.id) && (
+                                                    <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-md font-bold">
+                                                        Tú
+                                                    </span>
+                                                )}
+
+                                                {/* Delete Button for Admin */}
+                                                {isClubAdmin && matches.length === 0 && (
+                                                    <button
+                                                        onClick={() => handleUnenrollPlayer(p)}
+                                                        disabled={deletingPlayerId === p.id}
+                                                        className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                        title="Dar de baja / Quitar inscripto"
+                                                    >
+                                                        {deletingPlayerId === p.id ? (
+                                                            <Loader2 size={13} className="animate-spin text-red-400" />
+                                                        ) : (
+                                                            <Trash2 size={13} />
+                                                        )}
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="text-xs font-bold text-white truncate">{p.name || p.player_name}</div>
-                                            <div className="text-[10px] text-muted">{p.category ? `${p.category} Cat.` : 'Sin Categoría'}</div>
-                                        </div>
-                                        {(p.player_id === user.id || p.id === user.id) && (
-                                            <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold">
-                                                Tú
-                                            </span>
-                                        )}
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     </Card>
                 </div>
             </div>
+
+            {/* MANUAL ENROLL MODAL */}
+            {showManualEnrollModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-3xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]">
+                        {/* Header */}
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                <UserPlus size={18} className="text-primary" /> Inscribir Jugador al Torneo
+                            </h3>
+                            <button onClick={() => setShowManualEnrollModal(false)} className="text-muted hover:text-white p-1">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Mode Selector */}
+                        <div className="p-4 pb-0">
+                            <div className="grid grid-cols-2 p-1 bg-slate-900/80 rounded-2xl border border-white/10 text-xs">
+                                <button
+                                    type="button"
+                                    onClick={() => setEnrollMode('member')}
+                                    className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                        enrollMode === 'member'
+                                            ? 'bg-primary text-white shadow-md shadow-primary/30'
+                                            : 'text-muted hover:text-white'
+                                    }`}
+                                >
+                                    <UserCheck size={14} /> Socio / Usuario Registrado
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setEnrollMode('guest')}
+                                    className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                        enrollMode === 'guest'
+                                            ? 'bg-primary text-white shadow-md shadow-primary/30'
+                                            : 'text-muted hover:text-white'
+                                    }`}
+                                >
+                                    <Users size={14} /> Jugador Externo / Invitado
+                                </button>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleManualEnrollSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                            {enrollMode === 'member' ? (
+                                <div className="space-y-3">
+                                    <label className="text-xs text-muted font-bold uppercase block">Buscar Usuario o Socio</label>
+                                    <div className="relative">
+                                        <Search size={16} className="absolute left-3 top-3 text-muted" />
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar por nombre, apellido, DNI o email..."
+                                            value={searchUserQuery}
+                                            onChange={e => setSearchUserQuery(e.target.value)}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl pl-9 pr-3 py-2.5 text-xs text-white placeholder-slate-500 focus:border-primary outline-none"
+                                        />
+                                    </div>
+
+                                    {/* User Search Results */}
+                                    <div className="max-h-48 overflow-y-auto space-y-1.5 border border-white/5 rounded-2xl p-2 bg-slate-900/60 custom-scrollbar">
+                                        {loadingProfiles ? (
+                                            <div className="py-4 text-center text-xs text-muted flex items-center justify-center gap-2">
+                                                <Loader2 size={14} className="animate-spin text-primary" /> Buscando socios...
+                                            </div>
+                                        ) : (
+                                            allProfiles
+                                                .filter(p => {
+                                                    const query = searchUserQuery.toLowerCase().trim();
+                                                    if (!query) return true;
+                                                    const fullName = `${p.name} ${p.lastname || ''}`.toLowerCase();
+                                                    return (
+                                                        fullName.includes(query) ||
+                                                        (p.email && p.email.toLowerCase().includes(query)) ||
+                                                        (p.dni && p.dni.includes(query))
+                                                    );
+                                                })
+                                                .slice(0, 30)
+                                                .map(p => {
+                                                    const isSelected = selectedUserForEnroll?.id === p.id;
+                                                    const isAlreadyIn = players.some(pl => pl.player_id === p.id);
+
+                                                    return (
+                                                        <button
+                                                            key={p.id}
+                                                            type="button"
+                                                            disabled={isAlreadyIn}
+                                                            onClick={() => setSelectedUserForEnroll(p)}
+                                                            className={`w-full text-left p-2.5 rounded-xl text-xs flex items-center justify-between transition-all ${
+                                                                isAlreadyIn
+                                                                    ? 'opacity-40 bg-white/5 cursor-not-allowed'
+                                                                    : isSelected
+                                                                    ? 'bg-primary/20 border border-primary/40 text-primary font-bold shadow-sm'
+                                                                    : 'bg-white/5 hover:bg-white/10 text-white border border-transparent'
+                                                            }`}
+                                                        >
+                                                            <div className="min-w-0 flex-1">
+                                                                <div className="font-bold truncate">{p.name} {p.lastname || ''}</div>
+                                                                <div className="text-[10px] text-muted truncate">
+                                                                    {p.category ? `${p.category} Cat.` : 'Sin Cat.'} {p.institution ? `• ${p.institution}` : ''}
+                                                                </div>
+                                                            </div>
+                                                            {isAlreadyIn ? (
+                                                                <span className="text-[10px] text-yellow-400 font-semibold">Ya inscripto</span>
+                                                            ) : isSelected ? (
+                                                                <CheckCircle2 size={16} className="text-primary" />
+                                                            ) : null}
+                                                        </button>
+                                                    );
+                                                })
+                                        )}
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="text-xs text-muted font-bold uppercase block mb-1.5">Nombre y Apellido *</label>
+                                        <input
+                                            type="text"
+                                            required
+                                            placeholder="Ej: Marcos Rodríguez"
+                                            value={guestName}
+                                            onChange={e => setGuestName(e.target.value)}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white focus:border-primary outline-none"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs text-muted font-bold uppercase block mb-1.5">Categoría *</label>
+                                        <select
+                                            value={guestCategory}
+                                            onChange={e => setGuestCategory(e.target.value)}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white font-semibold focus:border-primary outline-none"
+                                        >
+                                            {getCategoriesForInstitution(tournament?.institutions).map(cat => (
+                                                <option key={cat} value={cat}>{cat}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Commercial / Payment Details */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                                <div>
+                                    <label className="text-xs text-muted font-bold uppercase block mb-1.5">Arancel de Inscripción ($)</label>
+                                    <div className="relative">
+                                        <DollarSign size={14} className="absolute left-3 top-3.5 text-muted" />
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            value={manualFee}
+                                            onChange={e => setManualFee(Number(e.target.value))}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl pl-8 pr-3 py-2.5 text-xs text-white font-mono font-bold focus:border-primary outline-none"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs text-muted font-bold uppercase block mb-1.5">Estado de Pago</label>
+                                    <select
+                                        value={manualPaymentStatus}
+                                        onChange={e => setManualPaymentStatus(e.target.value as 'pending' | 'paid')}
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-xs text-white font-bold focus:border-primary outline-none"
+                                    >
+                                        <option value="paid">Pagado (Abonó en el Club)</option>
+                                        <option value="pending">Pendiente de Pago</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* Actions */}
+                            <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowManualEnrollModal(false)}
+                                    className="px-4 py-2.5 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submittingEnroll}
+                                    className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
+                                >
+                                    {submittingEnroll ? <Loader2 size={14} className="animate-spin" /> : <UserPlus size={14} />} Confirmar Inscripción
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* SCORE INPUT MODAL */}
             {selectedMatchForScore && (

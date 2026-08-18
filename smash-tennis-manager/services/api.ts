@@ -636,6 +636,47 @@ export const api = {
             });
             if (error) throw error;
         },
+        async manualEnroll(tournamentId: string, params: {
+            playerId?: string;
+            playerName: string;
+            category: string;
+            fee?: number;
+            paymentStatus?: 'pending' | 'paid';
+        }) {
+            const insertData: any = {
+                tournament_id: tournamentId,
+                player_name: params.playerName.trim(),
+                category: params.category,
+                payment_status: params.paymentStatus || 'pending',
+                fee_amount: params.fee || 0
+            };
+            if (params.playerId) {
+                insertData.player_id = params.playerId;
+            }
+            const { data, error } = await supabase
+                .from('tournament_players')
+                .insert(insertData)
+                .select()
+                .single();
+            if (error) throw error;
+            return data;
+        },
+        async unenroll(enrollmentId: string) {
+            const { error } = await supabase
+                .from('tournament_players')
+                .delete()
+                .eq('id', enrollmentId);
+            if (error) throw error;
+            return true;
+        },
+        async updatePaymentStatus(enrollmentId: string, paymentStatus: 'pending' | 'paid') {
+            const { error } = await supabase
+                .from('tournament_players')
+                .update({ payment_status: paymentStatus })
+                .eq('id', enrollmentId);
+            if (error) throw error;
+            return true;
+        },
         async getByTournament(tournamentId: string) {
             const { data, error } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
             if (error) throw error;
