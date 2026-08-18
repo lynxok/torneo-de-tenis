@@ -145,10 +145,16 @@ export const api = {
             return data as UserProfile[];
         },
         async updateProfile(id: string, updates: Partial<UserProfile>) {
-            const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select();
+            // Eliminar campos que no existen en la tabla profiles de Postgres para evitar error PGRST204
+            const sanitizedUpdates: any = { ...updates };
+            delete sanitizedUpdates.is_member;
+            delete sanitizedUpdates.institution;
+
+            const { data, error } = await supabase.from('profiles').update(sanitizedUpdates).eq('id', id).select();
             if (error) throw error;
             return data && data.length > 0 ? data[0] : null;
         },
+
         async signUp(email: string, password: string, meta: any) {
             return await supabase.auth.signUp({ email, password, options: { data: meta } });
         },

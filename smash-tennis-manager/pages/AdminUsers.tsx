@@ -107,7 +107,6 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 gender: editFormData.gender || null,
                 role: editFormData.role,
                 institution_id: editFormData.institution_id || null,
-                is_member: editFormData.is_member,
                 member_number: editFormData.member_number || null,
                 member_status: editFormData.member_status
             };
@@ -167,12 +166,15 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     };
 
     const handleQuickApprove = async (targetUser: UserProfile) => {
+        if (!approvalCategory) {
+            alert('Por favor selecciona una categoría antes de aprobar.');
+            return;
+        }
         setProcessingApproval(true);
         try {
             await api.auth.updateProfile(targetUser.id, {
                 is_approved: true,
                 category: approvalCategory,
-                is_member: approvalIsMember,
                 member_number: approvalMemberNumber || targetUser.member_number || null,
                 member_status: 'active'
             });
