@@ -316,6 +316,20 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                     >
                         <UserPlus size={18} /> Nuevo Socio / Usuario
                     </button>
+
+                    {user?.institution_id && (
+                        <button
+                            onClick={() => {
+                                const inviteUrl = `${window.location.origin}/?club=${user.institution_id}&mode=register`;
+                                navigator.clipboard.writeText(inviteUrl);
+                                alert('¡Enlace de invitación copiado al portapapeles! Compártelo para que los nuevos socios se registren directamente en tu club.');
+                            }}
+                            className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl font-semibold flex items-center justify-center gap-2 transition-all border border-white/10 whitespace-nowrap text-sm"
+                            title="Copiar link directo para que nuevos socios se registren con tu club preseleccionado"
+                        >
+                            <Building size={16} className="text-primary" /> Link Invitación Club
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -466,14 +480,23 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         </div>
                                     ) : (
                                         <div className="space-y-3 pt-2 border-t border-white/10">
-                                            {/* Badge de Club solicitado o Sin Asignar */}
-                                            <div className="flex items-center justify-between text-xs">
-                                                <span className="text-muted flex items-center gap-1">
-                                                    <Building size={13} className="text-slate-400" /> Club solicitado:
-                                                </span>
-                                                <span className="font-bold text-primary">
-                                                    {u.institution || institutions.find(i => i.id === u.institution_id)?.name || 'Sin club seleccionado'}
-                                                </span>
+                                            {/* Info de Club solicitado y Categoría pretendida */}
+                                            <div className="grid grid-cols-2 gap-2 text-xs">
+                                                <div className="flex items-center gap-1">
+                                                    <Building size={13} className="text-slate-400 shrink-0" />
+                                                    <span className="text-muted truncate">Club:</span>
+                                                    <span className="font-bold text-primary truncate">
+                                                        {u.institution || institutions.find(i => i.id === u.institution_id)?.name || 'Independiente'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="flex items-center gap-1 justify-end">
+                                                    <Award size={13} className="text-amber-400 shrink-0" />
+                                                    <span className="text-muted">Categoría:</span>
+                                                    <span className="font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded text-[11px]">
+                                                        {u.category || 'Sin declarar'}
+                                                    </span>
+                                                </div>
                                             </div>
 
                                             <div className="flex items-center justify-end gap-2">
@@ -591,14 +614,14 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                     className="bg-slate-800 text-white text-xs py-1.5 px-2 rounded-lg border border-white/10 outline-none cursor-pointer hover:border-white/30 focus:border-primary transition-all shadow-sm"
                                                     value={u.role}
                                                     onChange={(e) => handleRoleUpdate(u.id, e.target.value as UserRole)}
-                                                    disabled={!isSuperAdmin && (u.role === 'superadmin' || u.role === 'admin')}
+                                                    disabled={!isSuperAdmin && u.role === 'superadmin'}
                                                 >
                                                     <option value="player" className="bg-slate-800 text-white">Jugador</option>
-                                                    <option value="professor" className="bg-slate-800 text-white">Profesor (Sin Caja)</option>
+                                                    <option value="professor" className="bg-slate-800 text-white">Profesor</option>
+                                                    <option value="admin" className="bg-slate-800 text-white">Organizador / Admin</option>
 
                                                     {isSuperAdmin && (
                                                         <>
-                                                            <option value="admin" className="bg-slate-800 text-white">Admin (Inst)</option>
                                                             <option value="coordinator" className="bg-slate-800 text-white">Coordinador</option>
                                                             <option value="superadmin" className="bg-slate-800 text-white">Super Admin</option>
                                                         </>
@@ -890,15 +913,16 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Categoría Inicial</label>
+                                    <label className="text-xs text-muted uppercase font-bold">Rol de Usuario</label>
                                     <select
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
-                                        value={newUser.category}
-                                        onChange={e => setNewUser({ ...newUser, category: e.target.value })}
+                                        value={newUser.role}
+                                        onChange={e => setNewUser({ ...newUser, role: e.target.value as UserRole })}
                                     >
-                                        {NUMERIC_CATEGORIES.map(cat => (
-                                            <option key={cat} value={cat}>{cat} Categoría</option>
-                                        ))}
+                                        <option value="player">Jugador</option>
+                                        <option value="professor">Profesor</option>
+                                        <option value="admin">Organizador / Admin</option>
+                                        {isSuperAdmin && <option value="superadmin">Super Admin</option>}
                                     </select>
                                 </div>
 

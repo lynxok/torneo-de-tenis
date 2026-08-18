@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { Tournament, UserProfile, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 
 interface TournamentsProps {
@@ -151,8 +151,34 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-lg ${t.status === 'active' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-muted'}`}>
                                     <Trophy size={24} />
                                 </div>
-                                <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${t.status === 'active' ? 'bg-green-500/20 text-green-400' : t.status === 'finished' ? 'bg-slate-700 text-slate-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                    {t.status === 'active' ? 'En Curso' : t.status === 'finished' ? 'Finalizado' : 'Borrador'}
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const shareUrl = `${window.location.origin}/?tournament=${t.id}`;
+                                            navigator.clipboard.writeText(shareUrl);
+                                            addToast('¡Link del torneo copiado!', 'success');
+                                        }}
+                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-muted hover:text-primary transition-colors border border-white/10"
+                                        title="Copiar link directo del torneo"
+                                    >
+                                        <Share2 size={14} />
+                                    </button>
+                                    <button
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            const shareUrl = `${window.location.origin}/?tournament=${t.id}`;
+                                            const message = encodeURIComponent(`🎾 ¡Te invito a participar o seguir el torneo "${t.name}" en ${t.institutions?.name || 'nuestro club'}! Mirá el cuadro y detalles aquí: ${shareUrl}`);
+                                            window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+                                        }}
+                                        className="p-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 transition-colors"
+                                        title="Compartir torneo por WhatsApp"
+                                    >
+                                        <MessageCircle size={14} />
+                                    </button>
+                                    <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${t.status === 'active' ? 'bg-green-500/20 text-green-400' : t.status === 'finished' ? 'bg-slate-700 text-slate-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
+                                        {t.status === 'active' ? 'En Curso' : t.status === 'finished' ? 'Finalizado' : 'Borrador'}
+                                    </div>
                                 </div>
                             </div>
                             <h3 className="text-lg font-bold text-white mb-1 group-hover:text-primary transition-colors">{t.name}</h3>

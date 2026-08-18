@@ -7,7 +7,7 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Calendar, Clock, MapPin, X, Loader2, CheckCircle2, DollarSign, Lock, ChevronLeft, ChevronRight, 
     Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
-    ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, Sparkles, ShieldCheck, Star
+    ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, Sparkles, ShieldCheck, Star, Share2, MessageCircle
 } from 'lucide-react';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
@@ -363,13 +363,32 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
                                 </div>
                             </div>
 
-                            {/* Book Action Button */}
-                            <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center">
-                                <span className="text-[11px] text-muted">
-                                    {isMemberOfThisClub 
-                                        ? 'Beneficio de socio activo' 
-                                        : 'Disponible para reservas públicas'}
-                                </span>
+                            {/* Book Action Button & Share */}
+                            <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap justify-between items-center gap-3">
+                                <div className="flex items-center gap-1.5">
+                                    <button
+                                        onClick={() => {
+                                            const shareUrl = `${window.location.origin}/?club=${inst.id}`;
+                                            navigator.clipboard.writeText(shareUrl);
+                                            addToast('¡Link del club copiado al portapapeles!', 'success');
+                                        }}
+                                        className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-muted hover:text-primary transition-all border border-white/10"
+                                        title="Copiar link directo del club"
+                                    >
+                                        <Share2 size={14} />
+                                    </button>
+                                    <button
+                                        onClick={() => {
+                                            const shareUrl = `${window.location.origin}/?club=${inst.id}`;
+                                            const message = encodeURIComponent(`🎾 ¡Te invito a jugar y reservar canchas en "${inst.name}" a través de Smash Tennis! Link directo: ${shareUrl}`);
+                                            window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+                                        }}
+                                        className="p-2 rounded-xl bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 transition-all"
+                                        title="Compartir por WhatsApp"
+                                    >
+                                        <MessageCircle size={14} />
+                                    </button>
+                                </div>
                                 <button
                                     onClick={() => handleBookAtClub(inst.id)}
                                     className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-primary/20 flex items-center gap-1.5"

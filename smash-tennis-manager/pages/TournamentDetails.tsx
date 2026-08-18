@@ -3,7 +3,7 @@ import { Tournament, UserProfile, TournamentPlayer, Match } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, X, Save, Layers, Award, Sparkles } from 'lucide-react';
+import { Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb } from 'lucide-react';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -17,6 +17,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('all');
     const { addToast } = useToast();
+
+    // Swap / Edit Groups State
+    const [isSwapMode, setIsSwapMode] = useState(false);
+    const [swapSource, setSwapSource] = useState<{ id: string; name: string } | null>(null);
+    const [isSwapping, setIsSwapping] = useState(false);
 
     // Score Modal State
     const [selectedMatchForScore, setSelectedMatchForScore] = useState<Match | null>(null);
@@ -109,6 +114,40 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
+    const handlePlayerClickForSwap = async (playerId?: string, playerName?: string) => {
+        if (!isSwapMode || !tournament || !playerId || !playerName) return;
+
+        if (!swapSource) {
+            setSwapSource({ id: playerId, name: playerName });
+            addToast(`Seleccionaste a ${playerName}. Ahora haz clic en el jugador con quien deseas intercambiarlo.`, 'info');
+            return;
+        }
+
+        if (swapSource.id === playerId) {
+            setSwapSource(null);
+            addToast('Selección cancelada', 'info');
+            return;
+        }
+
+        // Execute swap
+        setIsSwapping(true);
+        try {
+            await api.tournaments.swapGroupPlayers(
+                tournament.id,
+                swapSource,
+                { id: playerId, name: playerName }
+            );
+            addToast(`¡Intercambio realizado entre ${swapSource.name} y ${playerName}!`, 'success');
+            setSwapSource(null);
+            setIsSwapMode(false);
+            loadTournament();
+        } catch (e: any) {
+            addToast("Error al intercambiar jugadores: " + e.message, 'error');
+        } finally {
+            setIsSwapping(false);
+        }
+    };
+
     const formatMatchScore = (score: any) => {
         if (!score) return null;
         if (typeof score === 'string') return score;
@@ -172,8 +211,32 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             </div>
                         </div>
 
-                        {/* Inscription Button */}
-                        <div className="hidden md:block">
+                        {/* Action and Share Buttons */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <button
+                                onClick={() => {
+                                    const shareUrl = `${window.location.origin}/?tournament=${tournament.id}`;
+                                    navigator.clipboard.writeText(shareUrl);
+                                    addToast('¡Link del torneo copiado al portapapeles!', 'success');
+                                }}
+                                className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl transition-all border border-white/10 flex items-center gap-2 text-sm"
+                                title="Copiar link directo al torneo"
+                            >
+                                <Share2 size={16} className="text-primary" /> Copiar Link
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    const shareUrl = `${window.location.origin}/?tournament=${tournament.id}`;
+                                    const message = encodeURIComponent(`🎾 ¡Te invito a participar en el torneo "${tournament.name}" en ${tournament.institutions?.name || 'nuestro club'}! Regístrate o inscríbete directamente aquí: ${shareUrl}`);
+                                    window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+                                }}
+                                className="px-4 py-3 bg-green-600/30 hover:bg-green-600/50 text-green-300 font-semibold rounded-xl transition-all border border-green-500/30 flex items-center gap-2 text-sm"
+                                title="Compartir por WhatsApp"
+                            >
+                                <MessageCircle size={16} /> WhatsApp
+                            </button>
+
                             {!isEnrolled ? (
                                 !isRegClosed ? (
                                     <button onClick={handleEnrollClick} disabled={isEnrolling} className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center gap-2 text-sm">
@@ -240,6 +303,24 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             <Play size={14} /> Generar Grupos
                                         </button>
 
+                                        {groupMatches.length > 0 && (
+                                            <button
+                                                onClick={() => {
+                                                    setIsSwapMode(!isSwapMode);
+                                                    setSwapSource(null);
+                                                }}
+                                                disabled={isSwapping}
+                                                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 border ${
+                                                    isSwapMode
+                                                        ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-lg shadow-amber-500/20'
+                                                        : 'bg-amber-500/10 border-amber-500/20 text-amber-400 hover:bg-amber-500/20'
+                                                }`}
+                                            >
+                                                <ArrowLeftRight size={14} className={isSwapping ? "animate-spin" : ""} />
+                                                {isSwapMode ? 'Cancelar Intercambio' : 'Intercambiar Jugadores'}
+                                            </button>
+                                        )}
+
                                         <button
                                             onClick={async () => {
                                                 if (matches.some(m => m.round === 'Cuartos de Final' || m.round === 'Semifinal')) {
@@ -259,6 +340,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     </>
                                 )}
                             </div>
+
+                            {/* Organizer Advice Banner */}
+                            {groupMatches.length > 0 && tournament.status !== 'finished' && (
+                                <div className="mt-4 p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-start gap-3">
+                                    <Lightbulb size={18} className="text-amber-400 shrink-0 mt-0.5" />
+                                    <div className="text-xs text-amber-200/90 leading-relaxed">
+                                        <span className="font-bold text-amber-300">Consejo de Organización:</span> Al no contar con datos previos o historial suficiente de los jugadores, si observas que un grupo está desfasado o muy desigual, puedes hacer clic en <strong className="text-white">"Intercambiar Jugadores"</strong> para equilibrar las zonas manualmente haciendo clic sobre los dos participantes que deseas intercambiar.
+                                    </div>
+                                </div>
+                            )}
                         </Card>
                     </div>
                 )}
@@ -294,6 +385,30 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             </div>
                         </div>
 
+                        {/* Swap Mode Active Guide Bar */}
+                        {isSwapMode && (
+                            <div className="mb-4 p-3.5 bg-amber-500/20 border border-amber-500/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fade-in">
+                                <div className="text-xs text-amber-200 flex items-center gap-2.5">
+                                    <ArrowLeftRight size={18} className="text-amber-400 shrink-0" />
+                                    {swapSource ? (
+                                        <span>
+                                            Seleccionaste a <strong className="text-white bg-amber-500/40 px-2 py-0.5 rounded-lg font-bold">{swapSource.name}</strong>. Ahora haz clic sobre el jugador con quien deseas intercambiarlo.
+                                        </span>
+                                    ) : (
+                                        <span>
+                                            <strong className="text-white">Modo Intercambio Activo:</strong> Haz clic sobre el primer jugador que deseas mover de zona.
+                                        </span>
+                                    )}
+                                </div>
+                                <button
+                                    onClick={() => { setIsSwapMode(false); setSwapSource(null); }}
+                                    className="text-xs text-amber-300 hover:text-white px-3 py-1.5 bg-amber-500/30 hover:bg-amber-500/40 rounded-xl transition-all font-semibold self-end sm:self-auto"
+                                >
+                                    Cancelar
+                                </button>
+                            </div>
+                        )}
+
                         {displayedMatches.length === 0 ? (
                             <div className="text-center py-12 text-muted bg-white/5 rounded-2xl border border-dashed border-white/10">
                                 <Trophy size={32} className="mx-auto mb-2 opacity-40" />
@@ -305,10 +420,13 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id;
                                     const canEditScore = isClubAdmin || isUserInMatch;
                                     const formattedScore = formatMatchScore(m.score);
+                                    const isGroupMatchPending = m.round === 'Fase de Grupos' && m.scheduling_status !== 'finished';
+                                    const isP1SelectedForSwap = swapSource?.id === m.player1_id;
+                                    const isP2SelectedForSwap = swapSource?.id === m.player2_id;
 
                                     return (
                                         <div key={m.id} className="bg-slate-900/60 hover:bg-slate-900 p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all">
-                                            <div className="space-y-1.5 flex-1 min-w-0">
+                                            <div className="space-y-1.5 flex-1 min-w-0 w-full sm:w-auto">
                                                 <div className="flex items-center gap-2">
                                                     <span className="text-[10px] font-bold uppercase tracking-wider text-muted bg-white/5 px-2 py-0.5 rounded">
                                                         {m.round} {m.group_number ? `(Grupo ${m.group_number})` : ''}
@@ -321,14 +439,57 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                 </div>
 
                                                 <div className="space-y-1 pt-1">
-                                                    <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                        <span>{m.player1_name || 'A definir'}</span>
-                                                        {m.winner_id === m.player1_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
-                                                    </div>
-                                                    <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                        <span>{m.player2_name || 'A definir'}</span>
-                                                        {m.winner_id === m.player2_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
-                                                    </div>
+                                                    {/* Player 1 Row */}
+                                                    {isSwapMode && isGroupMatchPending ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handlePlayerClickForSwap(m.player1_id, m.player1_name)}
+                                                            className={`w-full text-left px-2.5 py-1.5 rounded-xl text-sm font-semibold flex items-center justify-between transition-all border ${
+                                                                isP1SelectedForSwap
+                                                                    ? 'bg-amber-500/30 border-amber-400 text-amber-200 ring-2 ring-amber-400/50 shadow-md'
+                                                                    : 'bg-white/5 hover:bg-amber-500/10 border-white/5 hover:border-amber-500/30 text-white'
+                                                            }`}
+                                                        >
+                                                            <span className="flex items-center gap-2">
+                                                                <ArrowLeftRight size={13} className={isP1SelectedForSwap ? "text-amber-400" : "text-muted"} />
+                                                                {m.player1_name || 'A definir'}
+                                                            </span>
+                                                            <span className="text-[11px] text-amber-300/80 font-normal">
+                                                                {isP1SelectedForSwap ? '✓ Seleccionado' : 'Click para mover'}
+                                                            </span>
+                                                        </button>
+                                                    ) : (
+                                                        <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-white'}`}>
+                                                            <span>{m.player1_name || 'A definir'}</span>
+                                                            {m.winner_id === m.player1_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
+                                                        </div>
+                                                    )}
+
+                                                    {/* Player 2 Row */}
+                                                    {isSwapMode && isGroupMatchPending ? (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => handlePlayerClickForSwap(m.player2_id, m.player2_name)}
+                                                            className={`w-full text-left px-2.5 py-1.5 rounded-xl text-sm font-semibold flex items-center justify-between transition-all border ${
+                                                                isP2SelectedForSwap
+                                                                    ? 'bg-amber-500/30 border-amber-400 text-amber-200 ring-2 ring-amber-400/50 shadow-md'
+                                                                    : 'bg-white/5 hover:bg-amber-500/10 border-white/5 hover:border-amber-500/30 text-white'
+                                                            }`}
+                                                        >
+                                                            <span className="flex items-center gap-2">
+                                                                <ArrowLeftRight size={13} className={isP2SelectedForSwap ? "text-amber-400" : "text-muted"} />
+                                                                {m.player2_name || 'A definir'}
+                                                            </span>
+                                                            <span className="text-[11px] text-amber-300/80 font-normal">
+                                                                {isP2SelectedForSwap ? '✓ Seleccionado' : 'Click para mover'}
+                                                            </span>
+                                                        </button>
+                                                    ) : (
+                                                        <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-white'}`}>
+                                                            <span>{m.player2_name || 'A definir'}</span>
+                                                            {m.winner_id === m.player2_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
 
@@ -344,7 +505,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     </span>
                                                 )}
 
-                                                {canEditScore && (
+                                                {canEditScore && !isSwapMode && (
                                                     <button
                                                         onClick={() => openScoreModal(m)}
                                                         className="p-2 rounded-xl bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-all border border-white/10"

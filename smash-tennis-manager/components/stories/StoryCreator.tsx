@@ -1,7 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
     X, Type, Smile, AtSign, MapPin, Trash2, Send, 
-    Sparkles, ChevronRight, Search
+    Sparkles, ChevronRight, Search, Image as ImageIcon,
+    Palette, ArrowLeft, Check
 } from 'lucide-react';
 import { StoryLayer, StoryTextLayer, StoryEmojiLayer, StoryStickerLayer, StoryMentionLayer, StoryLocationLayer, UserProfile, Institution } from '../../types';
 import { api } from '../../services/api';
@@ -21,16 +23,27 @@ const TENNIS_STICKERS = [
     { id: 'champions', label: 'CAMPEONES 🏆', bg: 'from-yellow-400 to-amber-600' },
     { id: 'clay_court', label: 'POLVO DE LADRILLO 🧱', bg: 'from-orange-600 to-amber-700' },
     { id: 'training', label: 'ENTRENAMIENTO 💪', bg: 'from-purple-600 to-pink-600' },
+    { id: 'smash_tourn', label: 'TORNEO SMASH 🎾', bg: 'from-lime-400 to-emerald-700' },
+    { id: 'cancha_central', label: 'CANCHA CENTRAL 🏟️', bg: 'from-sky-500 to-blue-700' },
 ];
 
-const QUICK_EMOJIS = ['🎾', '🔥', '🏆', '🥇', '⚡', '💪', '👏', '🎯', '🚀', '💯', '🥵', '😎'];
+const QUICK_EMOJIS = ['🎾', '🔥', '🏆', '🥇', '⚡', '💪', '👏', '🎯', '🚀', '💯', '🥵', '😎', '👑', '⭐', '💥', '🤩', '🎾', '🍻'];
 
 const TEXT_COLORS = [
-    { text: '#FFFFFF', bg: 'rgba(0,0,0,0.6)', label: 'Blanco' },
-    { text: '#bef264', bg: 'rgba(0,0,0,0.7)', label: 'Lime' },
-    { text: '#38bdf8', bg: 'rgba(0,0,0,0.7)', label: 'Cyan' },
-    { text: '#f43f5e', bg: 'rgba(0,0,0,0.7)', label: 'Rosa' },
-    { text: '#fbbf24', bg: 'rgba(0,0,0,0.7)', label: 'Amarillo' },
+    { text: '#FFFFFF', bg: 'rgba(0,0,0,0.75)', label: 'Blanco' },
+    { text: '#bef264', bg: 'rgba(0,0,0,0.85)', label: 'Lime' },
+    { text: '#38bdf8', bg: 'rgba(0,0,0,0.85)', label: 'Cyan' },
+    { text: '#f43f5e', bg: 'rgba(0,0,0,0.85)', label: 'Rosa' },
+    { text: '#fbbf24', bg: 'rgba(0,0,0,0.85)', label: 'Amarillo' },
+    { text: '#000000', bg: 'rgba(255,255,255,0.9)', label: 'Negro' },
+];
+
+const GRADIENT_PRESETS = [
+    { id: 'smash', label: 'Smash Neon', colors: ['#14532d', '#064e3b', '#022c22'] },
+    { id: 'clay', label: 'Polvo de Ladrillo', colors: ['#9a3412', '#7c2d12', '#431407'] },
+    { id: 'night', label: 'Cancha Nocturna', colors: ['#1e1b4b', '#0f172a', '#020617'] },
+    { id: 'sunset', label: 'Atardecer Tenis', colors: ['#831843', '#581c87', '#1e1b4b'] },
+    { id: 'gold', label: 'Grand Slam Dorado', colors: ['#78350f', '#451a03', '#1c1917'] },
 ];
 
 export const StoryCreator: React.FC<StoryCreatorProps> = ({
@@ -38,7 +51,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
     onClose,
     onPublished,
     currentUser,
-    institutions
+    institutions = []
 }) => {
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -64,6 +77,28 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
             setImageFile(file);
             setImagePreview(URL.createObjectURL(file));
         }
+    };
+
+    const handleSelectGradient = async (preset: typeof GRADIENT_PRESETS[0]) => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1080;
+        canvas.height = 1920;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+            const gradient = ctx.createLinearGradient(0, 0, 1080, 1920);
+            gradient.addColorStop(0, preset.colors[0]);
+            gradient.addColorStop(0.5, preset.colors[1]);
+            gradient.addColorStop(1, preset.colors[2]);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, 1080, 1920);
+        }
+        canvas.toBlob((blob) => {
+            if (blob) {
+                const file = new File([blob], `story_${preset.id}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+                setImageFile(file);
+                setImagePreview(URL.createObjectURL(blob));
+            }
+        }, 'image/jpeg', 0.92);
     };
 
     useEffect(() => {
@@ -111,7 +146,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
         x = Math.max(5, Math.min(95, x));
         y = Math.max(5, Math.min(95, y));
 
-        setIsOverTrash(y > 85);
+        setIsOverTrash(y > 82);
         setLayers(prev => prev.map(l => l.id === draggingLayerId ? { ...l, x, y } : l));
     };
 
@@ -207,9 +242,10 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
             onPublished();
             handleReset();
             onClose();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Error al publicar historia:', error);
-            alert('No se pudo publicar la historia. Verifique la conexión.');
+            const msg = error?.message || 'Verifique la conexión o el esquema de base de datos.';
+            alert(`No se pudo publicar la historia: ${msg}`);
         } finally {
             setIsPublishing(false);
         }
@@ -225,8 +261,10 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
 
     if (!isOpen) return null;
 
-    return (
-        <div className="fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center select-none overflow-hidden touch-none p-0 m-0">
+    // Usamos createPortal para garantizar que el modal viva directamente en document.body
+    // evitando ser atrapado por filtros de CSS como backdrop-blur o transformaciones en padres
+    return createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-[100dvh] bg-black/95 backdrop-blur-2xl flex flex-col items-center justify-center select-none overflow-hidden touch-none p-0 sm:p-4 m-0">
             <input 
                 type="file" 
                 ref={fileInputRef} 
@@ -236,12 +274,15 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
             />
 
             {!imagePreview ? (
-                <div className="relative w-full h-[100dvh] max-w-md flex flex-col justify-between p-6 bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white shadow-2xl border-x border-white/5">
+                /* PANTALLA INICIAL DE SELECCIÓN DE FOTO O FONDO */
+                <div className="relative w-full h-[100dvh] sm:h-[92vh] sm:max-h-[820px] max-w-md flex flex-col justify-between p-6 bg-gradient-to-b from-slate-900 via-slate-950 to-black text-white shadow-2xl sm:rounded-3xl border border-white/10 overflow-y-auto">
                     {/* Header */}
-                    <div className="flex justify-between items-center pt-8 pb-4">
+                    <div className="flex justify-between items-center pt-2 pb-4">
                         <button 
+                            type="button"
                             onClick={onClose}
                             className="p-3 rounded-full bg-white/10 hover:bg-white/20 text-white active:scale-95 transition"
+                            title="Cerrar"
                         >
                             <X className="w-6 h-6" />
                         </button>
@@ -251,53 +292,83 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                     </div>
 
                     {/* Contenido Central */}
-                    <div className="text-center space-y-5 my-auto px-4">
-                        <div className="w-24 h-24 mx-auto rounded-3xl bg-gradient-to-tr from-lime-400 to-emerald-500 flex items-center justify-center shadow-2xl shadow-lime-500/30 ring-4 ring-lime-400/20">
-                            <Sparkles className="w-12 h-12 text-slate-950" />
+                    <div className="text-center space-y-4 my-auto px-2">
+                        <div className="w-20 h-20 mx-auto rounded-3xl bg-gradient-to-tr from-lime-400 via-emerald-500 to-teal-500 flex items-center justify-center shadow-2xl shadow-lime-500/30 ring-4 ring-lime-400/20">
+                            <Sparkles className="w-10 h-10 text-slate-950" />
                         </div>
                         <div>
                             <h2 className="text-2xl sm:text-3xl font-black tracking-tight text-white mb-2">Crear Historia Smash</h2>
                             <p className="text-sm text-slate-400 max-w-xs mx-auto leading-relaxed">
-                                Sube una foto, agrega stickers de tenis, menciones a jugadores y ubicaciones. Duración activa: <span className="text-lime-400 font-bold">20 horas</span>.
+                                Comparte novedades, fotos del torneo, resultados o anuncios con toda la comunidad. Activa por <span className="text-lime-400 font-bold">20 horas</span>.
                             </p>
+                        </div>
+
+                        {/* Presets de fondos de color / degradados para anuncios rápidos */}
+                        <div className="pt-3">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center justify-center gap-1.5">
+                                <Palette className="w-3.5 h-3.5 text-lime-400" /> O elige un fondo para anuncio
+                            </p>
+                            <div className="grid grid-cols-5 gap-2 max-w-xs mx-auto">
+                                {GRADIENT_PRESETS.map((preset) => (
+                                    <button
+                                        key={preset.id}
+                                        type="button"
+                                        onClick={() => handleSelectGradient(preset)}
+                                        style={{
+                                            background: `linear-gradient(135deg, ${preset.colors[0]}, ${preset.colors[1]}, ${preset.colors[2]})`
+                                        }}
+                                        className="h-14 rounded-2xl border-2 border-white/20 hover:border-lime-400 hover:scale-105 active:scale-95 transition shadow-lg flex items-center justify-center group"
+                                        title={preset.label}
+                                    >
+                                        <Sparkles className="w-4 h-4 text-white/50 group-hover:text-white transition" />
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
                     {/* Botones Inferiores */}
-                    <div className="space-y-3 pb-10">
+                    <div className="space-y-3 pt-4 pb-2">
                         <button 
+                            type="button"
                             onClick={() => fileInputRef.current?.click()}
-                            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-black text-base shadow-xl shadow-lime-500/25 active:scale-[0.98] transition flex items-center justify-center gap-3"
+                            className="w-full py-4 px-6 rounded-2xl bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-black text-base shadow-xl shadow-lime-500/25 hover:brightness-110 active:scale-[0.98] transition flex items-center justify-center gap-3"
                         >
-                            <span>Elegir Foto o Tomar con Cámara</span>
-                            <ChevronRight className="w-5 h-5" />
+                            <ImageIcon className="w-5 h-5" />
+                            <span>Elegir Foto o Galería</span>
+                            <ChevronRight className="w-5 h-5 ml-auto" />
                         </button>
                         <button 
+                            type="button"
                             onClick={onClose}
-                            className="w-full py-3 text-slate-400 text-sm font-bold hover:text-white transition"
+                            className="w-full py-2.5 text-slate-400 text-sm font-bold hover:text-white transition"
                         >
                             Volver al Dashboard
                         </button>
                     </div>
                 </div>
             ) : (
+                /* CANVAS DE EDICIÓN DE HISTORIA */
                 <div 
                     ref={canvasRef}
                     onMouseMove={handleTouchMove}
                     onMouseUp={handleTouchEnd}
                     onTouchMove={handleTouchMove}
                     onTouchEnd={handleTouchEnd}
-                    className="relative w-full h-[100dvh] max-w-md bg-black flex flex-col justify-between overflow-hidden shadow-2xl"
+                    className="relative w-full h-[100dvh] sm:h-[92vh] sm:max-h-[820px] max-w-md bg-black flex flex-col justify-between overflow-hidden shadow-2xl sm:rounded-3xl border border-white/10"
                 >
+                    {/* Imagen de Fondo */}
                     <img 
                         src={imagePreview} 
                         alt="Story preview" 
                         className="absolute inset-0 w-full h-full object-cover pointer-events-none"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/40 via-transparent to-black/60 pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/70 pointer-events-none" />
 
+                    {/* CAPAS INTERACTIVAS */}
                     {layers.map((layer) => {
                         const isDragging = draggingLayerId === layer.id;
+
                         return (
                             <div 
                                 key={layer.id}
@@ -336,7 +407,7 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                 )}
 
                                 {layer.type === 'mention' && (
-                                    <div className="px-3.5 py-1.5 rounded-full bg-white/90 text-slate-950 font-bold text-xs shadow-xl flex items-center gap-1.5 border border-white">
+                                    <div className="px-3.5 py-1.5 rounded-full bg-white/95 text-slate-950 font-bold text-xs shadow-xl flex items-center gap-1.5 border border-white">
                                         <div className="w-4 h-4 rounded-full bg-lime-500 flex items-center justify-center text-[10px] text-black font-extrabold">
                                             @
                                         </div>
@@ -354,70 +425,77 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                         );
                     })}
 
-                    {/* TOP BAR */}
+                    {/* TOP BAR CON HERRAMIENTAS */}
                     <div className="relative z-30 flex items-center justify-between p-4 pt-6">
                         <button 
+                            type="button"
                             onClick={handleReset}
-                            className="p-2.5 rounded-full bg-black/50 backdrop-blur-md text-white hover:bg-black/70 active:scale-95 transition"
+                            className="p-2.5 rounded-full bg-black/60 backdrop-blur-md text-white hover:bg-black/80 active:scale-95 transition border border-white/10"
+                            title="Cambiar imagen / Volver"
                         >
-                            <X className="w-6 h-6" />
+                            <ArrowLeft className="w-5 h-5" />
                         </button>
 
-                        <div className="flex items-center gap-2 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10">
+                        <div className="flex items-center gap-1.5 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/15 shadow-xl">
                             <button 
+                                type="button"
                                 onClick={() => setActiveTool('text')}
-                                className={`p-2 rounded-full transition ${activeTool === 'text' ? 'bg-lime-500 text-black' : 'text-white hover:bg-white/10'}`}
-                                title="Texto"
+                                className={`p-2 rounded-full transition ${activeTool === 'text' ? 'bg-lime-500 text-black shadow-md' : 'text-white hover:bg-white/10'}`}
+                                title="Agregar Texto"
                             >
                                 <Type className="w-5 h-5" />
                             </button>
 
                             <button 
+                                type="button"
                                 onClick={() => setActiveTool('stickers')}
-                                className={`p-2 rounded-full transition ${activeTool === 'stickers' ? 'bg-lime-500 text-black' : 'text-white hover:bg-white/10'}`}
+                                className={`p-2 rounded-full transition ${activeTool === 'stickers' ? 'bg-lime-500 text-black shadow-md' : 'text-white hover:bg-white/10'}`}
                                 title="Stickers y Emojis"
                             >
                                 <Smile className="w-5 h-5" />
                             </button>
 
                             <button 
+                                type="button"
                                 onClick={() => setActiveTool('mentions')}
-                                className={`p-2 rounded-full transition ${activeTool === 'mentions' ? 'bg-lime-500 text-black' : 'text-white hover:bg-white/10'}`}
+                                className={`p-2 rounded-full transition ${activeTool === 'mentions' ? 'bg-lime-500 text-black shadow-md' : 'text-white hover:bg-white/10'}`}
                                 title="Etiquetar Jugador"
                             >
                                 <AtSign className="w-5 h-5" />
                             </button>
 
                             <button 
+                                type="button"
                                 onClick={() => setActiveTool('location')}
-                                className={`p-2 rounded-full transition ${activeTool === 'location' ? 'bg-lime-500 text-black' : 'text-white hover:bg-white/10'}`}
-                                title="Ubicación"
+                                className={`p-2 rounded-full transition ${activeTool === 'location' ? 'bg-lime-500 text-black shadow-md' : 'text-white hover:bg-white/10'}`}
+                                title="Agregar Ubicación"
                             >
                                 <MapPin className="w-5 h-5" />
                             </button>
                         </div>
                     </div>
 
-                    {/* BOTTOM BAR */}
-                    <div className="relative z-30 p-4 pb-8 flex items-center justify-between">
+                    {/* BOTTOM BAR: PUBLICAR O ZONA DE BASURA */}
+                    <div className="relative z-30 p-4 pb-6 flex items-center justify-between">
                         {draggingLayerId ? (
                             <div className={`w-full py-4 rounded-2xl flex items-center justify-center gap-2 font-bold text-sm transition-all ${
-                                isOverTrash ? 'bg-red-600 text-white scale-105 shadow-xl' : 'bg-black/60 text-slate-300 border border-white/20'
+                                isOverTrash ? 'bg-red-600 text-white scale-105 shadow-xl' : 'bg-black/70 text-slate-300 border border-white/20'
                             }`}>
                                 <Trash2 className="w-5 h-5" />
                                 <span>{isOverTrash ? 'Soltar para eliminar' : 'Arrastrar aquí para borrar'}</span>
                             </div>
                         ) : (
                             <>
-                                <div className="flex items-center gap-2 text-xs text-white/80 bg-black/40 backdrop-blur-md px-3 py-1.5 rounded-full">
+                                <div className="flex items-center gap-2 text-xs text-white/90 bg-black/60 backdrop-blur-md px-3.5 py-2 rounded-full border border-white/10">
                                     <Sparkles className="w-3.5 h-3.5 text-lime-400" />
-                                    <span>20 horas</span>
+                                    <span>20 horas activas</span>
                                 </div>
 
                                 <button 
+                                    type="button"
                                     onClick={handlePublish}
                                     disabled={isPublishing}
-                                    className="py-3 px-6 rounded-full bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-black text-sm shadow-xl shadow-lime-500/20 active:scale-95 transition flex items-center gap-2 disabled:opacity-50"
+                                    className="py-3 px-6 rounded-full bg-gradient-to-r from-lime-400 to-emerald-500 text-slate-950 font-black text-sm shadow-xl shadow-lime-500/20 hover:brightness-110 active:scale-95 transition flex items-center gap-2 disabled:opacity-50"
                                 >
                                     {isPublishing ? (
                                         <span>Publicando...</span>
@@ -432,18 +510,20 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                         )}
                     </div>
 
-                    {/* MODAL: TEXTO */}
+                    {/* MODAL HERRAMIENTA: TEXTO */}
                     {activeTool === 'text' && (
-                        <div className="absolute inset-0 z-50 bg-black/85 backdrop-blur-md flex flex-col justify-between p-6">
+                        <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-6">
                             <div className="flex justify-between items-center">
-                                <button onClick={() => setActiveTool('none')} className="text-white p-2">
+                                <button type="button" onClick={() => setActiveTool('none')} className="text-white p-2">
                                     <X className="w-6 h-6" />
                                 </button>
                                 <button 
+                                    type="button"
                                     onClick={handleAddText}
-                                    className="px-5 py-1.5 rounded-full bg-lime-400 text-black font-bold text-sm"
+                                    className="px-5 py-2 rounded-full bg-lime-400 text-black font-extrabold text-sm shadow-lg active:scale-95 transition flex items-center gap-1.5"
                                 >
-                                    Listo
+                                    <Check className="w-4 h-4" />
+                                    <span>Listo</span>
                                 </button>
                             </div>
 
@@ -451,14 +531,14 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                 <textarea 
                                     autoFocus
                                     rows={3}
-                                    placeholder="Escribe un mensaje..."
+                                    placeholder="Escribe tu mensaje aquí..."
                                     value={textInput}
                                     onChange={(e) => setTextInput(e.target.value)}
                                     style={{
                                         color: TEXT_COLORS[selectedColorIdx].text,
                                         backgroundColor: TEXT_COLORS[selectedColorIdx].bg
                                     }}
-                                    className="w-full max-w-xs text-center text-2xl font-black p-4 rounded-2xl outline-none resize-none border-none"
+                                    className="w-full max-w-xs text-center text-2xl font-black p-4 rounded-2xl outline-none resize-none border border-white/20 shadow-2xl placeholder-white/40"
                                 />
                             </div>
 
@@ -466,23 +546,24 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                 {TEXT_COLORS.map((c, i) => (
                                     <button 
                                         key={i}
+                                        type="button"
                                         onClick={() => setSelectedColorIdx(i)}
                                         style={{ backgroundColor: c.text }}
-                                        className={`w-8 h-8 rounded-full border-2 transition ${selectedColorIdx === i ? 'border-white scale-125' : 'border-transparent'}`}
+                                        className={`w-8 h-8 rounded-full border-2 transition ${selectedColorIdx === i ? 'border-white scale-125 shadow-lg ring-2 ring-lime-400' : 'border-transparent opacity-70 hover:opacity-100'}`}
                                     />
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    {/* MODAL: STICKERS & EMOJIS */}
+                    {/* MODAL HERRAMIENTA: STICKERS & EMOJIS */}
                     {activeTool === 'stickers' && (
-                        <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col p-6 text-white overflow-y-auto">
+                        <div className="absolute inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 text-white overflow-y-auto">
                             <div className="flex justify-between items-center mb-6">
                                 <h3 className="font-bold text-lg flex items-center gap-2">
                                     <Smile className="w-5 h-5 text-lime-400" /> Stickers de Tenis
                                 </h3>
-                                <button onClick={() => setActiveTool('none')} className="p-2 text-white/70 hover:text-white">
+                                <button type="button" onClick={() => setActiveTool('none')} className="p-2 text-white/70 hover:text-white">
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
@@ -494,8 +575,9 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                         {TENNIS_STICKERS.map((st) => (
                                             <button 
                                                 key={st.id}
+                                                type="button"
                                                 onClick={() => handleAddSticker(st)}
-                                                className={`p-3 rounded-xl bg-gradient-to-r ${st.bg} font-black text-xs text-slate-950 shadow-md text-left active:scale-95 transition flex items-center justify-between`}
+                                                className={`p-3.5 rounded-xl bg-gradient-to-r ${st.bg} font-black text-xs text-slate-950 shadow-md text-left active:scale-95 transition flex items-center justify-between border border-white/20`}
                                             >
                                                 <span>{st.label}</span>
                                             </button>
@@ -509,8 +591,9 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                         {QUICK_EMOJIS.map((em, idx) => (
                                             <button 
                                                 key={idx}
+                                                type="button"
                                                 onClick={() => handleAddEmoji(em)}
-                                                className="p-2 rounded-xl bg-white/5 hover:bg-white/15 active:scale-125 transition flex items-center justify-center"
+                                                className="p-2.5 rounded-xl bg-white/5 hover:bg-white/15 active:scale-125 transition flex items-center justify-center border border-white/5"
                                             >
                                                 {em}
                                             </button>
@@ -521,14 +604,14 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                         </div>
                     )}
 
-                    {/* MODAL: MENCIONES */}
+                    {/* MODAL HERRAMIENTA: MENCIONES */}
                     {activeTool === 'mentions' && (
-                        <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col p-6 text-white">
+                        <div className="absolute inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 text-white">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="font-bold text-lg flex items-center gap-2">
                                     <AtSign className="w-5 h-5 text-lime-400" /> Etiquetar Jugador
                                 </h3>
-                                <button onClick={() => setActiveTool('none')} className="p-2 text-white/70 hover:text-white">
+                                <button type="button" onClick={() => setActiveTool('none')} className="p-2 text-white/70 hover:text-white">
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
@@ -555,8 +638,9 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                 {!isSearchingUsers && mentionResults.map((u) => (
                                     <button 
                                         key={u.id}
+                                        type="button"
                                         onClick={() => handleAddMention(u)}
-                                        className="w-full p-3 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-between active:scale-[0.99] transition"
+                                        className="w-full p-3 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-between active:scale-[0.99] transition border border-white/5"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-10 h-10 rounded-full bg-slate-800 border border-white/20 overflow-hidden flex items-center justify-center font-bold text-lime-400">
@@ -584,14 +668,14 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                         </div>
                     )}
 
-                    {/* MODAL: UBICACIÓN */}
+                    {/* MODAL HERRAMIENTA: UBICACIÓN */}
                     {activeTool === 'location' && (
-                        <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col p-6 text-white">
+                        <div className="absolute inset-0 z-50 bg-black/95 backdrop-blur-md flex flex-col p-6 text-white">
                             <div className="flex justify-between items-center mb-4">
                                 <h3 className="font-bold text-lg flex items-center gap-2">
                                     <MapPin className="w-5 h-5 text-blue-400" /> Agregar Ubicación
                                 </h3>
-                                <button onClick={() => setActiveTool('none')} className="p-2 text-white/70 hover:text-white">
+                                <button type="button" onClick={() => setActiveTool('none')} className="p-2 text-white/70 hover:text-white">
                                     <X className="w-6 h-6" />
                                 </button>
                             </div>
@@ -601,8 +685,9 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                 {institutions.map((inst) => (
                                     <button 
                                         key={inst.id}
+                                        type="button"
                                         onClick={() => handleAddLocation(inst.name, inst.id)}
-                                        className="w-full p-3.5 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-between text-left active:scale-[0.99] transition"
+                                        className="w-full p-3.5 rounded-xl bg-white/5 hover:bg-white/15 flex items-center justify-between text-left active:scale-[0.99] transition border border-white/5"
                                     >
                                         <div className="flex items-center gap-3">
                                             <div className="w-9 h-9 rounded-lg bg-blue-500/20 text-blue-400 flex items-center justify-center">
@@ -618,19 +703,32 @@ export const StoryCreator: React.FC<StoryCreatorProps> = ({
                                 ))}
                                 
                                 <button 
+                                    type="button"
                                     onClick={() => handleAddLocation('Cancha Central')}
-                                    className="w-full p-3.5 rounded-xl bg-white/5 hover:bg-white/15 flex items-center gap-3 text-left"
+                                    className="w-full p-3.5 rounded-xl bg-white/5 hover:bg-white/15 flex items-center gap-3 text-left border border-white/5"
                                 >
                                     <div className="w-9 h-9 rounded-lg bg-lime-500/20 text-lime-400 flex items-center justify-center font-bold text-xs">
                                         🎾
                                     </div>
                                     <p className="font-bold text-sm text-white">Cancha Central</p>
                                 </button>
+
+                                <button 
+                                    type="button"
+                                    onClick={() => handleAddLocation('Cancha 1')}
+                                    className="w-full p-3.5 rounded-xl bg-white/5 hover:bg-white/15 flex items-center gap-3 text-left border border-white/5"
+                                >
+                                    <div className="w-9 h-9 rounded-lg bg-lime-500/20 text-lime-400 flex items-center justify-center font-bold text-xs">
+                                        🎾
+                                    </div>
+                                    <p className="font-bold text-sm text-white">Cancha 1</p>
+                                </button>
                             </div>
                         </div>
                     )}
                 </div>
             )}
-        </div>
+        </div>,
+        document.body
     );
 };

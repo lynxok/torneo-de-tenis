@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ChevronLeft, ChevronRight, MapPin, Trash2, ShieldAlert } from 'lucide-react';
 import { Story, UserProfile } from '../../types';
 import { api } from '../../services/api';
@@ -157,11 +158,11 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
 
     if (!isOpen || !activeStory) return null;
 
-    return (
-        <div className="fixed inset-0 z-[9999] w-screen h-[100dvh] bg-black/95 backdrop-blur-xl flex items-center justify-center select-none touch-none overflow-hidden p-0 m-0">
+    return createPortal(
+        <div className="fixed inset-0 z-[99999] w-screen h-[100dvh] bg-black/95 backdrop-blur-2xl flex items-center justify-center select-none touch-none overflow-hidden p-0 sm:p-4 m-0">
             {/* Contenedor Vertical 9:16 Mobile-First */}
             <div 
-                className="relative w-full h-[100dvh] max-w-md bg-slate-950 flex flex-col justify-between overflow-hidden shadow-2xl border-x border-white/5"
+                className="relative w-full h-[100dvh] sm:h-[92vh] sm:max-h-[820px] max-w-md bg-slate-950 flex flex-col justify-between overflow-hidden shadow-2xl sm:rounded-3xl border border-white/10"
                 onMouseDown={handlePressStart}
                 onMouseUp={handlePressEnd}
                 onTouchStart={handlePressStart}
@@ -218,7 +219,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                                         onSelectUser(layer.userId);
                                     }
                                 }}
-                                className="px-3.5 py-1.5 rounded-full bg-white/90 text-slate-950 font-bold text-xs shadow-xl flex items-center gap-1.5 border border-white hover:scale-105 active:scale-95 transition"
+                                className="px-3.5 py-1.5 rounded-full bg-white/95 text-slate-950 font-bold text-xs shadow-xl flex items-center gap-1.5 border border-white hover:scale-105 active:scale-95 transition pointer-events-auto cursor-pointer"
                             >
                                 <div className="w-4 h-4 rounded-full bg-lime-500 flex items-center justify-center text-[10px] text-black font-extrabold">
                                     @
@@ -236,81 +237,80 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                     </div>
                 ))}
 
-                {/* ZONA DE CONTROL Y HEADER */}
-                <div className="relative z-40 p-4 pt-6 flex flex-col gap-3">
-                    {/* BARRAS DE PROGRESO SEGMENTADAS */}
-                    <div className="flex items-center gap-1.5 w-full">
-                        {stories.map((s, idx) => {
-                            let barProgress = 0;
-                            if (idx < currentIndex) barProgress = 100;
-                            else if (idx === currentIndex) barProgress = progress;
-
-                            return (
-                                <div key={s.id} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
-                                    <div 
-                                        className="h-full bg-white transition-[width] duration-75 ease-linear rounded-full"
-                                        style={{ width: `${barProgress}%` }}
-                                    />
-                                </div>
-                            );
-                        })}
+                {/* HEADER: BARRAS DE PROGRESO + INFO AUTOR + BOTÓN CERRAR */}
+                <div className="relative z-30 p-4 pt-6 space-y-3">
+                    {/* Barras de Progreso Segmentadas */}
+                    <div className="flex gap-1.5 w-full">
+                        {stories.map((s, idx) => (
+                            <div key={s.id || idx} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-lime-400 rounded-full transition-all duration-75"
+                                    style={{
+                                        width: idx === currentIndex ? `${progress}%` : idx < currentIndex ? '100%' : '0%'
+                                    }}
+                                />
+                            </div>
+                        ))}
                     </div>
 
-                    {/* CABECERA: AVATAR, AUTOR, TIEMPO RESTANTE Y ACCIONES */}
+                    {/* Fila del Autor & Controles */}
                     <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                            <div className="w-10 h-10 rounded-full p-[2px] bg-gradient-to-tr from-lime-400 to-emerald-500 shadow-md">
-                                <div className="w-full h-full rounded-full bg-slate-900 overflow-hidden flex items-center justify-center font-bold text-sm text-lime-400">
-                                    {activeStory.author?.profile_picture_url ? (
-                                        <img 
-                                            src={activeStory.author.profile_picture_url} 
-                                            alt={activeStory.author.name} 
-                                            className="w-full h-full object-cover" 
-                                        />
-                                    ) : (
-                                        (activeStory.author?.name || 'S')[0]
-                                    )}
-                                </div>
+                        <div 
+                            className="flex items-center gap-2.5 cursor-pointer"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                if (activeStory.user_id && onSelectUser) {
+                                    onClose();
+                                    onSelectUser(activeStory.user_id);
+                                }
+                            }}
+                        >
+                            <div className="w-9 h-9 rounded-full bg-slate-800 border-2 border-lime-400 overflow-hidden flex items-center justify-center text-xs font-bold text-lime-400 shadow-md">
+                                {activeStory.author?.profile_picture_url ? (
+                                    <img src={activeStory.author.profile_picture_url} alt="Autor" className="w-full h-full object-cover" />
+                                ) : (
+                                    activeStory.author?.name?.[0] || 'S'
+                                )}
                             </div>
-
                             <div>
-                                <div className="flex items-center gap-1.5">
-                                    <p className="font-bold text-sm text-white drop-shadow">
-                                        {activeStory.author ? `${activeStory.author.name} ${activeStory.author.lastname || ''}`.trim() : 'Smash Tennis'}
-                                    </p>
-                                    <span className="px-1.5 py-0.5 rounded-full bg-lime-400/20 border border-lime-400/40 text-[10px] font-bold text-lime-400">
-                                        OFICIAL
-                                    </span>
-                                </div>
-                                <p className="text-[11px] text-white/70">
-                                    Quedan {getRemainingHours(activeStory.expires_at)}
+                                <p className="text-white font-bold text-sm leading-tight flex items-center gap-1.5">
+                                    <span>{activeStory.author?.name || 'Smash Tennis'}</span>
+                                    {activeStory.author?.role === 'superadmin' && (
+                                        <span className="px-1.5 py-0.5 rounded bg-lime-400/20 text-lime-400 text-[9px] font-black uppercase">
+                                            Oficial
+                                        </span>
+                                    )}
+                                </p>
+                                <p className="text-[11px] text-slate-300 font-medium">
+                                    Vence en {getRemainingHours(activeStory.expires_at)}
                                 </p>
                             </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
-                            {/* Botón borrar (Solo SuperAdmin) */}
-                            {isSuperAdmin && (
-                                <button 
+                        <div className="flex items-center gap-1.5">
+                            {/* Botón Borrar (Solo Superadmin o Autor) */}
+                            {(isSuperAdmin || currentUser?.id === activeStory.user_id) && (
+                                <button
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handleDeleteStory();
                                     }}
                                     disabled={isDeleting}
-                                    title="Eliminar historia ahora"
-                                    className="p-2 rounded-full bg-red-600/80 hover:bg-red-600 text-white backdrop-blur-md active:scale-95 transition"
+                                    className="p-2 rounded-full bg-black/40 text-red-400 hover:bg-red-500/20 hover:text-red-300 transition backdrop-blur-md"
+                                    title="Eliminar Historia"
                                 >
                                     <Trash2 className="w-4 h-4" />
                                 </button>
                             )}
 
-                            {/* Botón cerrar */}
-                            <button 
+                            {/* Botón Cerrar */}
+                            <button
                                 onClick={(e) => {
                                     e.stopPropagation();
                                     onClose();
                                 }}
-                                className="p-2 rounded-full bg-black/40 hover:bg-black/60 text-white backdrop-blur-md active:scale-95 transition"
+                                className="p-2 rounded-full bg-black/40 text-white hover:bg-white/20 transition backdrop-blur-md"
+                                title="Cerrar"
                             >
                                 <X className="w-5 h-5" />
                             </button>
@@ -333,6 +333,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                     )}
                 </div>
             </div>
-        </div>
+        </div>,
+        document.body
     );
 };

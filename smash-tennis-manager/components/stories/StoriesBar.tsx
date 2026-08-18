@@ -13,7 +13,7 @@ interface StoriesBarProps {
 
 export const StoriesBar: React.FC<StoriesBarProps> = ({
     currentUser,
-    institutions,
+    institutions = [],
     onSelectUser
 }) => {
     const [stories, setStories] = useState<Story[]>([]);
@@ -21,6 +21,7 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
     const [isViewerOpen, setIsViewerOpen] = useState(false);
     const [isCreatorOpen, setIsCreatorOpen] = useState(false);
     const [selectedStoryIndex, setSelectedStoryIndex] = useState(0);
+    const [loadedInstitutions, setLoadedInstitutions] = useState<Institution[]>(institutions);
 
     const isSuperAdmin = currentUser?.role === 'superadmin';
 
@@ -37,10 +38,15 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
 
     useEffect(() => {
         loadStories();
+        if (!institutions || institutions.length === 0) {
+            api.institutions.getAll().then(setLoadedInstitutions).catch(console.error);
+        } else {
+            setLoadedInstitutions(institutions);
+        }
         // Polling cada 2 minutos para sincronizar historias
         const interval = setInterval(loadStories, 120000);
         return () => clearInterval(interval);
-    }, []);
+    }, [institutions]);
 
     const handleOpenStory = (index: number) => {
         setSelectedStoryIndex(index);
@@ -138,7 +144,7 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                     onClose={() => setIsCreatorOpen(false)}
                     onPublished={loadStories}
                     currentUser={currentUser}
-                    institutions={institutions}
+                    institutions={loadedInstitutions}
                 />
             )}
         </div>

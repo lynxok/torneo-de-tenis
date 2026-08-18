@@ -49,14 +49,20 @@ const AppContent = () => {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else setLoading(false);
+      if (session) {
+        fetchProfile(session.user.id);
+        checkUrlRedirects();
+      } else {
+        setLoading(false);
+      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
-      if (session) fetchProfile(session.user.id);
-      else {
+      if (session) {
+        fetchProfile(session.user.id);
+        checkUrlRedirects();
+      } else {
         setUserProfile(null);
         setLoading(false);
         setSimulatedRole(null);
@@ -67,6 +73,20 @@ const AppContent = () => {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const checkUrlRedirects = () => {
+    const params = new URLSearchParams(window.location.search);
+    const tournamentId = params.get('tournament') || params.get('t');
+    const clubId = params.get('club') || params.get('institution') || params.get('c');
+
+    if (tournamentId) {
+      setActiveView('tournament-detail');
+      setNavData(tournamentId);
+    } else if (clubId) {
+      setActiveView('bookings');
+      setNavData({ clubId });
+    }
+  };
 
   // Sync Badge Count with Role Changes (Simulation)
   useEffect(() => {

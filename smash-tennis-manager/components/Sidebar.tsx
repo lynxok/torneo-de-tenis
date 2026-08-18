@@ -13,6 +13,7 @@ import {
   Sliders
 } from 'lucide-react';
 import { UserRole } from '../types';
+import packageInfo from '../package.json';
 
 interface SidebarProps {
   role: UserRole;
@@ -121,9 +122,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ role, activeView, onNavigate, 
           Cerrar Sesión
         </button>
 
-        <div className="flex justify-center items-center gap-2 opacity-30 hover:opacity-80 transition-opacity pt-2">
-          <span className="text-sm text-muted">Desarrollado por</span>
-          <img src="/lynx-logo-white.png" alt="Lynx" className="h-8 w-auto" />
+        <div className="flex flex-col items-center justify-center gap-1 pt-2">
+          <div className="flex items-center gap-2 opacity-40 hover:opacity-80 transition-opacity">
+            <span className="text-xs text-muted">Desarrollado por</span>
+            <img src="/lynx-logo-white.png" alt="Lynx" className="h-6 w-auto" />
+          </div>
+          <span className="text-[10px] font-mono text-primary/70 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+            v{packageInfo.version}
+          </span>
         </div>
       </div>
     </aside>

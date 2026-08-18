@@ -500,6 +500,59 @@ export const api = {
             if (error) throw error;
             return true;
         },
+        async swapGroupPlayers(tournamentId: string, playerA: { id: string; name: string }, playerB: { id: string; name: string }) {
+            // 1. Fetch unplayed group matches for this tournament
+            const { data: matches, error: fetchErr } = await supabase
+                .from('matches')
+                .select('*')
+                .eq('tournament_id', tournamentId)
+                .eq('round', 'Fase de Grupos')
+                .neq('scheduling_status', 'finished');
+
+            if (fetchErr) throw fetchErr;
+            if (!matches || matches.length === 0) {
+                throw new Error("No se encontraron partidos de grupos pendientes para actualizar.");
+            }
+
+            // 2. Perform swap on affected matches
+            const updates = [];
+            for (const match of matches) {
+                let updated = false;
+                const updatePayload: any = {};
+
+                if (match.player1_id === playerA.id) {
+                    updatePayload.player1_id = playerB.id;
+                    updatePayload.player1_name = playerB.name;
+                    updated = true;
+                } else if (match.player1_id === playerB.id) {
+                    updatePayload.player1_id = playerA.id;
+                    updatePayload.player1_name = playerA.name;
+                    updated = true;
+                }
+
+                if (match.player2_id === playerA.id) {
+                    updatePayload.player2_id = playerB.id;
+                    updatePayload.player2_name = playerB.name;
+                    updated = true;
+                } else if (match.player2_id === playerB.id) {
+                    updatePayload.player2_id = playerA.id;
+                    updatePayload.player2_name = playerA.name;
+                    updated = true;
+                }
+
+                if (updated) {
+                    updates.push(
+                        supabase.from('matches').update(updatePayload).eq('id', match.id)
+                    );
+                }
+            }
+
+            if (updates.length > 0) {
+                await Promise.all(updates);
+            }
+
+            return true;
+        },
         async simulateHistory(tournamentId: string) {
             // 1. Get Players
             const { data: players } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
