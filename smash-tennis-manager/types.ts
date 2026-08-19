@@ -200,6 +200,9 @@ export interface Tournament {
   registration_closed?: boolean;
   registration_deadline?: string; // YYYY-MM-DD
 
+  // Superadmin Fee Waiver
+  is_commission_waived?: boolean;
+
   // ATP Point Defense Logic
   previous_edition_id?: string; // ID of the tournament from last year
 }

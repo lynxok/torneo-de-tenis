@@ -177,6 +177,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                     >
                                         <MessageCircle size={14} />
                                     </button>
+                                    {Boolean(t.is_commission_waived || (typeof t.rules === 'object' && t.rules !== null && t.rules.is_commission_waived)) && (
+                                        <div className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                            Bonificado
+                                        </div>
+                                    )}
                                     <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${t.status === 'active' ? 'bg-green-500/20 text-green-400' : t.status === 'finished' ? 'bg-slate-700 text-slate-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
                                         {t.status === 'active' ? 'En Curso' : t.status === 'finished' ? 'Finalizado' : 'Borrador'}
                                     </div>

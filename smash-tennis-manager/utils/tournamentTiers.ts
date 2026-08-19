@@ -1,4 +1,4 @@
-﻿import { SystemConfig, TournamentTierInfo } from '../types';
+import { SystemConfig, TournamentTierInfo } from '../types';
 
 export const DEFAULT_TIER_CONFIG = {
     tier_250_min_players: 6,
@@ -75,10 +75,27 @@ export const getTournamentTier = (playerCount: number, config?: Partial<SystemCo
 export const calculateTournamentFinances = (
     playerCount: number,
     pricePerPlayer: number,
-    config?: Partial<SystemConfig>
+    config?: Partial<SystemConfig>,
+    isWaived: boolean = false
 ) => {
     const tier = getTournamentTier(playerCount, config);
     const grossTotal = Math.max(0, playerCount * (pricePerPlayer || 0));
+
+    if (isWaived) {
+        return {
+            tier,
+            playerCount,
+            pricePerPlayer,
+            grossTotal,
+            feePct: 0,
+            originalFeePct: tier.feePercentage,
+            fixedFeePerPlayer: 0,
+            platformTotalCommission: 0,
+            clubNetIncome: grossTotal,
+            isWaived: true
+        };
+    }
+
     const feePct = tier.feePercentage || 0;
     const fixedFeePerPlayer = Number(config?.monetization_base_fee_fixed || 0);
 
@@ -93,8 +110,10 @@ export const calculateTournamentFinances = (
         pricePerPlayer,
         grossTotal,
         feePct,
+        originalFeePct: tier.feePercentage,
         fixedFeePerPlayer,
         platformTotalCommission,
-        clubNetIncome
+        clubNetIncome,
+        isWaived: false
     };
 };

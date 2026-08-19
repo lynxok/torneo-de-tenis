@@ -6,7 +6,7 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
-    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet 
+    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift 
 } from 'lucide-react';
 import { getCategoriesForInstitution } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
@@ -23,6 +23,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('all');
     const { addToast } = useToast();
+
+    // Superadmin Waive Fee State
+    const [isTogglingWaive, setIsTogglingWaive] = useState(false);
 
     // Swap / Edit Groups State
     const [isSwapMode, setIsSwapMode] = useState(false);
@@ -342,10 +345,46 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const groupMatches = matches.filter(m => m.round === 'Fase de Grupos' || m.group_number);
     const playoffMatches = matches.filter(m => m.round !== 'Fase de Grupos' && !m.group_number);
 
-    const displayedMatches = activeTab === 'groups' ? groupMatches : activeTab === 'playoffs' ? playoffMatches : matches;
+    const isCommissionWaived = Boolean(
+        tournament.is_commission_waived ?? 
+        (typeof tournament.rules === 'object' && tournament.rules !== null && tournament.rules.is_commission_waived)
+    );
+
+    const handleToggleCommissionWaived = async () => {
+        if (user.role !== 'superadmin' || !tournament) return;
+        const nextVal = !isCommissionWaived;
+        setIsTogglingWaive(true);
+        try {
+            const currentRules = (typeof tournament.rules === 'object' && tournament.rules !== null) ? tournament.rules : {};
+            const updatedRules = { ...currentRules, is_commission_waived: nextVal };
+            
+            try {
+                await api.tournaments.update(tournament.id, { 
+                    rules: updatedRules,
+                    is_commission_waived: nextVal 
+                });
+            } catch (colErr) {
+                await api.tournaments.update(tournament.id, { 
+                    rules: updatedRules
+                });
+            }
+
+            setTournament({
+                ...tournament,
+                rules: updatedRules,
+                is_commission_waived: nextVal
+            });
+            addToast(nextVal ? '🎉 Torneo bonificado: Comisión de la App al 0%' : 'Bonificación desactivada: Se aplica comisión estándar', 'success');
+        } catch (err) {
+            console.error(err);
+            addToast('Error al actualizar estado de bonificación', 'error');
+        } finally {
+            setIsTogglingWaive(false);
+        }
+    };
 
     const tierInfo = getTournamentTier(players.length);
-    const finances = calculateTournamentFinances(players.length, effectivePrice);
+    const finances = calculateTournamentFinances(players.length, effectivePrice, undefined, isCommissionWaived);
 
     return (
         <div className="space-y-6 animate-fade-up">
@@ -516,8 +555,61 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     </div>
                                 </div>
                             )}
+                            {/* SUPERADMIN COMMISSION WAIVER SWITCH */}
+                            {user.role === 'superadmin' && (
+                                <div className="mt-4 p-3.5 bg-gradient-to-r from-purple-950/40 via-purple-900/30 to-purple-950/40 border border-purple-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-inner">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300">
+                                            <Gift size={18} />
+                                        </div>
+                                        <div>
+                                            <div className="text-xs font-bold text-white flex items-center gap-2">
+                                                <span>Bonificar Torneo (0% Comisión Plataforma)</span>
+                                                <span className="text-[10px] bg-purple-500/30 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded-full font-bold">Solo Superadmin</span>
+                                            </div>
+                                            <div className="text-[11px] text-purple-200/70">
+                                                {isCommissionWaived 
+                                                    ? 'Torneo 100% bonificado: el club no abona comisión a la app Smash.' 
+                                                    : 'Comisión estándar activa según el nivel de convocatoria del torneo.'}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                        <input
+                                            type="checkbox"
+                                            className="sr-only peer"
+                                            checked={isCommissionWaived}
+                                            disabled={isTogglingWaive}
+                                            onChange={handleToggleCommissionWaived}
+                                        />
+                                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
+                                    </label>
+                                </div>
+                            )}
+
                             {/* FINANCIAL & COMMISSION SUMMARY */}
                             <div className="mt-4 p-4 bg-black/40 border border-white/10 rounded-2xl">
+                                {/* Cartel / Banner de Bonificado para el Organizador y Superadmin */}
+                                {isCommissionWaived && (
+                                    <div className="mb-4 p-3 bg-gradient-to-r from-emerald-950/50 via-emerald-900/30 to-emerald-950/50 border border-emerald-500/40 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-lg">
+                                        <div className="flex items-center gap-2.5">
+                                            <Gift className="text-emerald-400 shrink-0" size={20} />
+                                            <div>
+                                                <div className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2">
+                                                    <span>🎉 Torneo 100% Bonificado</span>
+                                                    <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-md text-[10px] font-bold">0% Comisión</span>
+                                                </div>
+                                                <div className="text-[11px] text-emerald-200/80">
+                                                    La plataforma Smash Tennis ha bonificado este torneo. El 100% de lo recaudado queda libre para el club organizador.
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <span className="px-3 py-1 bg-emerald-500 text-dark font-black rounded-lg text-xs tracking-wider uppercase shadow-md shrink-0">
+                                            Bonificado
+                                        </span>
+                                    </div>
+                                )}
+
                                 <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/10 pb-2.5 mb-3 gap-2">
                                     <div className="flex items-center gap-2">
                                         <Wallet size={16} className="text-green-400" />
@@ -525,9 +617,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             Desglose Financiero y Nivel del Torneo
                                         </h4>
                                     </div>
-                                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${tierInfo.badgeColor} ${tierInfo.textColor} ${tierInfo.borderColor}`}>
-                                        {tierInfo.label} • {tierInfo.pointsWinner} pts al Campeón
-                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        {isCommissionWaived && (
+                                            <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                                Bonificado
+                                            </span>
+                                        )}
+                                        <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${tierInfo.badgeColor} ${tierInfo.textColor} ${tierInfo.borderColor}`}>
+                                            {tierInfo.label} • {tierInfo.pointsWinner} pts al Campeón
+                                        </span>
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <div className="bg-sidebar/80 p-3 rounded-xl border border-white/5 space-y-1">
@@ -537,15 +636,22 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         </div>
                                         <div className="text-[10px] text-slate-400">{players.length} inscriptos × ${effectivePrice.toLocaleString('es-AR')}</div>
                                     </div>
-                                    <div className="bg-green-500/10 p-3 rounded-xl border border-green-500/30 space-y-1">
-                                        <div className="text-[10px] text-green-400 uppercase font-bold flex items-center justify-between">
+                                    <div className={`p-3 rounded-xl border space-y-1 ${isCommissionWaived ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-green-500/10 border-green-500/30'}`}>
+                                        <div className="text-[10px] uppercase font-bold flex items-center justify-between text-green-400">
                                             <span>Comisión App Smash ({finances.feePct}%)</span>
                                             <TrendingUp size={12} />
                                         </div>
-                                        <div className="text-base font-mono font-bold text-green-400">
-                                            ${finances.platformTotalCommission.toLocaleString('es-AR')}
+                                        <div className="text-base font-mono font-bold text-green-400 flex items-center gap-2">
+                                            <span>${finances.platformTotalCommission.toLocaleString('es-AR')}</span>
+                                            {isCommissionWaived && (
+                                                <span className="text-[10px] bg-emerald-500/30 text-emerald-300 px-1.5 py-0.5 rounded font-bold">
+                                                    100% OFF
+                                                </span>
+                                            )}
                                         </div>
-                                        <div className="text-[10px] text-green-300/70">Take rate según nivel {tierInfo.label}</div>
+                                        <div className="text-[10px] text-green-300/70">
+                                            {isCommissionWaived ? 'Bonificación otorgada por Superadmin' : `Take rate según nivel ${tierInfo.label}`}
+                                        </div>
                                     </div>
                                     <div className="bg-sidebar/80 p-3 rounded-xl border border-white/5 space-y-1">
                                         <div className="text-[10px] text-muted uppercase font-bold">Ingreso Neto Club</div>
