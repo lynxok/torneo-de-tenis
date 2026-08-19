@@ -19,6 +19,7 @@ export interface UserProfile {
   role: UserRole;
   category?: string;
   gender?: string;
+  birth_date?: string; // Format: YYYY-MM-DD
   institution_id?: string;
   institution?: string; // joined name
   phone?: string;
@@ -42,6 +43,7 @@ export interface SystemConfig {
     target_folder_id: string; // The folder ID where images will be stored
     service_account_email?: string; // Email to share the folder with
     welcome_message?: string; // New: Welcome message for new users
+    junior_age_threshold?: number; // Age threshold to classify as junior (default: 16)
 
     // Smash Tour Tiering (Modelo A: Por Convocatoria)
     tier_250_min_players?: number;

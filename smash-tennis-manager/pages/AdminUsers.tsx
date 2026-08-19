@@ -2,9 +2,10 @@
 import React, { useEffect, useState } from 'react';
 import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
-import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard } from 'lucide-react';
+import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar } from 'lucide-react';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
+import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
 
 interface AdminUsersProps {
     user?: UserProfile;
@@ -37,6 +38,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         role: 'player' as UserRole,
         phone: '',
         dni: '',
+        gender: 'masculino',
+        birth_date: '',
         category: '4ta',
         is_member: true,
         member_number: ''
@@ -54,7 +57,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         phone: '',
         dni: '',
         category: '',
-        gender: '',
+        gender: 'masculino',
+        birth_date: '',
         role: 'player' as UserRole,
         institution_id: '',
         is_member: false,
@@ -84,7 +88,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             phone: u.phone || '',
             dni: u.dni || '',
             category: u.category || '',
-            gender: u.gender || '',
+            gender: u.gender || 'masculino',
+            birth_date: u.birth_date || '',
             role: u.role || 'player',
             institution_id: u.institution_id || '',
             is_member: !!u.is_member,
@@ -107,7 +112,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 phone: editFormData.phone,
                 dni: editFormData.dni,
                 category: editFormData.category || null,
-                gender: editFormData.gender || null,
+                gender: editFormData.gender || 'masculino',
+                birth_date: editFormData.birth_date || null,
                 role: editFormData.role,
                 institution_id: editFormData.institution_id ? editFormData.institution_id : null,
                 is_member: editFormData.is_member,
@@ -234,6 +240,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 role: newUser.role,
                 phone: newUser.phone,
                 dni: newUser.dni,
+                gender: newUser.gender || 'masculino',
+                birth_date: newUser.birth_date || null,
                 category: newUser.category,
                 is_approved: true,
                 is_member: newUser.is_member,
@@ -257,6 +265,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 role: 'player',
                 phone: '',
                 dni: '',
+                gender: 'masculino',
+                birth_date: '',
                 category: '4ta',
                 is_member: true,
                 member_number: ''
@@ -591,6 +601,14 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                         )}
                                                     </div>
                                                     <div className="text-xs text-muted">{u.email}</div>
+                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                        <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(u.gender)}`}>
+                                                            {formatGender(u.gender)}
+                                                        </span>
+                                                        <span className="text-[11px] text-slate-400">
+                                                            {getAgeCategoryLabel(u.birth_date)}
+                                                        </span>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </td>
@@ -730,6 +748,36 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
                                         value={editFormData.dni}
                                         onChange={e => setEditFormData({ ...editFormData, dni: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Rama / Género</label>
+                                    <select
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm cursor-pointer"
+                                        value={editFormData.gender}
+                                        onChange={e => setEditFormData({ ...editFormData, gender: e.target.value })}
+                                    >
+                                        <option value="masculino">Masculino (Caballeros)</option>
+                                        <option value="femenino">Femenino (Damas)</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                        <span>F. Nacimiento</span>
+                                        {editFormData.birth_date && (
+                                            <span className="text-[10px] text-green-400 font-bold">
+                                                {calculateAge(editFormData.birth_date)} años
+                                            </span>
+                                        )}
+                                    </label>
+                                    <input
+                                        type="date"
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary transition-colors text-xs"
+                                        value={editFormData.birth_date}
+                                        onChange={e => setEditFormData({ ...editFormData, birth_date: e.target.value })}
                                     />
                                 </div>
                             </div>
@@ -914,6 +962,36 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
                                         value={newUser.phone}
                                         onChange={e => setNewUser({ ...newUser, phone: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Rama / Género</label>
+                                    <select
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm cursor-pointer"
+                                        value={newUser.gender}
+                                        onChange={e => setNewUser({ ...newUser, gender: e.target.value })}
+                                    >
+                                        <option value="masculino">Masculino (Caballeros)</option>
+                                        <option value="femenino">Femenino (Damas)</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                        <span>F. Nacimiento</span>
+                                        {newUser.birth_date && (
+                                            <span className="text-[10px] text-green-400 font-bold">
+                                                {calculateAge(newUser.birth_date)} años
+                                            </span>
+                                        )}
+                                    </label>
+                                    <input
+                                        type="date"
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary transition-colors text-xs"
+                                        value={newUser.birth_date}
+                                        onChange={e => setNewUser({ ...newUser, birth_date: e.target.value })}
                                     />
                                 </div>
                             </div>

@@ -10,6 +10,8 @@ import {
     Sparkles, Zap, Smartphone, Loader2, Lock, AlertTriangle 
 } from 'lucide-react';
 import { getCategoryRank, NUMERIC_CATEGORIES } from '../utils/categories';
+import { formatPlayerName } from '../utils/formatters';
+import { formatGender, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
 
 interface PlayersProps {
     user: UserProfile;
@@ -26,6 +28,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   const [filter, setFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [institutionFilter, setInstitutionFilter] = useState('');
+  const [genderFilter, setGenderFilter] = useState('');
   
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); 
   
@@ -117,7 +120,11 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
           ? (p.institution_id === institutionFilter) 
           : true;
 
-      return matchesName && matchesCategory && matchesInstitution;
+      const matchesGender = genderFilter 
+          ? (formatGender(p.gender).toLowerCase() === genderFilter.toLowerCase())
+          : true;
+
+      return matchesName && matchesCategory && matchesInstitution && matchesGender;
     });
 
     // 2. Custom Category Sorting Order (uses global category rank)
@@ -293,6 +300,16 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                         <option key={c} value={c}>{c === 'Open' ? 'Open' : `${c} Categoría`}</option>
                     ))}
                 </select>
+
+                <select 
+                    className="bg-card border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-primary transition-colors cursor-pointer text-sm"
+                    value={genderFilter}
+                    onChange={(e) => setGenderFilter(e.target.value)}
+                >
+                    <option value="">Todas las Ramas</option>
+                    <option value="masculino">Masculino (Caballeros)</option>
+                    <option value="femenino">Femenino (Damas)</option>
+                </select>
                 
                 <div className="relative flex-1 sm:w-64 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
@@ -324,8 +341,8 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                 <thead>
                                     <tr className="bg-white/5 border-b border-white/10 text-muted text-xs uppercase tracking-wider">
                                         <th className="p-4 pl-6">Jugador</th>
+                                        <th className="p-4">Rama & Categoría</th>
                                         <th className="p-4">Ubicación / Club</th>
-                                        <th className="p-4 text-center">Categoría</th>
                                         <th className="p-4 text-center hidden md:table-cell">Estadísticas</th>
                                         <th className="p-4 text-right pr-6">Acciones</th>
                                     </tr>
@@ -346,12 +363,24 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                                         {player.is_approved && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-card rounded-full" title="Verificado"></div>}
                                                     </div>
                                                     <div>
-                                                        <div className="font-bold text-white group-hover:text-primary transition-colors">
-                                                            {player.name} {player.lastname}
-                                                            {player.id === user.id && <span className="ml-2 text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase font-bold">Yo</span>}
+                                                        <div className="font-bold text-white group-hover:text-primary transition-colors flex items-center gap-2">
+                                                            <span>{formatPlayerName(player.name, player.lastname)}</span>
+                                                            {player.id === user.id && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase font-bold">Yo</span>}
                                                         </div>
-                                                        <div className="text-xs text-muted">Miembro Activo</div>
+                                                        <div className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
+                                                            <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(player.gender)}`}>
+                                                                {formatGender(player.gender)}
+                                                            </span>
+                                                            <span>• {getAgeCategoryLabel(player.birth_date)}</span>
+                                                        </div>
                                                     </div>
+                                                </div>
+                                            </td>
+                                            <td className="p-4">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`inline-block px-3 py-1 rounded-lg text-xs font-bold border ${player.category ? 'bg-white/5 text-white border-white/10' : 'text-muted border-transparent'}`}>
+                                                        {player.category ? `${player.category} Categoría` : 'Sin categoría'}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td className="p-4 text-sm">
@@ -359,11 +388,6 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                                     <Building size={14} className="text-muted" />
                                                     {player.institution || <span className="text-muted italic">Sin club asignado</span>}
                                                 </div>
-                                            </td>
-                                            <td className="p-4 text-center">
-                                                <span className={`inline-block px-3 py-1 rounded-lg text-xs font-bold border ${player.category ? 'bg-white/5 text-white border-white/10' : 'text-muted border-transparent'}`}>
-                                                    {player.category || 'N/A'}
-                                                </span>
                                             </td>
                                             <td className="p-4 hidden md:table-cell">
                                                 <div className="flex items-center justify-center gap-4 text-xs">
@@ -425,9 +449,14 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                         </div>
                                         <div>
                                             <h4 className="font-bold text-white text-lg leading-tight group-hover:text-primary transition-colors">
-                                                {player.name} {player.lastname}
+                                                {formatPlayerName(player.name, player.lastname)}
                                             </h4>
-                                            <span className="text-xs text-muted">{player.id === user.id ? 'Tú' : 'Jugador'}</span>
+                                            <div className="flex items-center gap-1.5 mt-1">
+                                                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(player.gender)}`}>
+                                                    {formatGender(player.gender)}
+                                                </span>
+                                                <span className="text-xs text-muted">• {getAgeCategoryLabel(player.birth_date)}</span>
+                                            </div>
                                         </div>
                                     </div>
                                     <div className="space-y-2 border-t border-white/5 pt-3">
@@ -437,7 +466,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                         </div>
                                         <div className="flex items-center justify-between text-sm">
                                             <span className="text-muted flex items-center gap-2"><Award size={14} /> Categoría</span>
-                                            <span className="text-slate-200">{player.category || '-'}</span>
+                                            <span className="text-slate-200">{player.category ? `${player.category} Categoría` : '-'}</span>
                                         </div>
                                     </div>
                                     {player.id !== user.id && (

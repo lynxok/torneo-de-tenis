@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
-import { Trophy, Building2, Phone, CreditCard, Award, Info } from 'lucide-react';
+import { Trophy, Building2, Phone, CreditCard, Award, Info, Calendar, User, Users } from 'lucide-react';
 import { useToast } from './ui/Toast';
 import { Institution } from '../types';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
+import { calculateAge, getAgeCategoryLabel } from '../utils/demographics';
 
 interface AuthPageProps {
   onLoginSuccess: () => void;
@@ -24,6 +25,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
     lastname: '',
     phone: '',
     dni: '',
+    gender: 'masculino',
+    birth_date: '',
     category: '',
     institution_id: initialClubId || '',
     role: 'player'
@@ -99,6 +102,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
       return;
     }
 
+    if (!formData.birth_date) {
+      addToast('Por favor ingresa tu Fecha de Nacimiento.', 'error');
+      return;
+    }
+
     if (!formData.category) {
       addToast('Por favor selecciona tu Categoría actual estimada.', 'error');
       return;
@@ -118,6 +126,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
         lastname: cleanLastname,
         phone: cleanPhone,
         dni: cleanDni,
+        gender: formData.gender || 'masculino',
+        birth_date: formData.birth_date || null,
         category: formData.category,
         institution_id: selectedClubId,
         role: 'player',
@@ -204,6 +214,57 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
                     required
                     value={formData.phone}
                     onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              {/* Rama / Género y Fecha de Nacimiento */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <User size={13} className="text-primary" /> Rama / Género *
+                  </label>
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-sidebar border border-white/10 rounded-xl">
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, gender: 'masculino' })}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                        formData.gender === 'masculino'
+                          ? 'bg-blue-500 text-white shadow-md shadow-blue-500/25'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Masculino
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFormData({ ...formData, gender: 'femenino' })}
+                      className={`py-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 ${
+                        formData.gender === 'femenino'
+                          ? 'bg-pink-500 text-white shadow-md shadow-pink-500/25'
+                          : 'text-slate-400 hover:text-white'
+                      }`}
+                    >
+                      Femenino
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1"><Calendar size={13} className="text-primary" /> F. Nacimiento *</span>
+                    {formData.birth_date && (
+                      <span className="text-[10px] text-green-400 font-bold">
+                        {getAgeCategoryLabel(formData.birth_date)}
+                      </span>
+                    )}
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:border-primary focus:outline-none transition-colors text-xs"
+                    required
+                    value={formData.birth_date}
+                    onChange={e => setFormData({ ...formData, birth_date: e.target.value })}
                   />
                 </div>
               </div>

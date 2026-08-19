@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { 
     Sliders, Cloud, Lock, Save, Folder, Info, CheckCircle2, AlertTriangle, Key, MessageCircle,
-    Trophy, DollarSign, Percent, Calculator, Sparkles, TrendingUp, Wallet, ArrowRight, ShieldCheck, Layers
+    Trophy, DollarSign, Percent, Calculator, Sparkles, TrendingUp, Wallet, ArrowRight, ShieldCheck, Layers, Users, Calendar
 } from 'lucide-react';
 import { DEFAULT_TIER_CONFIG, calculateTournamentFinances } from '../utils/tournamentTiers';
 
@@ -160,6 +160,46 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                             onChange={e => setConfig({ ...config, welcome_message: e.target.value })}
                         />
                         <p className="text-[10px] text-muted">Este mensaje se enviará automáticamente a la bandeja de entrada del usuario tras el registro.</p>
+                    </div>
+                </Card>
+
+                {/* DEMOGRAPHICS & AGE CATEGORIES CONFIG */}
+                <Card className="border-cyan-500/20">
+                    <div className="border-b border-white/10 pb-4 mb-6">
+                        <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                            <Users className="text-cyan-400" /> Rango Etario y Categorías Infantiles / Menores
+                        </h3>
+                        <p className="text-sm text-slate-300 mt-1">
+                            Define la edad límite para clasificar automáticamente a los jugadores como categoría Infantil / Menores a partir de su fecha de nacimiento.
+                        </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
+                                <Calendar size={14} className="text-cyan-400" /> Edad Límite Categoría Infantil (Años)
+                            </label>
+                            <input
+                                type="number"
+                                min={10}
+                                max={21}
+                                className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary font-mono text-sm"
+                                placeholder="16"
+                                value={config.junior_age_threshold ?? 16}
+                                onChange={e => setConfig({ ...config, junior_age_threshold: Number(e.target.value) })}
+                            />
+                            <p className="text-[10px] text-muted">
+                                Los jugadores con edad menor o igual a este valor serán catalogados como <strong>Menores / Infantiles</strong>. Los de mayor edad serán catalogados como <strong>Adultos / Mayores</strong>.
+                            </p>
+                        </div>
+
+                        <div className="p-4 bg-cyan-500/10 border border-cyan-500/20 rounded-2xl space-y-2">
+                            <div className="text-xs font-bold text-cyan-300">Regla Activa del Circuito:</div>
+                            <div className="text-xs text-slate-300 space-y-1">
+                                <div>• Hasta <strong>{config.junior_age_threshold ?? 16} años</strong>: <span className="text-green-400 font-bold">Menor / Infantil (Sub-12 a Sub-{config.junior_age_threshold ?? 16})</span></div>
+                                <div>• Más de <strong>{config.junior_age_threshold ?? 16} años</strong>: <span className="text-blue-400 font-bold">Adulto / Mayor</span></div>
+                            </div>
+                        </div>
                     </div>
                 </Card>
 

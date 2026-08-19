@@ -10,6 +10,7 @@ import {
 import ImageCropper from '../components/ImageCropper';
 import imageCompression from 'browser-image-compression';
 import { formatPlayerName } from '../utils/formatters';
+import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
 
 interface ProfileProps {
     user: UserProfile;
@@ -36,7 +37,8 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         phone: user.phone || '',
         dni: user.dni || '',
         category: user.category || '',
-        gender: user.gender || '',
+        gender: user.gender || 'masculino',
+        birth_date: user.birth_date || '',
         institution_id: user.institution_id || '',
         show_whatsapp: user.show_whatsapp !== false,
         newPassword: '',
@@ -349,6 +351,18 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                             <InfoField label="Email" value={user.email} icon={Mail} />
                             <InfoField label="Teléfono" value={user.phone || 'No registrado'} icon={Phone} />
                             <InfoField label="DNI / Documento" value={user.dni || 'No registrado'} icon={CreditCard} />
+                            <InfoField 
+                                label="Rama / Género" 
+                                value={formatGender(user.gender)} 
+                                icon={User} 
+                                className={formatGender(user.gender) === 'Femenino' ? 'text-pink-400 font-bold' : 'text-blue-400 font-bold'} 
+                            />
+                            <InfoField 
+                                label="Rango Etario / Edad" 
+                                value={getAgeCategoryLabel(user.birth_date)} 
+                                icon={Calendar} 
+                                className="text-primary font-bold" 
+                            />
                             <InfoField label="Club Principal" value={user.institution || 'Sin club principal'} icon={MapPin} />
                             <InfoField label="Rol en Sistema" value={user.role} icon={Shield} className="capitalize" />
                             <InfoField
@@ -550,19 +564,33 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                         onChange={e => setFormData({ ...formData, show_whatsapp: e.target.checked })}
                                     />
                                 </div>
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                                     <div className="space-y-1">
-                                        <label className="text-xs text-muted uppercase font-bold">DNI (Requerido para foto)</label>
-                                        <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors" value={formData.dni} onChange={e => setFormData({ ...formData, dni: e.target.value })} placeholder="Sin puntos" />
+                                        <label className="text-xs text-muted uppercase font-bold">DNI</label>
+                                        <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-xs" value={formData.dni} onChange={e => setFormData({ ...formData, dni: e.target.value })} placeholder="Sin puntos" />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-xs text-muted uppercase font-bold">Género</label>
-                                        <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors" value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value })}>
-                                            <option value="">Seleccionar</option>
-                                            <option value="M">Masculino</option>
-                                            <option value="F">Femenino</option>
-                                            <option value="X">Otro</option>
+                                        <label className="text-xs text-muted uppercase font-bold">Rama / Género</label>
+                                        <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-xs cursor-pointer" value={formData.gender} onChange={e => setFormData({ ...formData, gender: e.target.value })}>
+                                            <option value="masculino">Masculino</option>
+                                            <option value="femenino">Femenino</option>
                                         </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                            <span>F. Nacimiento</span>
+                                            {formData.birth_date && (
+                                                <span className="text-[10px] text-green-400 font-bold">
+                                                    {calculateAge(formData.birth_date)} años
+                                                </span>
+                                            )}
+                                        </label>
+                                        <input 
+                                            type="date"
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary transition-colors text-xs" 
+                                            value={formData.birth_date} 
+                                            onChange={e => setFormData({ ...formData, birth_date: e.target.value })} 
+                                        />
                                     </div>
                                 </div>
                                 <div className="space-y-1">

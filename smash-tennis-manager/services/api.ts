@@ -144,9 +144,14 @@ export const api = {
                     if (!data.lastname && meta.lastname) updates.lastname = meta.lastname.trim();
                     if (!data.phone && meta.phone) updates.phone = meta.phone.trim();
                     if (!data.dni && meta.dni) updates.dni = meta.dni.trim();
+                    if (!data.gender && meta.gender) updates.gender = meta.gender.trim();
                     if ((!data.category || data.category === 'C') && meta.category && meta.category !== 'C') updates.category = meta.category.trim();
                     if (!data.institution_id && meta.institution_id && meta.institution_id !== 'none') updates.institution_id = meta.institution_id;
                     if ((!data.name || data.name === 'Usuario') && meta.name) updates.name = meta.name.trim();
+
+                    if (meta.birth_date && !data.birth_date) {
+                        data.birth_date = meta.birth_date;
+                    }
 
                     if (Object.keys(updates).length > 0) {
                         await supabase.from('profiles').update(updates).eq('id', userId);
@@ -163,6 +168,8 @@ export const api = {
                 console.warn("Auto-heal profile fallback:", healErr);
             }
 
+            if (!data.gender) data.gender = 'masculino';
+
             return { ...data, institution: data.institutions?.name } as UserProfile;
         },
         async getAllProfiles(page = 1, pageSize = 50) {
@@ -174,6 +181,7 @@ export const api = {
             if (error) throw error;
             return (data || []).map((p: any) => ({
                 ...p,
+                gender: p.gender || 'masculino',
                 institution: p.institutions?.name || null
             })) as UserProfile[];
         },
@@ -210,6 +218,17 @@ export const api = {
                 }
             }
 
+            // Also synchronize birth_date & gender to Auth user_metadata
+            try {
+                const metaUpdates: any = {};
+                if (updates.birth_date !== undefined) metaUpdates.birth_date = updates.birth_date;
+                if (updates.gender !== undefined) metaUpdates.gender = updates.gender;
+                if (Object.keys(metaUpdates).length > 0) {
+                    await supabase.auth.updateUser({ data: metaUpdates });
+                }
+            } catch (metaErr) {
+                console.warn("User metadata sync notice:", metaErr);
+            }
 
             const { data, error } = await supabase
                 .from('profiles')
@@ -218,7 +237,11 @@ export const api = {
                 .select();
 
             if (error) throw error;
-            return data && data.length > 0 ? data[0] : null;
+            const updated = data && data.length > 0 ? data[0] : null;
+            if (updated && updates.birth_date) {
+                updated.birth_date = updates.birth_date;
+            }
+            return updated;
         },
 
 
@@ -234,6 +257,7 @@ export const api = {
                     lastname: meta.lastname?.trim() || '',
                     phone: meta.phone?.trim() || '',
                     dni: meta.dni?.trim() || '',
+                    gender: meta.gender || 'masculino',
                     category: meta.category || '6ta',
                     role: meta.role || 'player',
                     institution_id: (meta.institution_id && meta.institution_id !== 'none') ? meta.institution_id : null,
