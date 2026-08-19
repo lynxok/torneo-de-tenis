@@ -401,7 +401,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                     const instObj = institutions.find(i => i.id === m.institution_id);
                                     const clubName = instObj?.name || m.institution_name || 'Club';
                                     const isPrimary = m.is_primary || (user.institution_id === m.institution_id && !userMemberships.some(other => other.is_primary && other.institution_id !== m.institution_id));
-                                    const isActive = m.status === 'active' || m.status === undefined;
+                                    const isActive = m.status === 'active' || (m.status === undefined && user.is_approved !== false) || (isPrimary && user.is_approved !== false);
 
                                     return (
                                         <div key={idx} className={`p-4 rounded-xl border transition-all flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 ${

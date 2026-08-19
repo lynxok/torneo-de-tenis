@@ -109,7 +109,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 category: editFormData.category || null,
                 gender: editFormData.gender || null,
                 role: editFormData.role,
-                institution_id: editFormData.institution_id ? editFormData.institution_id : null
+                institution_id: editFormData.institution_id ? editFormData.institution_id : null,
+                is_member: editFormData.is_member,
+                member_number: editFormData.member_number,
+                member_status: editFormData.member_status || (editFormData.is_member ? 'active' : 'inactive')
             };
 
             const updatedProfile = await api.auth.updateProfile(editingUser.id, updates);
@@ -183,7 +186,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         try {
             const updates: any = {
                 is_approved: true,
-                category: approvalCategory
+                category: approvalCategory,
+                is_member: approvalIsMember,
+                member_number: approvalMemberNumber.trim() || undefined,
+                member_status: 'active'
             };
 
             // Si es SuperAdmin y seleccionó un club (o cambió el club), se actualiza institution_id

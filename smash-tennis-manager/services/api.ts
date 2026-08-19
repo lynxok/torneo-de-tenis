@@ -319,12 +319,13 @@ export const api = {
                 return user.memberships;
             }
             if (user.institution_id) {
+                const isActive = (user.is_approved !== false) && (user.member_status === 'active' || user.is_member || user.is_approved || !user.member_status);
                 return [{
                     institution_id: user.institution_id,
                     institution_name: user.institution,
                     member_number: user.member_number,
                     is_primary: true,
-                    status: user.member_status || (user.is_member ? 'active' : 'pending'),
+                    status: isActive ? 'active' : (user.member_status || 'pending'),
                     joined_date: new Date().toISOString()
                 }];
             }
