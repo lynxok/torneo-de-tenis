@@ -383,7 +383,6 @@ export const api = {
                     lastname: '',
                     is_approved: false,
                     role: 'inactive' as any,
-                    member_status: 'deleted' as any,
                     category: null,
                     institution_id: null
                 })
