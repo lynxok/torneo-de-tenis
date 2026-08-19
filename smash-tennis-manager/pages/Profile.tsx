@@ -130,7 +130,8 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             phone: user.phone || '',
             dni: user.dni || '',
             category: user.category || '',
-            gender: user.gender || '',
+            gender: user.gender || 'masculino',
+            birth_date: user.birth_date || '',
             institution_id: user.institution_id || '',
             show_whatsapp: user.show_whatsapp !== false,
             newPassword: '',
@@ -201,6 +202,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             dni: formData.dni,
             category: formData.category,
             gender: formData.gender,
+            birth_date: formData.birth_date || null,
             institution_id: formData.institution_id,
             show_whatsapp: formData.show_whatsapp
         };

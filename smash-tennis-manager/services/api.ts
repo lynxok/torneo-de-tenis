@@ -149,7 +149,7 @@ export const api = {
                     if (!data.institution_id && meta.institution_id && meta.institution_id !== 'none') updates.institution_id = meta.institution_id;
                     if ((!data.name || data.name === 'Usuario') && meta.name) updates.name = meta.name.trim();
 
-                    if (meta.birth_date && !data.birth_date) {
+                    if (meta.birth_date) {
                         data.birth_date = meta.birth_date;
                     }
 
@@ -179,6 +179,22 @@ export const api = {
                 .order('created_at', { ascending: false })
                 .range((page - 1) * pageSize, page * pageSize - 1);
             if (error) throw error;
+
+            // Enrich with current user metadata if available
+            try {
+                const { data: authData } = await supabase.auth.getUser();
+                if (authData?.user?.user_metadata) {
+                    const currentMeta = authData.user.user_metadata;
+                    const match = (data || []).find((p: any) => p.id === authData.user.id);
+                    if (match) {
+                        if (currentMeta.birth_date) match.birth_date = currentMeta.birth_date;
+                        if (currentMeta.gender) match.gender = currentMeta.gender;
+                    }
+                }
+            } catch (e) {
+                // Ignore
+            }
+
             return (data || []).map((p: any) => ({
                 ...p,
                 gender: p.gender || 'masculino',
