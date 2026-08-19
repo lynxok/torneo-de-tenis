@@ -35,12 +35,50 @@ export interface UserProfile {
 }
 
 export interface SystemConfig {
+    profile_banner_url?: string;
     google_drive_enabled: boolean;
     google_client_id: string;
     google_api_key: string;
     target_folder_id: string; // The folder ID where images will be stored
     service_account_email?: string; // Email to share the folder with
     welcome_message?: string; // New: Welcome message for new users
+
+    // Smash Tour Tiering (Modelo A: Por Convocatoria)
+    tier_250_min_players?: number;
+    tier_250_max_players?: number;
+    tier_250_points?: number;
+    tier_250_fee_pct?: number;
+
+    tier_500_min_players?: number;
+    tier_500_max_players?: number;
+    tier_500_points?: number;
+    tier_500_fee_pct?: number;
+
+    tier_1000_min_players?: number;
+    tier_1000_max_players?: number;
+    tier_1000_points?: number;
+    tier_1000_fee_pct?: number;
+
+    tier_masters_min_players?: number;
+    tier_masters_points?: number;
+    tier_masters_fee_pct?: number;
+
+    // Platform Monetization Settings
+    monetization_base_fee_fixed?: number; // Fee fijo por inscripto (opcional)
+    platform_payout_alias?: string;       // Alias Mercado Pago / CVU de la app
+    platform_payout_holder?: string;      // Titular de la cuenta
+}
+
+export interface TournamentTierInfo {
+    tierKey: '250' | '500' | '1000' | 'masters';
+    label: string;
+    badgeColor: string;
+    textColor: string;
+    borderColor: string;
+    pointsWinner: number;
+    feePercentage: number;
+    minPlayers: number;
+    maxPlayers?: number;
 }
 
 export interface WeeklySchedule {

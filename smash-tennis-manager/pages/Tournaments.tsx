@@ -3,8 +3,9 @@ import { Tournament, UserProfile, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
+import { getTournamentTier } from '../utils/tournamentTiers';
 
 interface TournamentsProps {
     user: UserProfile;
@@ -187,6 +188,17 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                             </div>
 
                             <div className="space-y-2 text-sm border-t border-white/5 pt-3">
+                                {(() => {
+                                    const tier = getTournamentTier(t.players?.length || 12);
+                                    return (
+                                        <div className="flex justify-between items-center pb-1">
+                                            <span className="text-muted text-xs">Circuito</span>
+                                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${tier.badgeColor} ${tier.textColor} ${tier.borderColor}`}>
+                                                {tier.label} • {tier.pointsWinner} pts
+                                            </span>
+                                        </div>
+                                    );
+                                })()}
                                 <div className="flex justify-between">
                                     <span className="text-muted">Categoría</span>
                                     <span className="font-bold text-white">{t.category}</span>

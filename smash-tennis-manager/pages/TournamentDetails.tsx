@@ -6,9 +6,10 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
-    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check 
+    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet 
 } from 'lucide-react';
 import { getCategoriesForInstitution } from '../utils/categories';
+import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -343,6 +344,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const displayedMatches = activeTab === 'groups' ? groupMatches : activeTab === 'playoffs' ? playoffMatches : matches;
 
+    const tierInfo = getTournamentTier(players.length);
+    const finances = calculateTournamentFinances(players.length, effectivePrice);
+
     return (
         <div className="space-y-6 animate-fade-up">
             <button onClick={onBack} className="flex items-center gap-2 text-muted hover:text-white mb-4 transition-colors">
@@ -360,9 +364,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 <div className="absolute bottom-0 left-0 p-8 w-full">
                     <div className="flex flex-col md:flex-row justify-between items-end gap-4">
                         <div>
-                            <div className="flex gap-2 mb-2">
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
                                 <span className="bg-primary text-dark font-bold px-2.5 py-1 rounded-lg text-xs uppercase shadow-sm">{tournament.category}</span>
                                 <span className="bg-white/10 text-white font-bold px-2.5 py-1 rounded-lg text-xs uppercase backdrop-blur-sm border border-white/10">{tournament.type}</span>
+                                <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider border shadow-sm flex items-center gap-1.5 ${tierInfo.badgeColor} ${tierInfo.textColor} ${tierInfo.borderColor}`}>
+                                    <Trophy size={12} /> {tierInfo.label} • {tierInfo.pointsWinner} pts
+                                </span>
                                 {isUserMember && (
                                     <span className="bg-green-500/20 text-green-300 border border-green-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1">
                                         <Award size={12} /> Socio del Club
@@ -509,6 +516,46 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     </div>
                                 </div>
                             )}
+                            {/* FINANCIAL & COMMISSION SUMMARY */}
+                            <div className="mt-4 p-4 bg-black/40 border border-white/10 rounded-2xl">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between border-b border-white/10 pb-2.5 mb-3 gap-2">
+                                    <div className="flex items-center gap-2">
+                                        <Wallet size={16} className="text-green-400" />
+                                        <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                                            Desglose Financiero y Nivel del Torneo
+                                        </h4>
+                                    </div>
+                                    <span className={`px-2.5 py-0.5 rounded-lg text-[11px] font-bold border ${tierInfo.badgeColor} ${tierInfo.textColor} ${tierInfo.borderColor}`}>
+                                        {tierInfo.label} • {tierInfo.pointsWinner} pts al Campeón
+                                    </span>
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <div className="bg-sidebar/80 p-3 rounded-xl border border-white/5 space-y-1">
+                                        <div className="text-[10px] text-muted uppercase font-bold">Recaudación Bruta</div>
+                                        <div className="text-base font-mono font-bold text-white">
+                                            ${finances.grossTotal.toLocaleString('es-AR')}
+                                        </div>
+                                        <div className="text-[10px] text-slate-400">{players.length} inscriptos × ${effectivePrice.toLocaleString('es-AR')}</div>
+                                    </div>
+                                    <div className="bg-green-500/10 p-3 rounded-xl border border-green-500/30 space-y-1">
+                                        <div className="text-[10px] text-green-400 uppercase font-bold flex items-center justify-between">
+                                            <span>Comisión App Smash ({finances.feePct}%)</span>
+                                            <TrendingUp size={12} />
+                                        </div>
+                                        <div className="text-base font-mono font-bold text-green-400">
+                                            ${finances.platformTotalCommission.toLocaleString('es-AR')}
+                                        </div>
+                                        <div className="text-[10px] text-green-300/70">Take rate según nivel {tierInfo.label}</div>
+                                    </div>
+                                    <div className="bg-sidebar/80 p-3 rounded-xl border border-white/5 space-y-1">
+                                        <div className="text-[10px] text-muted uppercase font-bold">Ingreso Neto Club</div>
+                                        <div className="text-base font-mono font-bold text-primary">
+                                            ${finances.clubNetIncome.toLocaleString('es-AR')}
+                                        </div>
+                                        <div className="text-[10px] text-slate-400">Fondos libres de sede y premios</div>
+                                    </div>
+                                </div>
+                            </div>
                         </Card>
                     </div>
                 )}
