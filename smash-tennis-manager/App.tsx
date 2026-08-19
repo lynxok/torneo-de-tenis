@@ -20,6 +20,7 @@ import { Reports } from './pages/Reports';
 import { TutorialsPage, TUTORIALS } from './pages/TutorialsPage';
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { ToastProvider } from './components/ui/Toast'; // Import ToastProvider
+import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { Menu, ShieldAlert, User, Shield } from 'lucide-react';
 
 const AppContent = () => {
@@ -355,6 +356,7 @@ const AppContent = () => {
 const App = () => (
   <ToastProvider>
     <AppContent />
+    <PWAInstallPrompt />
   </ToastProvider>
 );
 

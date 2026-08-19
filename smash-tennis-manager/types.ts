@@ -237,6 +237,10 @@ export interface TournamentPlayer {
   fee_amount?: number; // New: Records the price agreed upon enrollment
   isComplete?: boolean; // For doubles
   members?: string[]; // For doubles
+  partner_id?: string; // For doubles
+  partner_name?: string; // For doubles
+  team_name?: string; // For doubles (e.g. "Pérez / Gómez")
+  is_doubles_pair?: boolean;
 }
 
 export interface Match {
@@ -246,21 +250,83 @@ export interface Match {
   player2_id?: string;
   player1_name?: string;
   player2_name?: string;
+  player1_partner_id?: string;
+  player2_partner_id?: string;
+  player1_partner_name?: string;
+  player2_partner_name?: string;
+  team1_name?: string;
+  team2_name?: string;
   winner_id?: string;
   winner_name?: string;
-  score?: any[]; // Array of {p1: number, p2: number}
+  winner_partner_id?: string;
+  score?: any; // Array of {p1: number, p2: number} or {set1: string, set2: string, set3?: string}
   round?: string;
   group_number?: number;
-  scheduling_status?: 'proposed' | 'confirmed' | null;
+  scheduling_status?: 'proposed' | 'confirmed' | 'finished' | null;
   scheduled_at?: string;
   proposal_data?: any;
   court_slot_id?: string;
   is_played?: boolean;
+  
+  // Score Verification & 24h Auto-confirmation
+  score_status?: 'pending_confirmation' | 'confirmed' | 'disputed';
+  score_submitted_by?: string;
+  score_submitted_at?: string;
+  score_dispute_reason?: string;
+  score_confirmed_at?: string;
+
   // UI helpers
   p1?: TournamentPlayer;
   p2?: TournamentPlayer;
   winner?: TournamentPlayer;
-  tournaments?: { name: string };
+  tournaments?: { name: string; institution_id?: string; institutions?: { name: string } };
+}
+
+export interface HeadToHeadStats {
+  player1: { id: string; name: string; lastname?: string; category?: string; avatar_url?: string };
+  player2: { id: string; name: string; lastname?: string; category?: string; avatar_url?: string };
+  totalMatches: number;
+  player1Wins: number;
+  player2Wins: number;
+  player1SetsWon: number;
+  player2SetsWon: number;
+  player1GamesWon: number;
+  player2GamesWon: number;
+  lastWinnerId?: string;
+  streakCount?: number;
+  streakWinnerName?: string;
+  matches: Array<{
+    id: string;
+    date: string;
+    tournament_name?: string;
+    round?: string;
+    score: any;
+    winner_id?: string;
+    winner_name?: string;
+  }>;
+}
+
+export interface MatchmakingPost {
+  id: string;
+  user_id: string;
+  user_name: string;
+  user_lastname?: string;
+  user_phone?: string;
+  user_avatar?: string;
+  user_category?: string;
+  type: 'singles' | 'doubles';
+  category: string;
+  institution_id?: string;
+  institution_name?: string;
+  date?: string;
+  time_slot?: string;
+  has_court_booked?: boolean;
+  court_name?: string;
+  description?: string;
+  created_at: string;
+  status: 'open' | 'matched' | 'cancelled';
+  matched_with_user_id?: string;
+  matched_with_name?: string;
 }
 
 export interface Booking {

@@ -7,7 +7,7 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Calendar, Clock, MapPin, X, Loader2, CheckCircle2, DollarSign, Lock, ChevronLeft, ChevronRight, 
     Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
-    ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, Sparkles, ShieldCheck, Star, Share2, MessageCircle
+    ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning
 } from 'lucide-react';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
@@ -39,8 +39,9 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
             api.bookings.getByUser(user.id),
             api.institutions.getAll()
         ]);
+        const activeInst = (instData || []).filter(i => i.is_active !== false);
         setBookings(bookingsData || []);
-        setInstitutions(instData || []);
+        setInstitutions(activeInst);
     } catch (e) {
         console.error(e);
     } finally {
@@ -911,7 +912,36 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     const [isRecurring, setIsRecurring] = useState(false);
     const [recurrenceDays, setRecurrenceDays] = useState<number[]>([]); 
     const [recurrenceEndDate, setRecurrenceEndDate] = useState('');
+    
+    // Mass cancellation por clima
+    const [showWeatherModal, setShowWeatherModal] = useState(false);
+    const [weatherCancelScope, setWeatherCancelScope] = useState<'full_day' | 'from_time'>('full_day');
+    const [weatherStartTime, setWeatherStartTime] = useState('16:00');
+    const [weatherReason, setWeatherReason] = useState('Suspensión por lluvia / mal tiempo');
+    const [weatherActionLoading, setWeatherActionLoading] = useState(false);
+
     const { addToast } = useToast();
+
+    const handleBulkCancelWeather = async () => {
+        if (!institution) return;
+        try {
+            setWeatherActionLoading(true);
+            const startTimeParam = weatherCancelScope === 'from_time' ? weatherStartTime : undefined;
+            const cancelled = await api.bookings.bulkCancelByWeather(
+                institution.id,
+                selectedDate,
+                startTimeParam,
+                weatherReason
+            );
+            addToast(`Se suspendieron y cancelaron ${cancelled.length} reservas por mal tiempo.`, 'success');
+            setShowWeatherModal(false);
+            loadBookingsResult();
+        } catch (e: any) {
+            addToast('Error al cancelar reservas masivamente: ' + e.message, 'error');
+        } finally {
+            setWeatherActionLoading(false);
+        }
+    };
 
     useEffect(() => {
         const loadInst = async () => {
@@ -1141,9 +1171,16 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                 {institution && (<div className="text-right"><div className="text-sm font-bold text-white">{institution.name}</div><div className="text-xs text-muted">{institution.city}</div></div>)}
             </div>
             <div id="grid-container">
-                <div className="flex justify-between items-end mb-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-4">
                     <h3 className="text-lg font-bold text-white flex items-center gap-2"><Calendar size={20} className="text-muted" /> Grilla Operativa</h3>
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <button 
+                            onClick={() => setShowWeatherModal(true)}
+                            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors shadow-lg shadow-blue-900/20"
+                            title="Cancelar reservas masivamente por mal tiempo o lluvia"
+                        >
+                            <CloudRain size={16} /> Suspensión Clima
+                        </button>
                         <input type="date" className="bg-card border border-white/10 rounded-xl px-4 py-2 text-white focus:border-primary focus:outline-none text-sm font-bold" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
                     </div>
                 </div>
@@ -1214,6 +1251,112 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                         <div className="space-y-4">
                             <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white" placeholder="Título" value={bookingTitle} onChange={e => setBookingTitle(e.target.value)} />
                             <button onClick={() => handleCreateBooking(actionType)} className="w-full py-3 bg-primary text-white font-bold rounded-xl shadow-lg">Confirmar</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* WEATHER MASS CANCELLATION MODAL */}
+            {showWeatherModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
+                    <div className="bg-card border border-blue-500/30 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                        <div className="p-6 space-y-4">
+                            <div className="w-12 h-12 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-400 flex items-center justify-center mx-auto">
+                                <CloudRain size={26} />
+                            </div>
+
+                            <div className="text-center space-y-1">
+                                <h3 className="text-xl font-bold text-white">Suspensión por Mal Tiempo</h3>
+                                <p className="text-xs text-slate-300">
+                                    Cancela y libera turnos afectados por lluvia o tormenta en <span className="text-white font-bold">{institution?.name}</span>.
+                                </p>
+                            </div>
+
+                            <div className="space-y-4 pt-2">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-muted uppercase font-bold">Fecha Seleccionada</label>
+                                    <div className="bg-sidebar border border-white/10 rounded-xl p-3 text-white text-sm font-bold flex items-center justify-between">
+                                        <span>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                        <span className="text-xs bg-white/10 px-2 py-0.5 rounded text-muted">{selectedDate}</span>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[10px] text-muted uppercase font-bold">Alcance de la Suspensión</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setWeatherCancelScope('full_day')}
+                                            className={`p-3 rounded-xl border text-xs font-bold transition-all text-left flex flex-col justify-between ${
+                                                weatherCancelScope === 'full_day'
+                                                    ? 'bg-blue-500/20 border-blue-500 text-white shadow-lg shadow-blue-500/10'
+                                                    : 'bg-sidebar border-white/10 text-muted hover:text-white'
+                                            }`}
+                                        >
+                                            <span className="block mb-1">Día Completo</span>
+                                            <span className="text-[10px] font-normal opacity-70">Todas las reservas del día</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setWeatherCancelScope('from_time')}
+                                            className={`p-3 rounded-xl border text-xs font-bold transition-all text-left flex flex-col justify-between ${
+                                                weatherCancelScope === 'from_time'
+                                                    ? 'bg-blue-500/20 border-blue-500 text-white shadow-lg shadow-blue-500/10'
+                                                    : 'bg-sidebar border-white/10 text-muted hover:text-white'
+                                            }`}
+                                        >
+                                            <span className="block mb-1">A partir de un horario</span>
+                                            <span className="text-[10px] font-normal opacity-70">Por inicio de lluvia</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {weatherCancelScope === 'from_time' && (
+                                    <div className="space-y-1 animate-in fade-in">
+                                        <label className="text-[10px] text-muted uppercase font-bold">Cancelar turnos a partir de las:</label>
+                                        <input 
+                                            type="time" 
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white font-bold focus:outline-none focus:border-blue-500 text-sm"
+                                            value={weatherStartTime}
+                                            onChange={e => setWeatherStartTime(e.target.value)}
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="space-y-1">
+                                    <label className="text-[10px] text-muted uppercase font-bold">Motivo / Mensaje Informativo</label>
+                                    <input 
+                                        type="text" 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-blue-500"
+                                        placeholder="Ej: Lluvia intensa - Canchas anegadas"
+                                        value={weatherReason}
+                                        onChange={e => setWeatherReason(e.target.value)}
+                                    />
+                                </div>
+
+                                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-[11px] text-blue-200 space-y-1">
+                                    <p className="font-bold flex items-center gap-1"><CloudLightning size={14} /> Información:</p>
+                                    <p>Las reservas afectadas cambiarán su estado a <strong>Cancelada</strong> y su título indicará la causa climática.</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 bg-white/5 border-t border-white/10 flex justify-end gap-3">
+                            <button 
+                                onClick={() => setShowWeatherModal(false)}
+                                className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors text-sm"
+                                disabled={weatherActionLoading}
+                            >
+                                Cancelar
+                            </button>
+                            <button 
+                                onClick={handleBulkCancelWeather}
+                                disabled={weatherActionLoading}
+                                className="px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold flex items-center gap-2 shadow-lg shadow-blue-600/20 transition-all text-sm disabled:opacity-50"
+                            >
+                                {weatherActionLoading ? <Loader2 className="animate-spin" size={16} /> : <CloudRain size={16} />}
+                                Confirmar Suspensión
+                            </button>
                         </div>
                     </div>
                 </div>

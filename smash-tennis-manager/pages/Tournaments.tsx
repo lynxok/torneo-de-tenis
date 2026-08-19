@@ -126,12 +126,52 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
         }
     }, [user.role]);
 
+    // Group tournaments by start month
+    const groupedTournaments = React.useMemo(() => {
+        const groups: { [key: string]: { monthLabel: string; sortKey: string; items: Tournament[] } } = {};
+        
+        // Sort tournaments by start_date ascending
+        const sorted = [...tournaments].sort((a, b) => {
+            const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
+            const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
+            return dateA - dateB;
+        });
+
+        sorted.forEach(t => {
+            if (!t.start_date) {
+                const key = 'sin-fecha';
+                if (!groups[key]) {
+                    groups[key] = { monthLabel: 'Fechas a Confirmar', sortKey: '9999-99', items: [] };
+                }
+                groups[key].items.push(t);
+                return;
+            }
+
+            const d = new Date(t.start_date + 'T00:00:00');
+            const year = d.getFullYear();
+            const month = d.getMonth();
+            const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+            
+            if (!groups[key]) {
+                const monthName = d.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' });
+                // Capitalize first letter
+                const formattedName = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+                groups[key] = { monthLabel: formattedName, sortKey: key, items: [] };
+            }
+            groups[key].items.push(t);
+        });
+
+        return Object.values(groups).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    }, [tournaments]);
+
+    const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all');
+
     return (
-        <div className="space-y-6 animate-fade-up">
-            <div className="flex justify-between items-center">
+        <div className="space-y-8 animate-fade-up">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-bold text-white">Torneos</h2>
-                    <p className="text-muted text-sm">Competencias disponibles.</p>
+                    <p className="text-muted text-sm">Calendario de competencias oficiales y amistosas.</p>
                 </div>
                 {(user.role === 'admin' || user.role === 'superadmin') && (
                     <button
@@ -144,93 +184,186 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                 )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {loading ? <div className="col-span-full text-center text-muted">Cargando torneos...</div> :
-                    tournaments.map(t => (
-                        <Card key={t.id} onClick={() => handleTournamentClick(t)} className="group cursor-pointer hover:border-primary/50 transition-all">
-                            <div className="flex justify-between items-start mb-4">
-                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-lg ${t.status === 'active' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-muted'}`}>
-                                    <Trophy size={24} />
-                                </div>
-                                <div className="flex items-center gap-1.5">
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            const shareUrl = `${window.location.origin}/?tournament=${t.id}`;
-                                            navigator.clipboard.writeText(shareUrl);
-                                            addToast('¡Link del torneo copiado!', 'success');
-                                        }}
-                                        className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-muted hover:text-primary transition-colors border border-white/10"
-                                        title="Copiar link directo del torneo"
-                                    >
-                                        <Share2 size={14} />
-                                    </button>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            const shareUrl = `${window.location.origin}/?tournament=${t.id}`;
-                                            const message = encodeURIComponent(`🎾 ¡Te invito a participar o seguir el torneo "${t.name}" en ${t.institutions?.name || 'nuestro club'}! Mirá el cuadro y detalles aquí: ${shareUrl}`);
-                                            window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
-                                        }}
-                                        className="p-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 transition-colors"
-                                        title="Compartir torneo por WhatsApp"
-                                    >
-                                        <MessageCircle size={14} />
-                                    </button>
-                                    {Boolean(t.is_commission_waived || (typeof t.rules === 'object' && t.rules !== null && t.rules.is_commission_waived)) && (user.role === 'superadmin' || (user.role === 'admin' && user.institution_id === t.institution_id)) && (
-                                        <div 
-                                            className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-help transition-transform hover:scale-105"
-                                            title="El torneo ha sido bonificado por Smash Tenis"
-                                        >
-                                            Bonificado
-                                        </div>
-                                    )}
-                                    <div className={`px-2 py-1 rounded text-[10px] font-bold uppercase ${t.status === 'active' ? 'bg-green-500/20 text-green-400' : t.status === 'finished' ? 'bg-slate-700 text-slate-400' : 'bg-yellow-500/20 text-yellow-400'}`}>
-                                        {t.status === 'active' ? 'En Curso' : t.status === 'finished' ? 'Finalizado' : 'Borrador'}
-                                    </div>
-                                </div>
-                            </div>
-                            <h3 className="text-lg font-bold text-white mb-1 group-hover:text-primary transition-colors">{t.name}</h3>
-                            <div className="text-sm text-muted mb-4 flex items-center gap-2">
-                                <MapPin size={14} /> {t.institutions?.name}
-                            </div>
+            {/* Month Quick Filter Tabs */}
+            {groupedTournaments.length > 1 && (
+                <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                    <button
+                        onClick={() => setSelectedMonthFilter('all')}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                            selectedMonthFilter === 'all'
+                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                : 'bg-card border-white/10 text-muted hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                        Todos los Meses ({tournaments.length})
+                    </button>
+                    {groupedTournaments.map(g => (
+                        <button
+                            key={g.sortKey}
+                            onClick={() => setSelectedMonthFilter(g.sortKey)}
+                            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                selectedMonthFilter === g.sortKey
+                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                    : 'bg-card border-white/10 text-muted hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            {g.monthLabel} ({g.items.length})
+                        </button>
+                    ))}
+                </div>
+            )}
 
-                            <div className="space-y-2 text-sm border-t border-white/5 pt-3">
-                                {(() => {
-                                    const countsForRanking = t.counts_for_ranking !== false && (!t.rules || t.rules.counts_for_ranking !== false);
-                                    const tier = getTournamentTier(t.players?.length || 12);
-                                    return (
-                                        <div className="flex justify-between items-center pb-1">
-                                            <span className="text-muted text-xs">Circuito</span>
-                                            {countsForRanking ? (
-                                                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${tier.badgeColor} ${tier.textColor} ${tier.borderColor}`}>
-                                                    {tier.label} • {tier.pointsWinner} pts
-                                                </span>
-                                            ) : (
-                                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-800 text-slate-400 border border-white/10" title="Este torneo no suma puntos para el ranking global oficial">
-                                                    🎾 Amistoso • Sin Puntos
-                                                </span>
-                                            )}
-                                        </div>
-                                    );
-                                })()}
-                                <div className="flex justify-between">
-                                    <span className="text-muted">Categoría</span>
-                                    <span className="font-bold text-white">{t.category}</span>
+            {loading ? (
+                <div className="text-center py-20 text-muted">Cargando calendario de torneos...</div>
+            ) : tournaments.length === 0 ? (
+                <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
+                    No hay torneos programados por el momento.
+                </div>
+            ) : (
+                <div className="space-y-10">
+                    {groupedTournaments
+                        .filter(g => selectedMonthFilter === 'all' || selectedMonthFilter === g.sortKey)
+                        .map(group => (
+                            <div key={group.sortKey} className="space-y-4">
+                                <div className="flex items-center gap-3 border-b border-white/10 pb-2">
+                                    <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xs">
+                                        <Calendar size={16} />
+                                    </div>
+                                    <h3 className="text-lg font-bold text-white tracking-wide">
+                                        {group.monthLabel}
+                                    </h3>
+                                    <span className="text-xs bg-white/5 text-muted px-2.5 py-0.5 rounded-full font-medium">
+                                        {group.items.length} {group.items.length === 1 ? 'torneo' : 'torneos'}
+                                    </span>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted">Fecha Inicio</span>
-                                    <span className="font-bold text-white">{new Date(t.start_date).toLocaleDateString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted">Inscripción</span>
-                                    <span className="font-bold text-primary">${t.registration_price}</span>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {group.items.map(t => {
+                                        const isRegClosed = t.registration_closed || t.status === 'finished';
+                                        const hasCompetitions = t.competitions && t.competitions.length > 0;
+
+                                        return (
+                                            <Card key={t.id} onClick={() => handleTournamentClick(t)} className="group cursor-pointer hover:border-primary/50 transition-all flex flex-col justify-between">
+                                                <div>
+                                                    <div className="flex justify-between items-start mb-4">
+                                                        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shadow-lg ${t.status === 'active' ? 'bg-amber-500 text-white' : 'bg-slate-700 text-muted'}`}>
+                                                            <Trophy size={24} />
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                                            {/* Doubles / Singles Badge */}
+                                                            {t.type === 'doubles' ? (
+                                                                <span className="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                                                                    👥 Dobles
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1">
+                                                                    👤 Singles
+                                                                </span>
+                                                            )}
+
+                                                            {/* Registration Status Badge */}
+                                                            {isRegClosed ? (
+                                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
+                                                                    🔴 Inscripción Cerrada
+                                                                </span>
+                                                            ) : (
+                                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
+                                                                    🟢 Inscripción Abierta
+                                                                </span>
+                                                            )}
+
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const shareUrl = `${window.location.origin}/?tournament=${t.id}`;
+                                                                    navigator.clipboard.writeText(shareUrl);
+                                                                    addToast('¡Link del torneo copiado!', 'success');
+                                                                }}
+                                                                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-muted hover:text-primary transition-colors border border-white/10"
+                                                                title="Copiar link directo del torneo"
+                                                            >
+                                                                <Share2 size={14} />
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const shareUrl = `${window.location.origin}/?tournament=${t.id}`;
+                                                                    const message = encodeURIComponent(`🎾 ¡Te invito a participar o seguir el torneo "${t.name}" en ${t.institutions?.name || 'nuestro club'}! Mirá el cuadro y detalles aquí: ${shareUrl}`);
+                                                                    window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+                                                                }}
+                                                                className="p-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 transition-colors"
+                                                                title="Compartir torneo por WhatsApp"
+                                                            >
+                                                                <MessageCircle size={14} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+
+                                                    <h3 className="text-lg font-bold text-white mb-1 group-hover:text-primary transition-colors">{t.name}</h3>
+                                                    <div className="text-sm text-muted mb-4 flex items-center gap-2">
+                                                        <MapPin size={14} /> {t.institutions?.name}
+                                                    </div>
+
+                                                    {/* Categorías o Sub-competencias */}
+                                                    <div className="mb-4">
+                                                        {hasCompetitions ? (
+                                                            <div className="space-y-1">
+                                                                <span className="text-[10px] text-muted uppercase font-bold tracking-wider">Cuadros en juego:</span>
+                                                                <div className="flex flex-wrap gap-1.5">
+                                                                    {t.competitions!.map((comp, cIdx) => (
+                                                                        <span key={cIdx} className="bg-white/5 border border-white/10 text-slate-200 text-xs px-2 py-0.5 rounded-md font-semibold">
+                                                                            {comp.name || comp.allowed_categories.join(' + ')}
+                                                                        </span>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="text-[10px] text-muted uppercase font-bold">Categoría:</span>
+                                                                <span className="bg-primary/10 text-primary border border-primary/20 text-xs px-2 py-0.5 rounded-md font-bold">
+                                                                    {t.category}
+                                                                </span>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-2 text-sm border-t border-white/5 pt-3 mt-auto">
+                                                    {(() => {
+                                                        const countsForRanking = t.counts_for_ranking !== false && (!t.rules || t.rules.counts_for_ranking !== false);
+                                                        const tier = getTournamentTier(t.players?.length || 12);
+                                                        return (
+                                                            <div className="flex justify-between items-center pb-1">
+                                                                <span className="text-muted text-xs">Circuito</span>
+                                                                {countsForRanking ? (
+                                                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${tier.badgeColor} ${tier.textColor} ${tier.borderColor}`}>
+                                                                        {tier.label} • {tier.pointsWinner} pts
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-800 text-slate-400 border border-white/10" title="Este torneo no suma puntos para el ranking global oficial">
+                                                                        🎾 Amistoso • Sin Puntos
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })()}
+                                                    <div className="flex justify-between">
+                                                        <span className="text-muted">Fecha Inicio</span>
+                                                        <span className="font-bold text-white">{new Date(t.start_date + 'T00:00:00').toLocaleDateString()}</span>
+                                                    </div>
+                                                    <div className="flex justify-between">
+                                                        <span className="text-muted">Inscripción</span>
+                                                        <span className="font-bold text-primary">${t.registration_price}</span>
+                                                    </div>
+                                                </div>
+                                            </Card>
+                                        );
+                                    })}
                                 </div>
                             </div>
-                        </Card>
-                    ))
-                }
-            </div>
+                        ))}
+                </div>
+            )}
 
             {/* Warning Modal */}
             {warningTournament && (

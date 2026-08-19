@@ -497,28 +497,30 @@ export const api = {
             return data as Tournament[];
         },
         async getById(id: string) {
-            const { data: tournament, error } = await supabase
-                .from('tournaments')
-                .select('*, institutions(name)')
-                .eq('id', id)
-                .single();
+            // OPTIMIZED: Fetch tournament, players, and matches concurrently with Promise.all
+            const [
+                { data: tournament, error: tourneyError },
+                { data: players, error: playersError },
+                { data: matches, error: matchesError }
+            ] = await Promise.all([
+                supabase.from('tournaments').select('*, institutions(name, id)').eq('id', id).single(),
+                supabase.from('tournament_players').select('*').eq('tournament_id', id).order('enrolled_at', { ascending: true }),
+                supabase.from('matches').select('*').eq('tournament_id', id).order('group_number', { ascending: true })
+            ]);
 
-            if (error) throw error;
+            if (tourneyError) throw tourneyError;
 
-            // Fetch Players with auto-healed profile names
-            const { data: players } = await supabase
-                .from('tournament_players')
-                .select('*')
-                .eq('tournament_id', id)
-                .order('enrolled_at', { ascending: true });
-
+            // Fetch Profiles for Players in a single batch
             const playerIds = (players || []).map(p => p.player_id).filter(Boolean);
+            const partnerIds = (players || []).map(p => p.partner_id).filter(Boolean);
+            const allProfileIds = Array.from(new Set([...playerIds, ...partnerIds]));
+
             const profileMap = new Map();
-            if (playerIds.length > 0) {
+            if (allProfileIds.length > 0) {
                 const { data: profiles } = await supabase
                     .from('profiles')
-                    .select('id, name, lastname, category')
-                    .in('id', playerIds);
+                    .select('id, name, lastname, category, avatar_url, profile_picture_url')
+                    .in('id', allProfileIds);
                 (profiles || []).forEach(p => profileMap.set(p.id, p));
             }
 
@@ -529,26 +531,78 @@ export const api = {
                 const formattedName = formatPlayerName(rawName, rawLastname);
                 const category = prof?.category || p.category || '4ta';
 
+                let partnerFormattedName = p.partner_name;
+                if (p.partner_id) {
+                    const partnerProf = profileMap.get(p.partner_id);
+                    if (partnerProf) {
+                        partnerFormattedName = formatPlayerName(partnerProf.name, partnerProf.lastname);
+                    }
+                }
+
                 return {
                     ...p,
                     player_name: formattedName,
                     name: formattedName,
-                    category
+                    category,
+                    partner_name: partnerFormattedName,
+                    team_name: p.team_name || (partnerFormattedName ? `${formattedName} / ${partnerFormattedName}` : formattedName)
                 };
             });
 
-            // Fetch Matches with formatted player names
-            const { data: matches } = await supabase
-                .from('matches')
-                .select('*')
-                .eq('tournament_id', id)
-                .order('group_number', { ascending: true });
+            // 24H AUTO-CONFIRMATION CHECK: Check if any match is pending confirmation for > 24 hours
+            const now = Date.now();
+            const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+            const autoConfirmUpdates: Promise<any>[] = [];
 
-            const formattedMatches = (matches || []).map(m => ({
-                ...m,
-                player1_name: formatPlayerName(m.player1_name),
-                player2_name: formatPlayerName(m.player2_name)
-            }));
+            const formattedMatches = (matches || []).map(m => {
+                let updatedScoreStatus = m.score_status;
+
+                // Auto-confirm if pending confirmation for > 24 hours
+                if (m.score_status === 'pending_confirmation' && m.score_submitted_at) {
+                    const submittedTime = new Date(m.score_submitted_at).getTime();
+                    if (now - submittedTime >= TWENTY_FOUR_HOURS) {
+                        updatedScoreStatus = 'confirmed';
+                        // Trigger async confirmation update in background
+                        autoConfirmUpdates.push(
+                            supabase.from('matches').update({
+                                score_status: 'confirmed',
+                                score_confirmed_at: new Date().toISOString()
+                            }).eq('id', m.id).then(async () => {
+                                if (m.winner_id) {
+                                    try {
+                                        const { data: wp } = await supabase.from('profiles').select('matches_won').eq('id', m.winner_id).single();
+                                        if (wp) {
+                                            await supabase.from('profiles').update({ matches_won: (wp.matches_won || 0) + 1 }).eq('id', m.winner_id);
+                                        }
+                                        await supabase.from('ranking_history').insert({
+                                            player_id: m.winner_id,
+                                            points: 50,
+                                            reason: `Victoria en torneo (auto-confirmada 24hs)`,
+                                            tournament_id: id,
+                                            date_obtained: new Date().toISOString()
+                                        });
+                                    } catch (e) {
+                                        console.warn("Auto-confirm point award fallback:", e);
+                                    }
+                                }
+                            })
+                        );
+                    }
+                }
+
+                return {
+                    ...m,
+                    score_status: updatedScoreStatus,
+                    player1_name: formatPlayerName(m.player1_name),
+                    player2_name: formatPlayerName(m.player2_name),
+                    player1_partner_name: m.player1_partner_name ? formatPlayerName(m.player1_partner_name) : undefined,
+                    player2_partner_name: m.player2_partner_name ? formatPlayerName(m.player2_partner_name) : undefined
+                };
+            });
+
+            if (autoConfirmUpdates.length > 0) {
+                Promise.all(autoConfirmUpdates).catch(e => console.warn("Auto-confirm batch error:", e));
+            }
 
             return {
                 ...tournament,
@@ -838,9 +892,10 @@ export const api = {
         }
     },
     players: {
-        async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number) {
+        async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number, partnerId?: string, partnerName?: string) {
             let finalName = formatPlayerName(playerName);
             let finalCat = category;
+            let finalPartnerName = partnerName ? formatPlayerName(partnerName) : undefined;
 
             try {
                 const { data: prof } = await supabase.from('profiles').select('name, lastname, category').eq('id', playerId).single();
@@ -848,9 +903,17 @@ export const api = {
                     finalName = formatPlayerName(prof.name, prof.lastname);
                     finalCat = prof.category || finalCat;
                 }
+                if (partnerId) {
+                    const { data: pProf } = await supabase.from('profiles').select('name, lastname').eq('id', partnerId).single();
+                    if (pProf) {
+                        finalPartnerName = formatPlayerName(pProf.name, pProf.lastname);
+                    }
+                }
             } catch (e) {
                 console.log("Fallback to raw playerName");
             }
+
+            const teamName = finalPartnerName ? `${finalName} / ${finalPartnerName}` : finalName;
 
             const { error } = await supabase.from('tournament_players').insert({
                 tournament_id: tournamentId,
@@ -858,7 +921,11 @@ export const api = {
                 player_name: finalName,
                 category: finalCat,
                 payment_status: 'pending',
-                fee_amount: fee || 0
+                fee_amount: fee || 0,
+                partner_id: partnerId || null,
+                partner_name: finalPartnerName || null,
+                team_name: teamName,
+                is_doubles_pair: Boolean(partnerId || partnerName)
             });
             if (error) throw error;
         },
@@ -868,9 +935,12 @@ export const api = {
             category: string;
             fee?: number;
             paymentStatus?: 'pending' | 'paid';
+            partnerId?: string;
+            partnerName?: string;
         }) {
             let finalName = formatPlayerName(params.playerName);
             let finalCat = params.category;
+            let finalPartnerName = params.partnerName ? formatPlayerName(params.partnerName) : undefined;
 
             if (params.playerId) {
                 try {
@@ -882,12 +952,27 @@ export const api = {
                 } catch (e) {}
             }
 
+            if (params.partnerId) {
+                try {
+                    const { data: pProf } = await supabase.from('profiles').select('name, lastname').eq('id', params.partnerId).single();
+                    if (pProf) {
+                        finalPartnerName = formatPlayerName(pProf.name, pProf.lastname);
+                    }
+                } catch (e) {}
+            }
+
+            const teamName = finalPartnerName ? `${finalName} / ${finalPartnerName}` : finalName;
+
             const insertData: any = {
                 tournament_id: tournamentId,
                 player_name: finalName,
                 category: finalCat,
                 payment_status: params.paymentStatus || 'pending',
-                fee_amount: params.fee || 0
+                fee_amount: params.fee || 0,
+                partner_id: params.partnerId || null,
+                partner_name: finalPartnerName || null,
+                team_name: teamName,
+                is_doubles_pair: Boolean(params.partnerId || params.partnerName)
             };
             if (params.playerId) {
                 insertData.player_id = params.playerId;
@@ -921,9 +1006,12 @@ export const api = {
             if (error) throw error;
 
             const playerIds = (players || []).map(p => p.player_id).filter(Boolean);
+            const partnerIds = (players || []).map(p => p.partner_id).filter(Boolean);
+            const allProfileIds = Array.from(new Set([...playerIds, ...partnerIds]));
+
             const profileMap = new Map();
-            if (playerIds.length > 0) {
-                const { data: profiles } = await supabase.from('profiles').select('id, name, lastname, category').in('id', playerIds);
+            if (allProfileIds.length > 0) {
+                const { data: profiles } = await supabase.from('profiles').select('id, name, lastname, category').in('id', allProfileIds);
                 (profiles || []).forEach(p => profileMap.set(p.id, p));
             }
 
@@ -931,28 +1019,62 @@ export const api = {
                 const prof = profileMap.get(p.player_id);
                 const rawName = prof ? prof.name : (p.name || p.player_name);
                 const rawLastname = prof ? prof.lastname : '';
+                const formattedName = formatPlayerName(rawName, rawLastname);
+
+                let partnerFormattedName = p.partner_name;
+                if (p.partner_id) {
+                    const partnerProf = profileMap.get(p.partner_id);
+                    if (partnerProf) {
+                        partnerFormattedName = formatPlayerName(partnerProf.name, partnerProf.lastname);
+                    }
+                }
+
                 return {
                     ...p,
-                    player_name: formatPlayerName(rawName, rawLastname),
-                    category: prof?.category || p.category
+                    player_name: formattedName,
+                    category: prof?.category || p.category,
+                    partner_name: partnerFormattedName,
+                    team_name: p.team_name || (partnerFormattedName ? `${formattedName} / ${partnerFormattedName}` : formattedName)
                 };
             });
         }
     },
     matches: {
-        async updateScore(matchId: string, score: any, winnerId: string) {
-            const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+        async updateScore(matchId: string, score: any, winnerId: string, user?: UserProfile, isDoubles?: boolean, winnerPartnerId?: string) {
+            const { data: matchData } = await supabase.from('matches').select('*, tournaments(institution_id)').eq('id', matchId).single();
 
-            const { error } = await supabase.from('matches').update({
+            const isOrgOrSuperAdmin = user && (
+                user.role === 'superadmin' || 
+                (user.role === 'admin' && user.institution_id === matchData?.tournaments?.institution_id)
+            );
+
+            const scoreStatus = isOrgOrSuperAdmin ? 'confirmed' : 'pending_confirmation';
+            const nowIso = new Date().toISOString();
+
+            const updatePayload: any = {
                 score,
                 winner_id: winnerId,
-                scheduling_status: 'finished'
-            }).eq('id', matchId);
+                scheduling_status: 'finished',
+                score_status: scoreStatus,
+                score_submitted_by: user?.id || null,
+                score_submitted_at: nowIso
+            };
+
+            if (isDoubles && winnerPartnerId) {
+                updatePayload.winner_partner_id = winnerPartnerId;
+            }
+
+            if (scoreStatus === 'confirmed') {
+                updatePayload.score_confirmed_at = nowIso;
+            }
+
+            const { error } = await supabase.from('matches').update(updatePayload).eq('id', matchId);
             if (error) throw error;
 
-            if (winnerId) {
+            // If confirmed immediately (by Admin/SuperAdmin), award wins and points
+            if (scoreStatus === 'confirmed' && winnerId) {
                 try {
-                    // 1. Increment matches_won for the winner
+                    // Winner 1
                     const { data: winnerProfile } = await supabase.from('profiles').select('matches_won').eq('id', winnerId).single();
                     if (winnerProfile) {
                         await supabase.from('profiles').update({
@@ -960,28 +1082,334 @@ export const api = {
                         }).eq('id', winnerId);
                     }
 
-                    // 2. Add ranking point record (50 points per tournament win)
                     await supabase.from('ranking_history').insert({
                         player_id: winnerId,
                         points: 50,
                         reason: `Victoria en partido de torneo`,
                         tournament_id: matchData?.tournament_id || null,
-                        date_obtained: new Date().toISOString()
+                        date_obtained: nowIso
                     });
+
+                    // Winner 2 (Doubles partner)
+                    if (isDoubles && winnerPartnerId) {
+                        const { data: partnerProfile } = await supabase.from('profiles').select('matches_won').eq('id', winnerPartnerId).single();
+                        if (partnerProfile) {
+                            await supabase.from('profiles').update({
+                                matches_won: (partnerProfile.matches_won || 0) + 1
+                            }).eq('id', winnerPartnerId);
+                        }
+                        await supabase.from('ranking_history').insert({
+                            player_id: winnerPartnerId,
+                            points: 50,
+                            reason: `Victoria en torneo (dobles)`,
+                            tournament_id: matchData?.tournament_id || null,
+                            date_obtained: nowIso
+                        });
+                    }
                 } catch (rankingErr) {
                     console.log("Ranking point auto-update fallback (non-blocking):", rankingErr);
                 }
             }
+
+            return { scoreStatus };
         },
+
+        async confirmScore(matchId: string, user: UserProfile) {
+            const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+            if (!matchData) throw new Error("Partido no encontrado");
+
+            const nowIso = new Date().toISOString();
+            const { error } = await supabase.from('matches').update({
+                score_status: 'confirmed',
+                score_confirmed_at: nowIso
+            }).eq('id', matchId);
+
+            if (error) throw error;
+
+            // Award wins and points to winner(s)
+            if (matchData.winner_id) {
+                try {
+                    const { data: winnerProfile } = await supabase.from('profiles').select('matches_won').eq('id', matchData.winner_id).single();
+                    if (winnerProfile) {
+                        await supabase.from('profiles').update({
+                            matches_won: (winnerProfile.matches_won || 0) + 1
+                        }).eq('id', matchData.winner_id);
+                    }
+
+                    await supabase.from('ranking_history').insert({
+                        player_id: matchData.winner_id,
+                        points: 50,
+                        reason: `Victoria en partido de torneo`,
+                        tournament_id: matchData.tournament_id || null,
+                        date_obtained: nowIso
+                    });
+
+                    if (matchData.winner_partner_id) {
+                        const { data: partnerProfile } = await supabase.from('profiles').select('matches_won').eq('id', matchData.winner_partner_id).single();
+                        if (partnerProfile) {
+                            await supabase.from('profiles').update({
+                                matches_won: (partnerProfile.matches_won || 0) + 1
+                            }).eq('id', matchData.winner_partner_id);
+                        }
+                        await supabase.from('ranking_history').insert({
+                            player_id: matchData.winner_partner_id,
+                            points: 50,
+                            reason: `Victoria en torneo (dobles)`,
+                            tournament_id: matchData.tournament_id || null,
+                            date_obtained: nowIso
+                        });
+                    }
+                } catch (e) {
+                    console.warn("Error awarding points on confirmation:", e);
+                }
+            }
+
+            return true;
+        },
+
+        async disputeScore(matchId: string, reason: string, user: UserProfile) {
+            const { error } = await supabase.from('matches').update({
+                score_status: 'disputed',
+                score_dispute_reason: reason
+            }).eq('id', matchId);
+
+            if (error) throw error;
+            return true;
+        },
+
+        async getHeadToHead(player1Id: string, player2Id: string) {
+            // Fetch both profiles
+            const [
+                { data: p1Data },
+                { data: p2Data },
+                { data: matchesData }
+            ] = await Promise.all([
+                supabase.from('profiles').select('id, name, lastname, category, avatar_url, profile_picture_url').eq('id', player1Id).single(),
+                supabase.from('profiles').select('id, name, lastname, category, avatar_url, profile_picture_url').eq('id', player2Id).single(),
+                supabase.from('matches').select('*, tournaments(name)').or(`and(player1_id.eq.${player1Id},player2_id.eq.${player2Id}),and(player1_id.eq.${player2Id},player2_id.eq.${player1Id})`).order('created_at', { ascending: false })
+            ]);
+
+            const p1 = {
+                id: player1Id,
+                name: p1Data ? formatPlayerName(p1Data.name, p1Data.lastname) : 'Jugador 1',
+                lastname: p1Data?.lastname,
+                category: p1Data?.category || '4ta',
+                avatar_url: p1Data?.profile_picture_url || p1Data?.avatar_url
+            };
+
+            const p2 = {
+                id: player2Id,
+                name: p2Data ? formatPlayerName(p2Data.name, p2Data.lastname) : 'Jugador 2',
+                lastname: p2Data?.lastname,
+                category: p2Data?.category || '4ta',
+                avatar_url: p2Data?.profile_picture_url || p2Data?.avatar_url
+            };
+
+            const allMatches = matchesData || [];
+            let p1Wins = 0;
+            let p2Wins = 0;
+            let p1SetsWon = 0;
+            let p2SetsWon = 0;
+            let p1GamesWon = 0;
+            let p2GamesWon = 0;
+
+            const formattedMatchesList: any[] = [];
+
+            allMatches.forEach(m => {
+                const isP1Player1 = m.player1_id === player1Id;
+                const winnerIsP1 = m.winner_id === player1Id;
+                const winnerIsP2 = m.winner_id === player2Id;
+
+                if (winnerIsP1) p1Wins++;
+                else if (winnerIsP2) p2Wins++;
+
+                // Parse sets and games if score exists
+                if (m.score) {
+                    if (typeof m.score === 'object') {
+                        ['set1', 'set2', 'set3'].forEach(setKey => {
+                            const val = m.score[setKey];
+                            if (val && typeof val === 'string' && val.includes('-')) {
+                                const [g1Str, g2Str] = val.split('-');
+                                const g1 = parseInt(g1Str) || 0;
+                                const g2 = parseInt(g2Str) || 0;
+                                const myGames = isP1Player1 ? g1 : g2;
+                                const theirGames = isP1Player1 ? g2 : g1;
+                                p1GamesWon += myGames;
+                                p2GamesWon += theirGames;
+                                if (myGames > theirGames) p1SetsWon++;
+                                else if (theirGames > myGames) p2SetsWon++;
+                            }
+                        });
+                    }
+                }
+
+                formattedMatchesList.push({
+                    id: m.id,
+                    date: m.created_at || m.scheduled_at || new Date().toISOString(),
+                    tournament_name: m.tournaments?.name || 'Desafío / Amistoso',
+                    round: m.round || 'Partido Oficial',
+                    score: m.score,
+                    winner_id: m.winner_id,
+                    winner_name: m.winner_id === player1Id ? p1.name : m.winner_id === player2Id ? p2.name : undefined
+                });
+            });
+
+            // Calculate streak
+            let streakCount = 0;
+            let streakWinnerId: string | null = null;
+            for (const m of formattedMatchesList) {
+                if (!m.winner_id) continue;
+                if (!streakWinnerId) {
+                    streakWinnerId = m.winner_id;
+                    streakCount = 1;
+                } else if (streakWinnerId === m.winner_id) {
+                    streakCount++;
+                } else {
+                    break;
+                }
+            }
+
+            return {
+                player1: p1,
+                player2: p2,
+                totalMatches: allMatches.length,
+                player1Wins: p1Wins,
+                player2Wins: p2Wins,
+                player1SetsWon: p1SetsWon,
+                player2SetsWon: p2SetsWon,
+                player1GamesWon: p1GamesWon,
+                player2GamesWon: p2GamesWon,
+                lastWinnerId: formattedMatchesList.length > 0 ? formattedMatchesList[0].winner_id : undefined,
+                streakCount,
+                streakWinnerName: streakWinnerId === player1Id ? p1.name : streakWinnerId === player2Id ? p2.name : undefined,
+                matches: formattedMatchesList
+            };
+        },
+
         async getByUser(userId: string) {
             const { data, error } = await supabase
                 .from('matches')
-                .select('*, tournaments(name, institutions(name))')
-                .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+                .select('*, tournaments(name, institution_id, institutions(name))')
+                .or(`player1_id.eq.${userId},player2_id.eq.${userId},player1_partner_id.eq.${userId},player2_partner_id.eq.${userId}`)
                 .order('created_at', { ascending: false });
 
             if (error) return [];
             return data as Match[];
+        }
+    },
+    matchmaking: {
+        async getPosts(institutionId?: string, category?: string, type?: 'singles' | 'doubles'): Promise<MatchmakingPost[]> {
+            try {
+                // Try from matchmaking_posts table
+                let query = supabase.from('matchmaking_posts').select('*').eq('status', 'open').order('created_at', { ascending: false });
+                if (institutionId && institutionId !== 'all') query = query.eq('institution_id', institutionId);
+                if (type) query = query.eq('type', type);
+                
+                const { data, error } = await query;
+                if (!error && data) {
+                    return data as MatchmakingPost[];
+                }
+            } catch (e) {}
+
+            // Graceful fallback from system_settings JSON
+            try {
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'matchmaking_posts').single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    let list = setting.value as MatchmakingPost[];
+                    list = list.filter(p => p.status === 'open');
+                    if (institutionId && institutionId !== 'all') list = list.filter(p => p.institution_id === institutionId);
+                    if (category && category !== 'all') list = list.filter(p => p.category === category);
+                    if (type) list = list.filter(p => p.type === type);
+                    return list;
+                }
+            } catch (e) {}
+
+            return [];
+        },
+
+        async createPost(post: Partial<MatchmakingPost>) {
+            const newPost: MatchmakingPost = {
+                id: `post-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                user_id: post.user_id || '',
+                user_name: formatPlayerName(post.user_name || 'Jugador', post.user_lastname),
+                user_lastname: post.user_lastname,
+                user_phone: post.user_phone,
+                user_avatar: post.user_avatar,
+                user_category: post.user_category || '4ta',
+                type: post.type || 'singles',
+                category: post.category || '4ta',
+                institution_id: post.institution_id,
+                institution_name: post.institution_name,
+                date: post.date,
+                time_slot: post.time_slot,
+                has_court_booked: post.has_court_booked || false,
+                court_name: post.court_name,
+                description: post.description || '',
+                created_at: new Date().toISOString(),
+                status: 'open'
+            };
+
+            // 1. Try table insert
+            try {
+                const { data, error } = await supabase.from('matchmaking_posts').insert(newPost).select().single();
+                if (!error && data) return data;
+            } catch (e) {}
+
+            // 2. Fallback to system_settings
+            try {
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'matchmaking_posts').single();
+                const existing = (setting?.value && Array.isArray(setting.value)) ? setting.value : [];
+                const updated = [newPost, ...existing].slice(0, 50); // Keep latest 50
+                await supabase.from('system_settings').upsert({ key: 'matchmaking_posts', value: updated, updated_at: new Date() });
+                return newPost;
+            } catch (e) {
+                console.error("Matchmaking fallback save:", e);
+                return newPost;
+            }
+        },
+
+        async deletePost(postId: string) {
+            try {
+                await supabase.from('matchmaking_posts').delete().eq('id', postId);
+            } catch (e) {}
+
+            try {
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'matchmaking_posts').single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    const filtered = setting.value.filter((p: any) => p.id !== postId);
+                    await supabase.from('system_settings').upsert({ key: 'matchmaking_posts', value: filtered, updated_at: new Date() });
+                }
+            } catch (e) {}
+            return true;
+        },
+
+        async markMatched(postId: string, user: UserProfile) {
+            try {
+                await supabase.from('matchmaking_posts').update({
+                    status: 'matched',
+                    matched_with_user_id: user.id,
+                    matched_with_name: formatPlayerName(user.name, user.lastname)
+                }).eq('id', postId);
+            } catch (e) {}
+
+            try {
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'matchmaking_posts').single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    const updated = setting.value.map((p: any) => {
+                        if (p.id === postId) {
+                            return {
+                                ...p,
+                                status: 'matched',
+                                matched_with_user_id: user.id,
+                                matched_with_name: formatPlayerName(user.name, user.lastname)
+                            };
+                        }
+                        return p;
+                    });
+                    await supabase.from('system_settings').upsert({ key: 'matchmaking_posts', value: updated, updated_at: new Date() });
+                }
+            } catch (e) {}
+            return true;
         }
     },
     bookings: {
@@ -1017,6 +1445,25 @@ export const api = {
         async delete(id: string) {
             const { error } = await supabase.from('bookings').delete().eq('id', id);
             if (error) throw error;
+        },
+        async bulkCancelByWeather(institutionId: string, date: string, startTime?: string, reason?: string) {
+            let query = supabase
+                .from('bookings')
+                .update({ 
+                    status: 'cancelled',
+                    title: reason ? `[Cancelado por clima] ${reason}` : '[Cancelado por clima] Lluvia / Mal tiempo'
+                })
+                .eq('institution_id', institutionId)
+                .eq('date', date)
+                .neq('status', 'cancelled');
+
+            if (startTime) {
+                query = query.gte('start_time', startTime);
+            }
+
+            const { data, error } = await query.select();
+            if (error) throw error;
+            return data || [];
         }
     },
     messages: {
@@ -1083,6 +1530,11 @@ export const api = {
             const { data, error } = await supabase.from('institutions').update(updates).eq('id', id).select().single();
             if (error) throw error;
             return data;
+        },
+        async delete(id: string) {
+            const { error } = await supabase.from('institutions').delete().eq('id', id);
+            if (error) throw error;
+            return true;
         },
         async getCourtSlots(instId: string, date: string) {
             const { data: inst, error: instError } = await supabase

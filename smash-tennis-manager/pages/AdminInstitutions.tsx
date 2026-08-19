@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { 
     Building, MapPin, Plus, Lightbulb, Sun, X, Save, 
     Instagram, Globe, Phone, Mail, Car, Wifi, Utensils, Droplets, ShoppingBag, Clock, ShieldCheck,
-    ArrowRightLeft, Layers, Info, Award
+    ArrowRightLeft, Layers, Info, Award, Trash2, Power, AlertTriangle
 } from 'lucide-react';
 import { CATEGORY_EQUIVALENCES } from '../utils/categories';
 
@@ -20,6 +20,9 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<Partial<Institution>>({});
   const [activeTab, setActiveTab] = useState('general');
+  const [deletingInst, setDeletingInst] = useState<Institution | null>(null);
+  const [confirmName, setConfirmName] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -124,6 +127,47 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
     }
   };
 
+  const handleToggleActive = async (inst: Institution) => {
+    const nextState = inst.is_active === false ? true : false;
+    const actionName = nextState ? 'activar' : 'desactivar';
+    
+    if (!confirm(`¿Estás seguro de que deseas ${actionName} la institución "${inst.name}"?`)) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      await api.institutions.update(inst.id, { is_active: nextState });
+      await loadInstitutions();
+    } catch (err: any) {
+      alert('Error al cambiar el estado: ' + err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteInstitution = async () => {
+    if (!deletingInst) return;
+    
+    if (confirmName.trim().toLowerCase() !== deletingInst.name.trim().toLowerCase()) {
+      alert('El nombre ingresado no coincide exactamente con el nombre de la institución.');
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      await api.institutions.delete(deletingInst.id);
+      setDeletingInst(null);
+      setConfirmName('');
+      await loadInstitutions();
+      alert('La institución ha sido eliminada permanentemente.');
+    } catch (err: any) {
+      alert('Error al eliminar la institución: ' + err.message);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
   // Helper for inputs
   const InputNumber = ({ label, value, onChange }: any) => (
       <div className="space-y-1">
@@ -174,11 +218,45 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
              <div className="col-span-full text-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
                  No tienes instituciones asignadas. Contacta al soporte.
              </div>
-         ) : institutions.map(inst => (
-             <Card key={inst.id} className="group relative overflow-hidden flex flex-col h-full p-0 border border-white/10 bg-card">
+         ) : institutions.map(inst => {
+             const isInactive = inst.is_active === false;
+
+             return (
+             <Card key={inst.id} className={`group relative overflow-hidden flex flex-col h-full p-0 border transition-all ${isInactive ? 'border-red-500/30 bg-card/60 opacity-80' : 'border-white/10 bg-card'}`}>
                 
-                {/* Edit Button - Floating Top Right */}
-                <div className="absolute top-4 right-4 z-10">
+                {/* Status & Edit Floating Top Right */}
+                <div className="absolute top-4 right-4 z-10 flex items-center gap-2">
+                    {user?.role === 'superadmin' && (
+                        <>
+                            {/* Toggle Active / Inactive */}
+                            <button 
+                              onClick={() => handleToggleActive(inst)}
+                              disabled={actionLoading}
+                              title={isInactive ? "Activar Sede" : "Desactivar Sede (Baja Lógica)"}
+                              className={`p-1.5 rounded-lg border backdrop-blur text-xs font-bold transition-colors ${
+                                isInactive 
+                                  ? 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-400 border-emerald-500/30' 
+                                  : 'bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 border-amber-500/30'
+                              }`}
+                            >
+                              <Power size={14} />
+                            </button>
+
+                            {/* Hard Delete Button */}
+                            <button 
+                              onClick={() => {
+                                setDeletingInst(inst);
+                                setConfirmName('');
+                              }}
+                              disabled={actionLoading}
+                              title="Eliminar permanentemente"
+                              className="bg-red-500/20 hover:bg-red-500/40 text-red-400 border border-red-500/30 p-1.5 rounded-lg backdrop-blur transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                        </>
+                    )}
+                    
                     <button id="inst-edit-btn" onClick={() => openEdit(inst)} className="bg-black/40 hover:bg-black/60 text-white text-xs font-bold px-3 py-1.5 rounded-lg backdrop-blur border border-white/10 transition-colors">
                         Editar
                     </button>
@@ -194,8 +272,15 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                                  <Building className="text-muted" size={28} />
                              )}
                          </div>
-                         <div className="pt-1 pr-12">
-                             <h3 className="font-bold text-white text-xl leading-tight mb-1">{inst.name}</h3>
+                         <div className="pt-1 pr-24">
+                             <div className="flex items-center gap-2">
+                               <h3 className="font-bold text-white text-xl leading-tight mb-1">{inst.name}</h3>
+                               {isInactive && (
+                                   <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold">
+                                       Inactiva
+                                   </span>
+                               )}
+                             </div>
                              <div className="flex items-center gap-1.5 text-xs text-muted">
                                  <MapPin size={12} className="text-primary" /> {inst.city}
                              </div>
@@ -251,7 +336,8 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                     </div>
                 </div>
              </Card>
-         ))}
+             );
+         })}
       </div>
 
       {showModal && (
@@ -591,6 +677,65 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                     </button>
                 </div>
              </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingInst && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-card border border-red-500/30 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
+                <div className="p-6 space-y-4">
+                    <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/20 text-red-400 flex items-center justify-center mx-auto">
+                        <AlertTriangle size={24} />
+                    </div>
+
+                    <div className="text-center space-y-2">
+                        <h3 className="text-xl font-bold text-white">¿Eliminar Institución?</h3>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                            Esta acción <strong className="text-red-400">eliminará permanentemente</strong> la sede <span className="text-white font-bold">"{deletingInst.name}"</span> de la base de datos.
+                        </p>
+                    </div>
+
+                    <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-[11px] text-red-300 space-y-1">
+                        <p className="font-bold">⚠️ Atención:</p>
+                        <p>Si la sede cuenta con torneos, partidos o reservas registradas, la eliminación física fallará para proteger la integridad del historial.</p>
+                        <p>En su lugar, se recomienda utilizar el botón de <strong>Baja Lógica (Desactivar)</strong>.</p>
+                    </div>
+
+                    <div className="space-y-2 pt-2">
+                        <label className="text-[11px] text-muted uppercase font-bold block">
+                            Escribe <span className="text-white font-mono font-bold">{deletingInst.name}</span> para confirmar:
+                        </label>
+                        <input 
+                            type="text" 
+                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-red-500 text-sm font-medium"
+                            placeholder="Nombre exacto de la institución"
+                            value={confirmName}
+                            onChange={(e) => setConfirmName(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                <div className="p-4 bg-white/5 border-t border-white/10 flex justify-end gap-3">
+                    <button 
+                        onClick={() => {
+                            setDeletingInst(null);
+                            setConfirmName('');
+                        }}
+                        className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors text-sm"
+                        disabled={actionLoading}
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={handleDeleteInstitution}
+                        disabled={actionLoading || confirmName.trim().toLowerCase() !== deletingInst.name.trim().toLowerCase()}
+                        className="px-5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-2 shadow-lg shadow-red-600/20 transition-all text-sm disabled:opacity-40 disabled:cursor-not-allowed"
+                    >
+                        <Trash2 size={16} /> Eliminar Permanentemente
+                    </button>
+                </div>
+            </div>
         </div>
       )}
     </div>

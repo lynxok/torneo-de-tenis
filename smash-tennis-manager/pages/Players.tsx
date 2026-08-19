@@ -7,11 +7,13 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Search, MapPin, Award, UserPlus, X, Activity, Trophy, Calendar, MessageCircle, Send, 
     Clock, CheckCircle2, LayoutList, LayoutGrid, ChevronRight, MoreHorizontal, Building, 
-    Sparkles, Zap, Smartphone, Loader2, Lock, AlertTriangle 
+    Sparkles, Zap, Smartphone, Loader2, Lock, AlertTriangle, Swords, Users 
 } from 'lucide-react';
 import { getCategoryRank, NUMERIC_CATEGORIES, getEquivalentCategory } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass, isJuniorPlayer } from '../utils/demographics';
+import { HeadToHeadModal } from '../components/HeadToHeadModal';
+import { MatchmakingBoard } from '../components/MatchmakingBoard';
 
 interface PlayersProps {
     user: UserProfile;
@@ -24,6 +26,9 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const { addToast } = useToast();
   
+  // Navigation Tabs
+  const [activeMainTab, setActiveMainTab] = useState<'directory' | 'matchmaking'>('directory');
+
   // Filters
   const [filter, setFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -35,6 +40,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   
   // Modals
   const [selectedPlayer, setSelectedPlayer] = useState<UserProfile | null>(null);
+  const [h2hTargetPlayer, setH2hTargetPlayer] = useState<UserProfile | null>(null);
   const [showContactModal, setShowContactModal] = useState(false);
   const [showMustActivateModal, setShowMustActivateModal] = useState(false);
   const [showTargetDisabledModal, setShowTargetDisabledModal] = useState<{ show: boolean; playerName: string }>({ show: false, playerName: '' });
@@ -199,6 +205,34 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   return (
     <div className="space-y-8 animate-fade-up">
 
+      {/* 1. TOP TAB SWITCHER */}
+      <div className="flex bg-card/80 border border-white/10 p-1.5 rounded-2xl w-full sm:w-auto self-start inline-flex gap-2">
+          <button
+              onClick={() => setActiveMainTab('directory')}
+              className={`px-5 py-2.5 rounded-xl font-black text-xs transition-all flex items-center gap-2 ${
+                  activeMainTab === 'directory' 
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20' 
+                      : 'text-muted hover:text-white'
+              }`}
+          >
+              <Users size={16} /> Directorio de Jugadores
+          </button>
+          <button
+              onClick={() => setActiveMainTab('matchmaking')}
+              className={`px-5 py-2.5 rounded-xl font-black text-xs transition-all flex items-center gap-2 ${
+                  activeMainTab === 'matchmaking' 
+                      ? 'bg-primary text-white shadow-lg shadow-primary/20' 
+                      : 'text-muted hover:text-white'
+              }`}
+          >
+              <Sparkles size={16} /> Tablón "Busco Rival / Dobles"
+          </button>
+      </div>
+
+      {activeMainTab === 'matchmaking' ? (
+          <MatchmakingBoard user={user} institutions={institutions} />
+      ) : (
+          <>
       {!isCurrentUserChallengesActive && (
           <div className="p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl flex items-center gap-3 animate-fade-up">
               <AlertTriangle className="text-yellow-400 shrink-0" size={20} />
@@ -251,12 +285,24 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                               ))}
                           </div>
 
-                          <button 
-                              onClick={(e) => handleContact(e, player)}
-                              className="w-full py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-all shadow-lg shadow-primary/10 flex items-center justify-center gap-2"
-                          >
-                              <MessageCircle size={14} /> Desafiar Ahora
-                          </button>
+                          <div className="grid grid-cols-2 gap-2">
+                              <button 
+                                  onClick={(e) => {
+                                      e.stopPropagation();
+                                      setH2hTargetPlayer(player);
+                                  }}
+                                  className="py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 flex items-center justify-center gap-1.5"
+                                  title="Ver historial cara a cara"
+                              >
+                                  <Swords size={13} className="text-primary" /> H2H
+                              </button>
+                              <button 
+                                  onClick={(e) => handleContact(e, player)}
+                                  className="py-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-all shadow-lg shadow-primary/10 flex items-center justify-center gap-1.5"
+                              >
+                                  <MessageCircle size={13} /> Desafiar
+                              </button>
+                          </div>
                       </div>
                   ))}
               </div>
@@ -436,6 +482,18 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                             <td className="p-4 pr-6 text-right">
                                                 <div className="flex items-center justify-end gap-2">
                                                     {player.id !== user.id && (
+                                                        <button
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                setH2hTargetPlayer(player);
+                                                            }}
+                                                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs flex items-center gap-1 transition-all"
+                                                            title="Ver Historial Cara a Cara (H2H)"
+                                                        >
+                                                            <Swords size={15} className="text-primary" />
+                                                        </button>
+                                                    )}
+                                                    {player.id !== user.id && (
                                                         !player.phone || player.show_whatsapp === false ? (
                                                             <button 
                                                                 onClick={(e) => handleContact(e, player)}
@@ -506,22 +564,34 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                         </div>
                                     </div>
                                     {player.id !== user.id && (
-                                        !isEligible ? (
-                                            <button 
-                                                onClick={(e) => handleContact(e, player)}
-                                                className="mt-2 w-full py-2 px-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 text-[11px] font-medium flex items-center justify-center gap-1.5 border border-white/5 transition-all text-center leading-tight"
-                                                title="Este usuario no está habilitado a ser desafiado (falta registro de WhatsApp)"
+                                        <div className="grid grid-cols-2 gap-2 mt-2 pt-2 border-t border-white/5">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setH2hTargetPlayer(player);
+                                                }}
+                                                className="py-2 px-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold transition-all border border-white/10 flex items-center justify-center gap-1.5"
+                                                title="Historial Cara a Cara"
                                             >
-                                                <Lock size={12} className="shrink-0 text-yellow-500/80" /> No habilitado a ser desafiado (falta WhatsApp)
+                                                <Swords size={13} className="text-primary" /> H2H
                                             </button>
-                                        ) : (
-                                            <button 
-                                                onClick={(e) => handleContact(e, player)}
-                                                className="mt-2 w-full py-2 rounded-lg bg-white/5 hover:bg-primary hover:text-white text-muted text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                                            >
-                                                <MessageCircle size={14} /> Contactar / Desafiar
-                                            </button>
-                                        )
+                                            {!isEligible ? (
+                                                <button 
+                                                    onClick={(e) => handleContact(e, player)}
+                                                    className="py-2 px-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 text-[11px] font-medium flex items-center justify-center gap-1 border border-white/5 transition-all"
+                                                    title="Este usuario no está habilitado a ser desafiado"
+                                                >
+                                                    <Lock size={12} className="text-yellow-500/80" /> Sin WA
+                                                </button>
+                                            ) : (
+                                                <button 
+                                                    onClick={(e) => handleContact(e, player)}
+                                                    className="py-2 px-2 rounded-xl bg-primary hover:bg-primary-hover text-white text-xs font-bold transition-all shadow-md shadow-primary/10 flex items-center justify-center gap-1.5"
+                                                >
+                                                    <MessageCircle size={13} /> Desafiar
+                                                </button>
+                                            )}
+                                        </div>
                                     )}
                                 </Card>
                             );
@@ -531,6 +601,8 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
             </div>
         )}
       </div>
+      </>
+      )}
 
       {/* MUST ACTIVATE WHATSAPP MODAL FOR CURRENT USER */}
       {showMustActivateModal && (
@@ -601,6 +673,9 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
             player={selectedPlayer} 
             currentUser={user}
             onClose={() => setSelectedPlayer(null)} 
+            onOpenH2H={() => {
+                setH2hTargetPlayer(selectedPlayer);
+            }}
             onContact={() => {
                 if (!isCurrentUserChallengesActive) {
                     setShowMustActivateModal(true);
@@ -616,6 +691,15 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                 }
                 setShowContactModal(true);
             }}
+          />
+      )}
+
+      {/* HEAD TO HEAD MODAL */}
+      {h2hTargetPlayer && (
+          <HeadToHeadModal
+              player1Id={user.id}
+              player2Id={h2hTargetPlayer.id}
+              onClose={() => setH2hTargetPlayer(null)}
           />
       )}
 
@@ -638,7 +722,19 @@ const ArrowUpRightIcon = ({ className, size }: { className?: string, size: numbe
 );
 
 // --- MODALS (Reused) ---
-const PlayerProfileModal = ({ player, currentUser, onClose, onContact }: { player: UserProfile, currentUser: UserProfile, onClose: () => void, onContact: () => void }) => {
+const PlayerProfileModal = ({ 
+    player, 
+    currentUser, 
+    onClose, 
+    onContact, 
+    onOpenH2H 
+}: { 
+    player: UserProfile; 
+    currentUser: UserProfile; 
+    onClose: () => void; 
+    onContact: () => void; 
+    onOpenH2H?: () => void; 
+}) => {
     const [matches, setMatches] = useState<Match[]>([]);
     const [loadingMatches, setLoadingMatches] = useState(true);
 
@@ -661,7 +757,7 @@ const PlayerProfileModal = ({ player, currentUser, onClose, onContact }: { playe
                         {player.name.charAt(0)}
                     </div>
                     <div className="flex-1 pt-16 md:pt-18 space-y-1">
-                        <div className="flex justify-between items-start">
+                        <div className="flex justify-between items-start flex-wrap gap-2">
                              <div>
                                 <h2 className="text-3xl font-bold text-white">{player.name} {player.lastname}</h2>
                                 <p className="text-muted flex items-center gap-2">
@@ -671,18 +767,29 @@ const PlayerProfileModal = ({ player, currentUser, onClose, onContact }: { playe
                                 </p>
                              </div>
                              {!isMe && (
-                                 !player.phone || player.show_whatsapp === false ? (
-                                     <button 
-                                         onClick={onContact} 
-                                         className="hidden md:flex bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10 px-4 py-2 rounded-xl text-xs font-semibold items-center gap-2 transition-colors"
-                                     >
-                                         <Lock size={14} className="text-yellow-500/80" /> No habilitado (falta WhatsApp)
-                                     </button>
-                                 ) : (
-                                     <button onClick={onContact} className="hidden md:flex bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold items-center gap-2 transition-all shadow-lg shadow-primary/20">
-                                         <MessageCircle size={18} /> Desafiar
-                                     </button>
-                                 )
+                                 <div className="flex items-center gap-2">
+                                     {onOpenH2H && (
+                                         <button 
+                                             onClick={onOpenH2H} 
+                                             className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-white/10 transition-all"
+                                             title="Ver Historial Cara a Cara"
+                                         >
+                                             <Swords size={16} className="text-primary" /> H2H
+                                         </button>
+                                     )}
+                                     {!player.phone || player.show_whatsapp === false ? (
+                                         <button 
+                                             onClick={onContact} 
+                                             className="bg-white/5 hover:bg-white/10 text-slate-400 border border-white/10 px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 transition-colors"
+                                         >
+                                             <Lock size={14} className="text-yellow-500/80" /> Sin WhatsApp
+                                         </button>
+                                     ) : (
+                                         <button onClick={onContact} className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20">
+                                             <MessageCircle size={18} /> Desafiar
+                                         </button>
+                                     )}
+                                 </div>
                              )}
                         </div>
                     </div>

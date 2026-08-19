@@ -6,12 +6,14 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
-    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield 
+    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
+    Swords, AlertTriangle, CheckSquare, Clock, AlertCircle
 } from 'lucide-react';
-import { getCategoriesForInstitution } from '../utils/categories';
+import { getCategoriesForInstitution, isUserEligibleForCategories } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 import { formatPlayerName } from '../utils/formatters';
 import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
+import { HeadToHeadModal } from '../components/HeadToHeadModal';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -25,6 +27,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('groups');
     const { addToast } = useToast();
+
+    // H2H State
+    const [h2hPlayers, setH2hPlayers] = useState<{ p1Id: string; p2Id: string } | null>(null);
 
     // Superadmin Fee Waiver & Ranking State
     const [isTogglingWaive, setIsTogglingWaive] = useState(false);
@@ -42,7 +47,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [previewGroups, setPreviewGroups] = useState<{ name: string; players: TournamentPlayer[] }[]>([]);
     const [generatingFixture, setGeneratingFixture] = useState(false);
 
-    // Manual Enroll Modal State
+    // Manual Enroll Modal State (with Doubles Partner support)
     const [showManualEnrollModal, setShowManualEnrollModal] = useState(false);
     const [enrollMode, setEnrollMode] = useState<'member' | 'guest'>('member');
     const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
@@ -51,12 +56,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [selectedUserForEnroll, setSelectedUserForEnroll] = useState<UserProfile | null>(null);
     const [guestName, setGuestName] = useState('');
     const [guestCategory, setGuestCategory] = useState('');
+    const [partnerUserForEnroll, setPartnerUserForEnroll] = useState<UserProfile | null>(null);
+    const [guestPartnerName, setGuestPartnerName] = useState('');
     const [manualFee, setManualFee] = useState<number>(0);
     const [manualPaymentStatus, setManualPaymentStatus] = useState<'pending' | 'paid'>('paid');
     const [submittingEnroll, setSubmittingEnroll] = useState(false);
     const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
 
-    // Score Modal State
+    // Score Modal State (with 24h confirmation & doubles support)
     const [selectedMatchForScore, setSelectedMatchForScore] = useState<Match | null>(null);
     const [scoreP1Set1, setScoreP1Set1] = useState(6);
     const [scoreP2Set1, setScoreP2Set1] = useState(4);
@@ -67,6 +74,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [hasSet3, setHasSet3] = useState(false);
     const [selectedWinnerId, setSelectedWinnerId] = useState<string>('');
     const [savingScore, setSavingScore] = useState(false);
+
+    // Dispute Modal State
+    const [disputeMatchId, setDisputeMatchId] = useState<string | null>(null);
+    const [disputeReason, setDisputeReason] = useState('');
+    const [submittingDispute, setSubmittingDispute] = useState(false);
 
     // Derived state
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
@@ -102,7 +114,25 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const handleEnrollClick = async () => {
         if (!tournament) return;
-        if (!confirm(`¿Confirmas tu inscripción a ${tournament.name} por $${effectivePrice}?`)) return;
+
+        // Check Category Eligibility
+        const allowedCats = tournament.competitions && tournament.competitions.length > 0
+            ? tournament.competitions.flatMap(c => c.allowed_categories)
+            : [tournament.category];
+
+        const eligibility = isUserEligibleForCategories(user.category, allowedCats);
+
+        if (!eligibility.canEnroll) {
+            alert(eligibility.reason || 'No puedes inscribirte a una categoría inferior a tu nivel actual.');
+            return;
+        }
+
+        let confirmMsg = `¿Confirmas tu inscripción a ${tournament.name} por $${effectivePrice}?`;
+        if (eligibility.isChallenger) {
+            confirmMsg = `🎾 Estás por inscribirte en una categoría superior a tu nivel (${user.category || '4ta'}).\n\n¿Deseas confirmar tu inscripción como Desafío/Challenger por $${effectivePrice}?`;
+        }
+
+        if (!confirm(confirmMsg)) return;
 
         setIsEnrolling(true);
         try {
@@ -117,6 +147,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     };
 
     const openScoreModal = (m: Match) => {
+        const isClubAdmin = user.role === 'superadmin' || (user.role === 'admin' && user.institution_id === tournament?.institution_id);
+        
+        // If match is already confirmed or disputed, only club admin/superadmin can edit
+        if ((m.score_status === 'confirmed' || m.score_status === 'disputed') && !isClubAdmin) {
+            addToast("Este marcador ya ha sido verificado u oficializado. Solo el organizador o SuperAdmin puede modificarlo.", "info");
+            return;
+        }
+
         setSelectedMatchForScore(m);
         setSelectedWinnerId(m.winner_id || m.player1_id || '');
         setHasSet3(false);
@@ -142,8 +180,25 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 scoreObj.set3 = `${scoreP1Set3}-${scoreP2Set3}`;
             }
 
-            await api.matches.updateScore(selectedMatchForScore.id, scoreObj, selectedWinnerId);
-            addToast("Resultado registrado correctamente.", 'success');
+            const isDoubles = tournament?.type === 'doubles';
+            const winnerPartnerId = selectedWinnerId === selectedMatchForScore.player1_id 
+                ? selectedMatchForScore.player1_partner_id 
+                : selectedMatchForScore.player2_partner_id;
+
+            const res = await api.matches.updateScore(
+                selectedMatchForScore.id, 
+                scoreObj, 
+                selectedWinnerId,
+                user,
+                isDoubles,
+                winnerPartnerId
+            );
+
+            if (res.scoreStatus === 'confirmed') {
+                addToast("Marcador oficializado y confirmado exitosamente.", 'success');
+            } else {
+                addToast("Resultado cargado. Tu rival tiene 24 horas para confirmarlo o reportar discrepancia.", 'info');
+            }
             setSelectedMatchForScore(null);
             loadTournament();
         } catch (e: any) {
@@ -153,9 +208,38 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
+    const handleConfirmScore = async (matchId: string) => {
+        try {
+            await api.matches.confirmScore(matchId, user);
+            addToast("¡Marcador confirmado exitosamente! Puntos acreditados al ranking.", "success");
+            loadTournament();
+        } catch (e: any) {
+            addToast("Error al confirmar resultado: " + e.message, "error");
+        }
+    };
+
+    const handleDisputeScore = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!disputeMatchId) return;
+        setSubmittingDispute(true);
+        try {
+            await api.matches.disputeScore(disputeMatchId, disputeReason, user);
+            addToast("Discrepancia registrada. El organizador del torneo revisará el marcador.", "warning");
+            setDisputeMatchId(null);
+            setDisputeReason('');
+            loadTournament();
+        } catch (e: any) {
+            addToast("Error al reportar discrepancia: " + e.message, "error");
+        } finally {
+            setSubmittingDispute(false);
+        }
+    };
+
     const openManualEnrollModal = async () => {
         setShowManualEnrollModal(true);
         setSelectedUserForEnroll(null);
+        setPartnerUserForEnroll(null);
+        setGuestPartnerName('');
         setSearchUserQuery('');
         setGuestName('');
         setGuestCategory(tournament?.category || '4ta');
@@ -183,6 +267,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         let pName = '';
         let pId: string | undefined = undefined;
         let pCat = '';
+        let partnerId: string | undefined = undefined;
+        let partnerName: string | undefined = undefined;
 
         if (enrollMode === 'member') {
             if (!selectedUserForEnroll) {
@@ -199,6 +285,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 addToast("Este socio ya se encuentra inscripto en el torneo.", 'error');
                 return;
             }
+
+            if (tournament.type === 'doubles') {
+                if (partnerUserForEnroll) {
+                    partnerId = partnerUserForEnroll.id;
+                    partnerName = `${partnerUserForEnroll.name} ${partnerUserForEnroll.lastname || ''}`.trim();
+                } else if (guestPartnerName.trim()) {
+                    partnerName = guestPartnerName.trim();
+                }
+            }
         } else {
             if (!guestName.trim()) {
                 addToast("Por favor ingresa el nombre del jugador invitado.", 'error');
@@ -206,6 +301,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             }
             pName = guestName.trim();
             pCat = guestCategory || tournament.category || 'Open';
+
+            if (tournament.type === 'doubles' && guestPartnerName.trim()) {
+                partnerName = guestPartnerName.trim();
+            }
         }
 
         setSubmittingEnroll(true);
@@ -215,10 +314,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 playerName: pName,
                 category: pCat,
                 fee: manualFee,
-                paymentStatus: manualPaymentStatus
+                paymentStatus: manualPaymentStatus,
+                partnerId,
+                partnerName
             });
 
-            addToast(`¡${pName} fue inscripto correctamente!`, 'success');
+            addToast(`¡${pName} ${partnerName ? `y ${partnerName}` : ''} fueron inscriptos correctamente!`, 'success');
             setShowManualEnrollModal(false);
             loadTournament();
         } catch (e: any) {
@@ -1014,41 +1115,97 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     </div>
                                                     <div className="grid grid-cols-1 gap-2">
                                                         {zone.matches.map(m => {
-                                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id;
-                                                            const canEditScore = isClubAdmin || isUserInMatch;
+                                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
+                                                            const canEditScore = isClubAdmin || (isUserInMatch && m.score_status !== 'confirmed');
                                                             const formattedScore = formatMatchScore(m.score);
+                                                            const isDoubles = tournament.type === 'doubles';
+                                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
+                                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                                            const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
+
                                                             return (
-                                                                <div key={m.id} className="bg-slate-950/60 p-2.5 rounded-xl border border-white/5 flex items-center justify-between gap-3 text-xs">
-                                                                    <div className="flex-1 min-w-0 space-y-1">
-                                                                        <div className={`flex justify-between items-center ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-                                                                            <span className="truncate">{formatPlayerName(m.player1_name) || 'A definir'}</span>
-                                                                            {m.winner_id === m.player1_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
+                                                                <div key={m.id} className="bg-slate-950/60 p-3 rounded-xl border border-white/5 flex flex-col gap-2 text-xs">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <div className="flex-1 min-w-0 space-y-1">
+                                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+                                                                                <span className="truncate">{p1DisplayName}</span>
+                                                                                {m.winner_id === m.player1_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
+                                                                            </div>
+                                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+                                                                                <span className="truncate">{p2DisplayName}</span>
+                                                                                {m.winner_id === m.player2_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
+                                                                            </div>
                                                                         </div>
-                                                                        <div className={`flex justify-between items-center ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
-                                                                            <span className="truncate">{formatPlayerName(m.player2_name) || 'A definir'}</span>
-                                                                            {m.winner_id === m.player2_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
+                                                                        <div className="flex items-center gap-2 shrink-0">
+                                                                            {/* H2H Button */}
+                                                                            {m.player1_id && m.player2_id && (
+                                                                                <button
+                                                                                    onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
+                                                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[10px] font-bold flex items-center gap-1"
+                                                                                    title="Ver Historial Cara a Cara"
+                                                                                >
+                                                                                    <Swords size={12} /> H2H
+                                                                                </button>
+                                                                            )}
+
+                                                                            {formattedScore ? (
+                                                                                <div className="flex flex-col items-end gap-1">
+                                                                                    <span className="px-2 py-1 bg-black/40 border border-white/10 rounded-lg font-mono font-bold text-primary text-xs">
+                                                                                        {formattedScore}
+                                                                                    </span>
+                                                                                    {m.score_status === 'pending_confirmation' && (
+                                                                                        <span className="text-[9px] text-amber-400 font-bold flex items-center gap-0.5">
+                                                                                            <Clock size={10} /> Pendiente 24h
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {m.score_status === 'disputed' && (
+                                                                                        <span className="text-[9px] text-red-400 font-bold flex items-center gap-0.5">
+                                                                                            <AlertTriangle size={10} /> En Disputa
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {m.score_status === 'confirmed' && (
+                                                                                        <span className="text-[9px] text-green-400 font-bold flex items-center gap-0.5">
+                                                                                            <CheckCircle2 size={10} /> Verificado
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                            ) : (
+                                                                                <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded text-[10px] font-semibold">
+                                                                                    Por Jugar
+                                                                                </span>
+                                                                            )}
+                                                                            {canEditScore && (
+                                                                                <button
+                                                                                    onClick={() => openScoreModal(m)}
+                                                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors"
+                                                                                    title="Cargar o editar resultado"
+                                                                                >
+                                                                                    <Edit3 size={13} />
+                                                                                </button>
+                                                                            )}
                                                                         </div>
                                                                     </div>
-                                                                    <div className="flex items-center gap-2 shrink-0">
-                                                                        {formattedScore ? (
-                                                                            <span className="px-2 py-1 bg-black/40 border border-white/10 rounded-lg font-mono font-bold text-primary text-xs">
-                                                                                {formattedScore}
-                                                                            </span>
-                                                                        ) : (
-                                                                            <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded text-[10px] font-semibold">
-                                                                                Por Jugar
-                                                                            </span>
-                                                                        )}
-                                                                        {canEditScore && (
-                                                                            <button
-                                                                                onClick={() => openScoreModal(m)}
-                                                                                className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors"
-                                                                                title="Cargar resultado"
-                                                                            >
-                                                                                <Edit3 size={13} />
-                                                                            </button>
-                                                                        )}
-                                                                    </div>
+
+                                                                    {/* Rival Score Confirmation Banner */}
+                                                                    {isOpponentPending && (
+                                                                        <div className="mt-1 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-2">
+                                                                            <span className="text-[11px] text-amber-300 font-medium">¿Confirmas este marcador cargado por tu rival?</span>
+                                                                            <div className="flex items-center gap-1.5">
+                                                                                <button
+                                                                                    onClick={() => handleConfirmScore(m.id)}
+                                                                                    className="px-2.5 py-1 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold rounded-md flex items-center gap-1 transition-all"
+                                                                                >
+                                                                                    <Check size={12} /> Confirmar
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => setDisputeMatchId(m.id)}
+                                                                                    className="px-2.5 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-[10px] font-bold rounded-md flex items-center gap-1 transition-all"
+                                                                                >
+                                                                                    <AlertTriangle size={12} /> Disputar
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             );
                                                         })}
@@ -1193,15 +1350,18 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                                                     <div className="space-y-4 flex flex-col justify-around flex-1">
                                                         {round.matches.map((m) => {
-                                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id;
-                                                            const canEditScore = isClubAdmin || isUserInMatch;
+                                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
+                                                            const canEditScore = isClubAdmin || (isUserInMatch && m.score_status !== 'confirmed');
                                                             const formattedScore = formatMatchScore(m.score);
                                                             const isFinished = !!m.winner_id || (m.score && m.scheduling_status === 'finished');
+                                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
+                                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                                            const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
 
                                                             return (
                                                                 <div 
                                                                     key={m.id} 
-                                                                    className={`relative bg-slate-900/90 border rounded-2xl p-3.5 shadow-lg transition-all ${
+                                                                    className={`relative bg-slate-900/90 border rounded-2xl p-3.5 shadow-lg transition-all space-y-2.5 ${
                                                                         isFinished ? 'border-primary/40' : 'border-white/10 hover:border-white/20'
                                                                     }`}
                                                                 >
@@ -1210,7 +1370,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         <div className={`flex items-center justify-between p-2 rounded-xl text-xs ${
                                                                             m.winner_id === m.player1_id ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' : 'bg-white/5 text-white'
                                                                         }`}>
-                                                                            <span className="truncate font-semibold">{formatPlayerName(m.player1_name) || 'A definir'}</span>
+                                                                            <span className="truncate font-semibold">{p1DisplayName}</span>
                                                                             {m.winner_id === m.player1_id && <Check size={14} className="text-green-400 shrink-0" />}
                                                                         </div>
 
@@ -1218,22 +1378,33 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         <div className={`flex items-center justify-between p-2 rounded-xl text-xs ${
                                                                             m.winner_id === m.player2_id ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' : 'bg-white/5 text-white'
                                                                         }`}>
-                                                                            <span className="truncate font-semibold">{formatPlayerName(m.player2_name) || 'A definir'}</span>
+                                                                            <span className="truncate font-semibold">{p2DisplayName}</span>
                                                                             {m.winner_id === m.player2_id && <Check size={14} className="text-green-400 shrink-0" />}
                                                                         </div>
                                                                     </div>
 
                                                                     {/* Score & Edit Bar */}
                                                                     <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between">
-                                                                        {formattedScore ? (
-                                                                            <span className="font-mono font-bold text-primary text-xs bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
-                                                                                {formattedScore}
-                                                                            </span>
-                                                                        ) : (
-                                                                            <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
-                                                                                Por Jugar
-                                                                            </span>
-                                                                        )}
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            {m.player1_id && m.player2_id && (
+                                                                                <button
+                                                                                    onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
+                                                                                    className="p-1 rounded bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[10px] font-bold flex items-center gap-0.5"
+                                                                                    title="Ver H2H"
+                                                                                >
+                                                                                    <Swords size={11} /> H2H
+                                                                                </button>
+                                                                            )}
+                                                                            {formattedScore ? (
+                                                                                <span className="font-mono font-bold text-primary text-xs bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
+                                                                                    {formattedScore}
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
+                                                                                    Por Jugar
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
 
                                                                         {canEditScore && (
                                                                             <button
@@ -1245,6 +1416,27 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             </button>
                                                                         )}
                                                                     </div>
+
+                                                                    {/* Rival Score Confirmation Banner */}
+                                                                    {isOpponentPending && (
+                                                                        <div className="mt-1 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-2">
+                                                                            <span className="text-[10px] text-amber-300 font-medium">¿Confirmas resultado?</span>
+                                                                            <div className="flex items-center gap-1">
+                                                                                <button
+                                                                                    onClick={() => handleConfirmScore(m.id)}
+                                                                                    className="px-2 py-0.5 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold rounded"
+                                                                                >
+                                                                                    ✓ Sí
+                                                                                </button>
+                                                                                <button
+                                                                                    onClick={() => setDisputeMatchId(m.id)}
+                                                                                    className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-[10px] font-bold rounded"
+                                                                                >
+                                                                                    Disputar
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             );
                                                         })}
@@ -1268,9 +1460,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 ) : (
                                     <div className="grid grid-cols-1 gap-3">
                                         {displayedMatches.map(m => {
-                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id;
-                                            const canEditScore = isClubAdmin || isUserInMatch;
+                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
+                                            const canEditScore = isClubAdmin || (isUserInMatch && m.score_status !== 'confirmed');
                                             const formattedScore = formatMatchScore(m.score);
+                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
+                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                            const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
 
                                             return (
                                                 <div key={m.id} className="bg-slate-900/60 hover:bg-slate-900 p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all">
@@ -1284,21 +1479,46 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                     Tu Partido
                                                                 </span>
                                                             )}
+                                                            {m.score_status === 'pending_confirmation' && (
+                                                                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
+                                                                    <Clock size={10} /> Pendiente 24h
+                                                                </span>
+                                                            )}
+                                                            {m.score_status === 'disputed' && (
+                                                                <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
+                                                                    <AlertTriangle size={10} /> En Disputa
+                                                                </span>
+                                                            )}
+                                                            {m.score_status === 'confirmed' && (
+                                                                <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
+                                                                    <CheckCircle2 size={10} /> Verificado
+                                                                </span>
+                                                            )}
                                                         </div>
 
                                                         <div className="space-y-1 pt-1">
                                                             <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                                <span>{formatPlayerName(m.player1_name) || 'A definir'}</span>
+                                                                <span>{p1DisplayName}</span>
                                                                 {m.winner_id === m.player1_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
                                                             </div>
                                                             <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                                <span>{formatPlayerName(m.player2_name) || 'A definir'}</span>
+                                                                <span>{p2DisplayName}</span>
                                                                 {m.winner_id === m.player2_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
                                                             </div>
                                                         </div>
                                                     </div>
 
                                                     <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
+                                                        {m.player1_id && m.player2_id && (
+                                                            <button
+                                                                onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
+                                                                className="px-2 py-1.5 rounded-xl bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-all border border-white/10 text-xs font-bold flex items-center gap-1"
+                                                                title="Ver Historial Cara a Cara"
+                                                            >
+                                                                <Swords size={14} /> H2H
+                                                            </button>
+                                                        )}
+
                                                         {formattedScore ? (
                                                             <div className="bg-black/40 border border-white/10 px-3 py-1.5 rounded-xl text-center">
                                                                 <div className="text-[10px] text-muted uppercase font-bold">Resultado</div>
@@ -1318,6 +1538,25 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             >
                                                                 <Edit3 size={16} />
                                                             </button>
+                                                        )}
+
+                                                        {isOpponentPending && (
+                                                            <div className="flex items-center gap-1">
+                                                                <button
+                                                                    onClick={() => handleConfirmScore(m.id)}
+                                                                    className="px-2.5 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-md"
+                                                                    title="Confirmar marcador"
+                                                                >
+                                                                    <Check size={13} /> Confirmar
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => setDisputeMatchId(m.id)}
+                                                                    className="px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-bold rounded-xl flex items-center gap-1"
+                                                                    title="Disputar marcador"
+                                                                >
+                                                                    <AlertTriangle size={13} /> Disputar
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>
@@ -1551,6 +1790,21 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         />
                                     </div>
 
+                                    {/* Doubles Partner for Guests */}
+                                    {tournament?.type === 'doubles' && (
+                                        <div>
+                                            <label className="text-xs text-primary font-bold uppercase block mb-1.5">🎾 Nombre de la Pareja de Dobles *</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                placeholder="Ej: Juan Pérez"
+                                                value={guestPartnerName}
+                                                onChange={e => setGuestPartnerName(e.target.value)}
+                                                className="w-full bg-sidebar border border-primary/40 rounded-xl p-3 text-xs text-white focus:border-primary outline-none"
+                                            />
+                                        </div>
+                                    )}
+
                                     <div>
                                         <label className="text-xs text-muted font-bold uppercase block mb-1.5">Categoría *</label>
                                         <select
@@ -1632,7 +1886,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             <div className="text-center pb-2 border-b border-white/10">
                                 <span className="text-xs text-muted font-bold uppercase">{selectedMatchForScore.round}</span>
                                 <div className="text-white font-bold text-sm mt-1">
-                                    {selectedMatchForScore.player1_name} vs {selectedMatchForScore.player2_name}
+                                    {selectedMatchForScore.team1_name || selectedMatchForScore.player1_name} vs {selectedMatchForScore.team2_name || selectedMatchForScore.player2_name}
+                                </div>
+                                <div className="text-[11px] text-slate-400 mt-1">
+                                    {isClubAdmin ? (
+                                        <span className="text-green-400 font-bold">✓ Oficialización directa como Administrador</span>
+                                    ) : (
+                                        <span className="text-amber-300">⏳ Tu rival tendrá 24hs para confirmar o se autoconfirmará</span>
+                                    )}
                                 </div>
                             </div>
 
@@ -1721,8 +1982,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     onChange={e => setSelectedWinnerId(e.target.value)}
                                     required
                                 >
-                                    <option value={selectedMatchForScore.player1_id}>{selectedMatchForScore.player1_name}</option>
-                                    <option value={selectedMatchForScore.player2_id}>{selectedMatchForScore.player2_name}</option>
+                                    <option value={selectedMatchForScore.player1_id}>{selectedMatchForScore.team1_name || selectedMatchForScore.player1_name}</option>
+                                    <option value={selectedMatchForScore.player2_id}>{selectedMatchForScore.team2_name || selectedMatchForScore.player2_name}</option>
                                 </select>
                             </div>
 
@@ -1745,6 +2006,50 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* DISPUTE MODAL */}
+            {disputeMatchId && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                            <h3 className="font-bold text-white text-base flex items-center gap-2">
+                                <AlertTriangle className="text-red-400" size={18} /> Reportar Discrepancia de Marcador
+                            </h3>
+                            <button onClick={() => setDisputeMatchId(null)} className="text-muted hover:text-white"><X size={18} /></button>
+                        </div>
+                        <form onSubmit={handleDisputeScore} className="space-y-3">
+                            <p className="text-xs text-slate-300">
+                                Indica cuál fue el resultado real o el motivo del desacuerdo. El organizador del torneo o SuperAdmin será notificado para arbitrar.
+                            </p>
+                            <textarea
+                                rows={3}
+                                required
+                                placeholder="Ej: El segundo set terminó 6-4 a mi favor, no 4-6..."
+                                className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-red-500"
+                                value={disputeReason}
+                                onChange={e => setDisputeReason(e.target.value)}
+                            />
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={() => setDisputeMatchId(null)} className="px-4 py-2 bg-white/10 text-white rounded-xl text-xs font-bold">
+                                    Cancelar
+                                </button>
+                                <button type="submit" disabled={submittingDispute} className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
+                                    {submittingDispute ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />} Enviar Disputa
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* HEAD TO HEAD (H2H) MODAL */}
+            {h2hPlayers && (
+                <HeadToHeadModal
+                    player1Id={h2hPlayers.p1Id}
+                    player2Id={h2hPlayers.p2Id}
+                    onClose={() => setH2hPlayers(null)}
+                />
             )}
 
             {/* GENERATE FIXTURE MODAL */}

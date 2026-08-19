@@ -109,10 +109,51 @@ export function getCategoriesForInstitution(institution?: Partial<Institution> |
 }
 
 /**
- * Todas las categorías posibles para selectores globales / superadmin
+ * Evalúa si un jugador puede anotarse en una competencia/cuadro según su categoría y las categorías permitidas del cuadro.
+ * Regla:
+ * - Un jugador puede anotarse en su misma categoría o en categorías de MAYOR nivel (rango <= techo del cuadro).
+ * - Un jugador NO puede anotarse en categorías de MENOR nivel (su rango numérico es menor que el mejor rango del cuadro).
+ * Nota: rank 1 = 1ra (máximo nivel), rank 7 = 7ma (mínimo nivel).
  */
-export const ALL_CATEGORIES = [
-    '1ra', '2da', '3ra', '4ta', '5ta', '6ta', '7ma',
-    'A1', 'A2', 'B1', 'B2', 'C1', 'C2', 'D1', 'D2',
-    'Open'
-];
+export function isUserEligibleForCategories(userCategory: string | undefined | null, allowedCategories: string[]): {
+    canEnroll: boolean;
+    isChallenger: boolean;
+    reason?: string;
+} {
+    if (!userCategory) {
+        return { canEnroll: true, isChallenger: false };
+    }
+
+    if (!allowedCategories || allowedCategories.length === 0) {
+        return { canEnroll: true, isChallenger: false };
+    }
+
+    const userRank = getCategoryRank(userCategory);
+
+    // Si el cuadro incluye 'Open' (rank 99), todos pueden participar
+    if (allowedCategories.some(c => c.toLowerCase() === 'open')) {
+        return { canEnroll: true, isChallenger: false };
+    }
+
+    const ranks = allowedCategories.map(getCategoryRank);
+    const highestRankInGroup = Math.min(...ranks); // Techo del cuadro (ej. 5ta = rank 5 en un grupo 5ta+6ta)
+    const lowestRankInGroup = Math.max(...ranks);  // Piso del cuadro (ej. 6ta = rank 6)
+
+    // Si el nivel del jugador es numéricamente menor al techo, significa que tiene MAYOR habilidad (ej: 4ta rank 4 vs techo rank 5) -> PROHIBIDO
+    if (userRank < highestRankInGroup) {
+        return {
+            canEnroll: false,
+            isChallenger: false,
+            reason: `Tu nivel (${userCategory}) supera la categoría máxima permitida para este cuadro.`
+        };
+    }
+
+    // Si el nivel del jugador es igual o inferior al piso (ej: 7ma rank 7 en cuadro 5ta+6ta), sube como Challenger
+    const isChallenger = userRank > lowestRankInGroup;
+
+    return {
+        canEnroll: true,
+        isChallenger
+    };
+}
+
