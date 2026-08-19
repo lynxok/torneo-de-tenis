@@ -6,7 +6,7 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
-    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift 
+    Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield 
 } from 'lucide-react';
 import { getCategoriesForInstitution } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
@@ -25,8 +25,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('all');
     const { addToast } = useToast();
 
-    // Superadmin Waive Fee State
+    // Superadmin Fee Waiver & Ranking State
     const [isTogglingWaive, setIsTogglingWaive] = useState(false);
+    const [isTogglingRanking, setIsTogglingRanking] = useState(false);
 
     // Swap / Edit Groups State
     const [isSwapMode, setIsSwapMode] = useState(false);
@@ -385,6 +386,44 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
+    const countsForRanking = Boolean(
+        (tournament.counts_for_ranking ?? 
+        (typeof tournament.rules === 'object' && tournament.rules !== null && tournament.rules.counts_for_ranking)) !== false
+    );
+
+    const handleToggleCountsForRanking = async () => {
+        if (user.role !== 'superadmin' || !tournament) return;
+        const nextVal = !countsForRanking;
+        setIsTogglingRanking(true);
+        try {
+            const currentRules = (typeof tournament.rules === 'object' && tournament.rules !== null) ? tournament.rules : {};
+            const updatedRules = { ...currentRules, counts_for_ranking: nextVal };
+            
+            try {
+                await api.tournaments.update(tournament.id, { 
+                    rules: updatedRules,
+                    counts_for_ranking: nextVal 
+                });
+            } catch (colErr) {
+                await api.tournaments.update(tournament.id, { 
+                    rules: updatedRules
+                });
+            }
+
+            setTournament({
+                ...tournament,
+                rules: updatedRules,
+                counts_for_ranking: nextVal
+            });
+            addToast(nextVal ? '🏆 Torneo oficial: Suma puntos para el ranking' : '🎾 Torneo configurado como Amistoso (No suma puntos)', 'success');
+        } catch (err) {
+            console.error(err);
+            addToast('Error al actualizar configuración de ranking', 'error');
+        } finally {
+            setIsTogglingRanking(false);
+        }
+    };
+
     const tierInfo = getTournamentTier(players.length);
     const finances = calculateTournamentFinances(players.length, effectivePrice, undefined, isCommissionWaived);
 
@@ -408,9 +447,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                                 <span className="bg-primary text-dark font-bold px-2.5 py-1 rounded-lg text-xs uppercase shadow-sm">{tournament.category}</span>
                                 <span className="bg-white/10 text-white font-bold px-2.5 py-1 rounded-lg text-xs uppercase backdrop-blur-sm border border-white/10">{tournament.type}</span>
-                                <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider border shadow-sm flex items-center gap-1.5 ${tierInfo.badgeColor} ${tierInfo.textColor} ${tierInfo.borderColor}`}>
-                                    <Trophy size={12} /> {tierInfo.label} • {tierInfo.pointsWinner} pts
-                                </span>
+                                {countsForRanking ? (
+                                    <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider border shadow-sm flex items-center gap-1.5 ${tierInfo.badgeColor} ${tierInfo.textColor} ${tierInfo.borderColor}`}>
+                                        <Trophy size={12} /> {tierInfo.label} • {tierInfo.pointsWinner} pts
+                                    </span>
+                                ) : (
+                                    <span className="px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider bg-slate-800 text-slate-400 border border-white/10 shadow-sm flex items-center gap-1.5" title="Este torneo no suma puntos para el ranking global oficial">
+                                        🎾 Amistoso • Sin Puntos
+                                    </span>
+                                )}
                                 {isUserMember && (
                                     <span className="bg-green-500/20 text-green-300 border border-green-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1">
                                         <Award size={12} /> Socio del Club
@@ -557,35 +602,70 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     </div>
                                 </div>
                             )}
-                            {/* SUPERADMIN COMMISSION WAIVER SWITCH */}
+                            {/* SUPERADMIN EXCLUSIVE CONTROLS */}
                             {user.role === 'superadmin' && (
-                                <div className="mt-4 p-3.5 bg-gradient-to-r from-purple-950/40 via-purple-900/30 to-purple-950/40 border border-purple-500/30 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-inner">
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-xl bg-purple-500/20 text-purple-300">
-                                            <Gift size={18} />
+                                <div className="mt-4 p-4 bg-gradient-to-r from-purple-950/40 via-purple-900/30 to-purple-950/40 border border-purple-500/30 rounded-2xl space-y-3 shadow-inner">
+                                    <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                                        <div className="flex items-center gap-2">
+                                            <Shield size={16} className="text-purple-400" />
+                                            <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                                                Controles Exclusivos de Superadmin
+                                            </h4>
                                         </div>
-                                        <div>
-                                            <div className="text-xs font-bold text-white flex items-center gap-2">
-                                                <span>Bonificar Torneo (0% Comisión Plataforma)</span>
-                                                <span className="text-[10px] bg-purple-500/30 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded-full font-bold">Solo Superadmin</span>
+                                        <span className="text-[10px] bg-purple-500/30 text-purple-300 border border-purple-500/40 px-2 py-0.5 rounded-full font-bold">Solo Superadmin</span>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        {/* Switch 1: Bonificación */}
+                                        <div className="p-3 bg-slate-900/60 border border-purple-500/20 rounded-xl flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className="p-1.5 rounded-lg bg-purple-500/20 text-purple-300 shrink-0">
+                                                    <Gift size={16} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-bold text-white truncate">Bonificar Torneo (0% Comisión)</div>
+                                                    <div className="text-[10px] text-purple-200/70 truncate">
+                                                        {isCommissionWaived ? '100% bonificado sin comisión.' : 'Comisión estándar activa.'}
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <div className="text-[11px] text-purple-200/70">
-                                                {isCommissionWaived 
-                                                    ? 'Torneo 100% bonificado: el club no abona comisión a la app Smash.' 
-                                                    : 'Comisión estándar activa según el nivel de convocatoria del torneo.'}
+                                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only peer"
+                                                    checked={isCommissionWaived}
+                                                    disabled={isTogglingWaive}
+                                                    onChange={handleToggleCommissionWaived}
+                                                />
+                                                <div className="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-purple-500"></div>
+                                            </label>
+                                        </div>
+
+                                        {/* Switch 2: Suma Puntos al Ranking */}
+                                        <div className="p-3 bg-slate-900/60 border border-blue-500/20 rounded-xl flex items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2.5 min-w-0">
+                                                <div className="p-1.5 rounded-lg bg-blue-500/20 text-blue-300 shrink-0">
+                                                    <Trophy size={16} />
+                                                </div>
+                                                <div className="min-w-0">
+                                                    <div className="text-xs font-bold text-white truncate">Suma Puntos al Ranking</div>
+                                                    <div className="text-[10px] text-blue-200/70 truncate">
+                                                        {countsForRanking ? 'Torneo oficial puntuable.' : 'Torneo amistoso (sin puntos).'}
+                                                    </div>
+                                                </div>
                                             </div>
+                                            <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    className="sr-only peer"
+                                                    checked={countsForRanking}
+                                                    disabled={isTogglingRanking}
+                                                    onChange={handleToggleCountsForRanking}
+                                                />
+                                                <div className="w-10 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-500"></div>
+                                            </label>
                                         </div>
                                     </div>
-                                    <label className="relative inline-flex items-center cursor-pointer shrink-0">
-                                        <input
-                                            type="checkbox"
-                                            className="sr-only peer"
-                                            checked={isCommissionWaived}
-                                            disabled={isTogglingWaive}
-                                            onChange={handleToggleCommissionWaived}
-                                        />
-                                        <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-500"></div>
-                                    </label>
                                 </div>
                             )}
 

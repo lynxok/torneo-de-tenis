@@ -177,8 +177,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                     >
                                         <MessageCircle size={14} />
                                     </button>
-                                    {Boolean(t.is_commission_waived || (typeof t.rules === 'object' && t.rules !== null && t.rules.is_commission_waived)) && (
-                                        <div className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                    {Boolean(t.is_commission_waived || (typeof t.rules === 'object' && t.rules !== null && t.rules.is_commission_waived)) && (user.role === 'superadmin' || (user.role === 'admin' && user.institution_id === t.institution_id)) && (
+                                        <div 
+                                            className="px-2 py-1 rounded text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 cursor-help transition-transform hover:scale-105"
+                                            title="El torneo ha sido bonificado por Smash Tenis"
+                                        >
                                             Bonificado
                                         </div>
                                     )}
@@ -194,13 +197,20 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
 
                             <div className="space-y-2 text-sm border-t border-white/5 pt-3">
                                 {(() => {
+                                    const countsForRanking = t.counts_for_ranking !== false && (!t.rules || t.rules.counts_for_ranking !== false);
                                     const tier = getTournamentTier(t.players?.length || 12);
                                     return (
                                         <div className="flex justify-between items-center pb-1">
                                             <span className="text-muted text-xs">Circuito</span>
-                                            <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${tier.badgeColor} ${tier.textColor} ${tier.borderColor}`}>
-                                                {tier.label} • {tier.pointsWinner} pts
-                                            </span>
+                                            {countsForRanking ? (
+                                                <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${tier.badgeColor} ${tier.textColor} ${tier.borderColor}`}>
+                                                    {tier.label} • {tier.pointsWinner} pts
+                                                </span>
+                                            ) : (
+                                                <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-800 text-slate-400 border border-white/10" title="Este torneo no suma puntos para el ranking global oficial">
+                                                    🎾 Amistoso • Sin Puntos
+                                                </span>
+                                            )}
                                         </div>
                                     );
                                 })()}

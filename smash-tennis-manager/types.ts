@@ -203,6 +203,9 @@ export interface Tournament {
   // Superadmin Fee Waiver
   is_commission_waived?: boolean;
 
+  // Superadmin Ranking Control
+  counts_for_ranking?: boolean;
+
   // ATP Point Defense Logic
   previous_edition_id?: string; // ID of the tournament from last year
 }
