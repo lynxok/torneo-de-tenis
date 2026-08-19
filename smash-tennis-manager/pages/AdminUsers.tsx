@@ -325,6 +325,9 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     // Filter & Ranking Logic:
     const scopedUsers = useMemo(() => {
         return users.filter(u => {
+            if (u.role === 'inactive' || u.member_status === 'deleted' || u.name?.includes('[Usuario Eliminado]') || u.name?.includes('[Eliminado]')) {
+                return false;
+            }
             if (!isSuperAdmin && user?.institution_id) {
                 return u.institution_id === user.institution_id;
             }

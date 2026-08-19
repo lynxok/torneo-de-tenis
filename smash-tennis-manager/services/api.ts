@@ -195,11 +195,13 @@ export const api = {
                 // Ignore
             }
 
-            return (data || []).map((p: any) => ({
-                ...p,
-                gender: p.gender || 'masculino',
-                institution: p.institutions?.name || null
-            })) as UserProfile[];
+            return (data || [])
+                .filter((p: any) => p.role !== 'inactive' && p.member_status !== 'deleted' && !p.name?.includes('[Usuario Eliminado]') && !p.name?.includes('[Eliminado]'))
+                .map((p: any) => ({
+                    ...p,
+                    gender: p.gender || 'masculino',
+                    institution: p.institutions?.name || null
+                })) as UserProfile[];
         },
 
         async updateProfile(id: string, updates: Partial<UserProfile>) {
@@ -347,25 +349,52 @@ export const api = {
             }
         },
         async deleteUser(userId: string) {
-            // Delete from profiles
-            const { error: profileError } = await supabase
+            // 1. Try RPC first (full hard-delete of auth.users and public.profiles if migration is applied)
+            try {
+                const { data: rpcData, error: rpcError } = await supabase.rpc('admin_delete_user', { target_user_id: userId });
+                if (!rpcError && rpcData) {
+                    return { success: true, method: 'rpc' };
+                }
+            } catch (e) {
+                // RPC not present in Supabase yet, continue with fallback
+            }
+
+            // 2. Try direct DELETE from public.profiles
+            try {
+                const { data: delData, error: profileError } = await supabase
+                    .from('profiles')
+                    .delete({ count: 'exact' })
+                    .eq('id', userId)
+                    .select();
+
+                if (!profileError && delData && delData.length > 0) {
+                    return { success: true, method: 'direct_delete' };
+                }
+            } catch (e) {
+                // Continue with decommissioning
+            }
+
+            // 3. Robust Fallback: Decommission / Inactive profile in database
+            // This immediately hides and disables the user across all app lists (AdminUsers, Directory, Rankings)
+            const { error: updateError } = await supabase
                 .from('profiles')
-                .delete()
+                .update({
+                    name: '[Usuario Eliminado]',
+                    lastname: '',
+                    is_approved: false,
+                    role: 'inactive' as any,
+                    member_status: 'deleted' as any,
+                    category: null,
+                    institution_id: null
+                })
                 .eq('id', userId);
 
-            if (profileError) {
-                console.error("Error deleting from profiles:", profileError);
-                throw profileError;
+            if (updateError) {
+                console.error("Error updating profile status:", updateError);
+                throw updateError;
             }
 
-            // Also attempt cleanup in auth if RPC is available
-            try {
-                await supabase.rpc('admin_delete_user', { target_user_id: userId });
-            } catch (e) {
-                // Non-blocking if RPC does not exist
-            }
-
-            return { success: true };
+            return { success: true, method: 'decommissioned' };
         },
         async signIn(email: string, password: string) {
             return await supabase.auth.signInWithPassword({ email, password });
