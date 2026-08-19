@@ -350,8 +350,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const playoffMatches = matches.filter(m => m.round !== 'Fase de Grupos' && !m.group_number);
     const displayedMatches = activeTab === 'groups' ? groupMatches : activeTab === 'playoffs' ? playoffMatches : matches;
 
-    const zones = React.useMemo(() => calculateGroupStandings(groupMatches, players), [groupMatches, players]);
-    const playoffRounds = React.useMemo(() => organizePlayoffRounds(playoffMatches), [playoffMatches]);
+    const zones = calculateGroupStandings(groupMatches, players);
+    const playoffRounds = organizePlayoffRounds(playoffMatches);
 
     const finalMatch = playoffMatches.find(m => m.round === 'Final');
     const championName = finalMatch?.winner_id ? (
