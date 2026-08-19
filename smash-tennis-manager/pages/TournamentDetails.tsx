@@ -11,7 +11,7 @@ import {
 import { getCategoriesForInstitution } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 import { formatPlayerName } from '../utils/formatters';
-import { calculateGroupStandings, organizePlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound } from '../utils/bracketHelper';
+import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -352,6 +352,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const zones = calculateGroupStandings(groupMatches, players);
     const playoffRounds = organizePlayoffRounds(playoffMatches);
+    const projectedPlayoffRounds = getProjectedPlayoffRounds(zones);
 
     const finalMatch = playoffMatches.find(m => m.round === 'Final');
     const championName = finalMatch?.winner_id ? (
@@ -1076,25 +1077,109 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 )}
 
                                 {playoffMatches.length === 0 ? (
-                                    <div className="text-center py-14 text-muted bg-white/5 rounded-3xl border border-dashed border-white/10 space-y-3">
-                                        <Trophy size={40} className="mx-auto text-amber-500 opacity-60" />
-                                        <div className="space-y-1">
-                                            <h4 className="text-base font-bold text-white">Cuadro de Llaves Pendiente</h4>
-                                            <p className="text-xs text-muted max-w-md mx-auto">
-                                                Las llaves de eliminación directa se armarán una vez finalizada la fase de zonas con los clasificados de cada grupo.
-                                            </p>
+                                    projectedPlayoffRounds.length > 0 ? (
+                                        <div className="space-y-6">
+                                            {/* Projected Notice Banner */}
+                                            <div className="p-4 bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-transparent border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                                <div className="flex items-start gap-3">
+                                                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
+                                                        <Sparkles size={18} />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                                            Previsualización de Cruces Proyectados
+                                                            <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
+                                                                En Vivo
+                                                            </span>
+                                                        </h4>
+                                                        <p className="text-xs text-amber-200/80 mt-0.5 leading-relaxed">
+                                                            Las llaves se proyectan y actualizan automáticamente según las posiciones de la fase de zonas. Una vez concluidos los grupos, el organizador oficializará los partidos finales.
+                                                        </p>
+                                                    </div>
+                                                </div>
+
+                                                {isClubAdmin && groupMatches.length > 0 && (
+                                                    <button
+                                                        onClick={handleGeneratePlayoffsFromZones}
+                                                        disabled={generatingPlayoffs}
+                                                        className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-dark font-black rounded-xl text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2 shrink-0"
+                                                    >
+                                                        <Trophy size={14} className={generatingPlayoffs ? "animate-spin" : ""} />
+                                                        🏆 Oficializar y Armar Llaves
+                                                    </button>
+                                                )}
+                                            </div>
+
+                                            {/* Projected Bracket Tree */}
+                                            <div className="overflow-x-auto pb-4 custom-scrollbar">
+                                                <div className="flex items-stretch gap-6 min-w-[650px] py-2">
+                                                    {projectedPlayoffRounds.map((round, rIdx) => (
+                                                        <div key={rIdx} className="flex-1 min-w-[220px] flex flex-col space-y-4">
+                                                            <div className="text-center pb-2 border-b border-white/10">
+                                                                <span className="text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">
+                                                                    {round.name}
+                                                                </span>
+                                                            </div>
+
+                                                            <div className="space-y-4 flex flex-col justify-around flex-1">
+                                                                {round.matches.map((m) => (
+                                                                    <div 
+                                                                        key={m.id} 
+                                                                        className="relative bg-slate-900/80 border border-dashed border-amber-500/30 hover:border-amber-500/50 rounded-2xl p-3.5 shadow-lg transition-all space-y-2.5"
+                                                                    >
+                                                                        <div className="flex items-center justify-between text-[10px] text-amber-300 font-bold uppercase tracking-wider">
+                                                                            <span>{m.round}</span>
+                                                                            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                                                                Proyectado
+                                                                            </span>
+                                                                        </div>
+
+                                                                        <div className="space-y-2">
+                                                                            {/* Contender 1 */}
+                                                                            <div className="bg-white/5 p-2 rounded-xl text-xs space-y-0.5 border border-white/5">
+                                                                                <div className="text-[10px] text-muted font-bold">{m.slotP1Label}</div>
+                                                                                <div className="font-bold text-white truncate">
+                                                                                    {m.p1Name ? formatPlayerName(m.p1Name) : <span className="text-slate-400 italic">Por definir</span>}
+                                                                                </div>
+                                                                            </div>
+
+                                                                            {/* Contender 2 */}
+                                                                            <div className="bg-white/5 p-2 rounded-xl text-xs space-y-0.5 border border-white/5">
+                                                                                <div className="text-[10px] text-muted font-bold">{m.slotP2Label}</div>
+                                                                                <div className="font-bold text-white truncate">
+                                                                                    {m.p2Name ? formatPlayerName(m.p2Name) : <span className="text-slate-400 italic">Por definir</span>}
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
                                         </div>
-                                        {isClubAdmin && groupMatches.length > 0 && (
-                                            <button
-                                                onClick={handleGeneratePlayoffsFromZones}
-                                                disabled={generatingPlayoffs}
-                                                className="mt-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-dark font-black rounded-xl text-xs shadow-lg hover:brightness-110 transition-all inline-flex items-center gap-2"
-                                            >
-                                                <Trophy size={14} className={generatingPlayoffs ? "animate-spin" : ""} />
-                                                🏆 Clasificar y Generar Llaves de Playoffs
-                                            </button>
-                                        )}
-                                    </div>
+                                    ) : (
+                                        <div className="text-center py-14 text-muted bg-white/5 rounded-3xl border border-dashed border-white/10 space-y-3">
+                                            <Trophy size={40} className="mx-auto text-amber-500 opacity-60" />
+                                            <div className="space-y-1">
+                                                <h4 className="text-base font-bold text-white">Cuadro de Llaves Pendiente</h4>
+                                                <p className="text-xs text-muted max-w-md mx-auto">
+                                                    Las llaves de eliminación directa se armarán una vez finalizada la fase de zonas con los clasificados de cada grupo.
+                                                </p>
+                                            </div>
+                                            {isClubAdmin && groupMatches.length > 0 && (
+                                                <button
+                                                    onClick={handleGeneratePlayoffsFromZones}
+                                                    disabled={generatingPlayoffs}
+                                                    className="mt-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-dark font-black rounded-xl text-xs shadow-lg hover:brightness-110 transition-all inline-flex items-center gap-2"
+                                                >
+                                                    <Trophy size={14} className={generatingPlayoffs ? "animate-spin" : ""} />
+                                                    🏆 Clasificar y Generar Llaves de Playoffs
+                                                </button>
+                                            )}
+                                        </div>
+                                    )
                                 ) : (
                                     <div className="overflow-x-auto pb-4 custom-scrollbar">
                                         <div className="flex items-stretch gap-6 min-w-[650px] py-2">

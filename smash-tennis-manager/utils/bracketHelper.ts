@@ -1,4 +1,4 @@
-﻿import { Match, TournamentPlayer } from '../types';
+import { Match, TournamentPlayer } from '../types';
 
 export interface GroupStandingRow {
     playerId: string;
@@ -245,6 +245,205 @@ export function organizePlayoffRounds(playoffMatches: Match[]): PlayoffRound[] {
         rounds.push({
             name: key,
             matches: list
+        });
+    }
+
+    return rounds;
+}
+
+export interface ProjectedMatch {
+    id: string;
+    round: string;
+    slotP1Label: string;
+    p1Name?: string;
+    p1Id?: string;
+    slotP2Label: string;
+    p2Name?: string;
+    p2Id?: string;
+}
+
+export interface ProjectedRound {
+    name: string;
+    matches: ProjectedMatch[];
+}
+
+export function getProjectedPlayoffRounds(zones: GroupZone[]): ProjectedRound[] {
+    if (!zones || zones.length < 2) return [];
+
+    const rounds: ProjectedRound[] = [];
+
+    if (zones.length === 4) {
+        // 4 Zones -> Cuartos de Final (4 matches), Semifinal (2 matches), Final (1 match)
+        const zA = zones[0];
+        const zB = zones[1];
+        const zC = zones[2];
+        const zD = zones[3];
+
+        const qfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-qf-1',
+                round: 'Cuartos de Final',
+                slotP1Label: `1° ${zA?.groupName || 'Grupo A'}`,
+                p1Name: zA?.players[0]?.playerName,
+                p1Id: zA?.players[0]?.playerId,
+                slotP2Label: `2° ${zB?.groupName || 'Grupo B'}`,
+                p2Name: zB?.players[1]?.playerName,
+                p2Id: zB?.players[1]?.playerId
+            },
+            {
+                id: 'proj-qf-2',
+                round: 'Cuartos de Final',
+                slotP1Label: `1° ${zC?.groupName || 'Grupo C'}`,
+                p1Name: zC?.players[0]?.playerName,
+                p1Id: zC?.players[0]?.playerId,
+                slotP2Label: `2° ${zD?.groupName || 'Grupo D'}`,
+                p2Name: zD?.players[1]?.playerName,
+                p2Id: zD?.players[1]?.playerId
+            },
+            {
+                id: 'proj-qf-3',
+                round: 'Cuartos de Final',
+                slotP1Label: `1° ${zB?.groupName || 'Grupo B'}`,
+                p1Name: zB?.players[0]?.playerName,
+                p1Id: zB?.players[0]?.playerId,
+                slotP2Label: `2° ${zA?.groupName || 'Grupo A'}`,
+                p2Name: zA?.players[1]?.playerName,
+                p2Id: zA?.players[1]?.playerId
+            },
+            {
+                id: 'proj-qf-4',
+                round: 'Cuartos de Final',
+                slotP1Label: `1° ${zD?.groupName || 'Grupo D'}`,
+                p1Name: zD?.players[0]?.playerName,
+                p1Id: zD?.players[0]?.playerId,
+                slotP2Label: `2° ${zC?.groupName || 'Grupo C'}`,
+                p2Name: zC?.players[1]?.playerName,
+                p2Id: zC?.players[1]?.playerId
+            }
+        ];
+
+        const sfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-sf-1',
+                round: 'Semifinal',
+                slotP1Label: 'Ganador Llave 1 (1°A vs 2°B)',
+                slotP2Label: 'Ganador Llave 2 (1°C vs 2°D)'
+            },
+            {
+                id: 'proj-sf-2',
+                round: 'Semifinal',
+                slotP1Label: 'Ganador Llave 3 (1°B vs 2°A)',
+                slotP2Label: 'Ganador Llave 4 (1°D vs 2°C)'
+            }
+        ];
+
+        const finalMatch: ProjectedMatch[] = [
+            {
+                id: 'proj-f-1',
+                round: 'Final',
+                slotP1Label: 'Ganador Semifinal 1',
+                slotP2Label: 'Ganador Semifinal 2'
+            }
+        ];
+
+        rounds.push(
+            { name: 'Cuartos de Final (Proyectado)', matches: qfMatches },
+            { name: 'Semifinales', matches: sfMatches },
+            { name: 'Gran Final', matches: finalMatch }
+        );
+    } else if (zones.length === 2) {
+        // 2 Zones -> Semifinales (2 matches), Final (1 match)
+        const zA = zones[0];
+        const zB = zones[1];
+
+        const sfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-sf-1',
+                round: 'Semifinal',
+                slotP1Label: `1° ${zA?.groupName || 'Grupo A'}`,
+                p1Name: zA?.players[0]?.playerName,
+                p1Id: zA?.players[0]?.playerId,
+                slotP2Label: `2° ${zB?.groupName || 'Grupo B'}`,
+                p2Name: zB?.players[1]?.playerName,
+                p2Id: zB?.players[1]?.playerId
+            },
+            {
+                id: 'proj-sf-2',
+                round: 'Semifinal',
+                slotP1Label: `1° ${zB?.groupName || 'Grupo B'}`,
+                p1Name: zB?.players[0]?.playerName,
+                p1Id: zB?.players[0]?.playerId,
+                slotP2Label: `2° ${zA?.groupName || 'Grupo A'}`,
+                p2Name: zA?.players[1]?.playerName,
+                p2Id: zA?.players[1]?.playerId
+            }
+        ];
+
+        const finalMatch: ProjectedMatch[] = [
+            {
+                id: 'proj-f-1',
+                round: 'Final',
+                slotP1Label: 'Ganador Semifinal 1',
+                slotP2Label: 'Ganador Semifinal 2'
+            }
+        ];
+
+        rounds.push(
+            { name: 'Semifinales (Proyectado)', matches: sfMatches },
+            { name: 'Gran Final', matches: finalMatch }
+        );
+    } else {
+        const qualifiers: { label: string; pName?: string; pId?: string }[] = [];
+        for (let i = 0; i < zones.length; i++) {
+            const z = zones[i];
+            qualifiers.push({
+                label: `1° ${z.groupName}`,
+                pName: z.players[0]?.playerName,
+                pId: z.players[0]?.playerId
+            });
+            if (z.players.length > 1) {
+                qualifiers.push({
+                    label: `2° ${z.groupName}`,
+                    pName: z.players[1]?.playerName,
+                    pId: z.players[1]?.playerId
+                });
+            }
+        }
+
+        const topQ = qualifiers.slice(0, 8);
+        const roundName = topQ.length > 4 ? 'Cuartos de Final (Proyectado)' : 'Semifinales (Proyectado)';
+        const matches: ProjectedMatch[] = [];
+
+        for (let i = 0; i < topQ.length; i += 2) {
+            if (i + 1 < topQ.length) {
+                matches.push({
+                    id: `proj-m-${i}`,
+                    round: roundName,
+                    slotP1Label: topQ[i].label,
+                    p1Name: topQ[i].pName,
+                    p1Id: topQ[i].pId,
+                    slotP2Label: topQ[i + 1].label,
+                    p2Name: topQ[i + 1].pName,
+                    p2Id: topQ[i + 1].pId
+                });
+            }
+        }
+
+        rounds.push({ name: roundName, matches });
+        if (roundName.includes('Cuartos')) {
+            rounds.push({
+                name: 'Semifinales',
+                matches: [
+                    { id: 'proj-sf-1', round: 'Semifinal', slotP1Label: 'Ganador Llave 1', slotP2Label: 'Ganador Llave 2' },
+                    { id: 'proj-sf-2', round: 'Semifinal', slotP1Label: 'Ganador Llave 3', slotP2Label: 'Ganador Llave 4' }
+                ]
+            });
+        }
+        rounds.push({
+            name: 'Gran Final',
+            matches: [
+                { id: 'proj-f-1', round: 'Final', slotP1Label: 'Ganador Semifinal 1', slotP2Label: 'Ganador Semifinal 2' }
+            ]
         });
     }
 
