@@ -473,36 +473,47 @@ export const api = {
         async getPointsDefense(previousTournamentId: string) {
             return []; // Needs historical data
         },
-        async generateFixture(tournamentId: string) {
-            // 1. Get Players
-            const { data: players } = await supabase
-                .from('tournament_players')
-                .select('*')
-                .eq('tournament_id', tournamentId);
+        async generateFixture(tournamentId: string, customGroups?: { name: string; players: any[] }[]) {
+            let groupsToUse: { name: string; players: any[] }[] = [];
 
-            if (!players || players.length < 3) {
-                throw new Error("Se necesitan al menos 3 jugadores/parejas para generar un fixture.");
+            if (customGroups && customGroups.length > 0) {
+                groupsToUse = customGroups;
+            } else {
+                // 1. Get Players
+                const { data: players } = await supabase
+                    .from('tournament_players')
+                    .select('*')
+                    .eq('tournament_id', tournamentId);
+
+                if (!players || players.length < 3) {
+                    throw new Error("Se necesitan al menos 3 jugadores/parejas para generar un fixture.");
+                }
+
+                // 2. Shuffle
+                const shuffled = [...players].sort(() => Math.random() - 0.5);
+
+                // 3. Determine Groups (Target size: 3 or 4)
+                const totalPlayers = shuffled.length;
+                let numGroups = Math.floor(totalPlayers / 3);
+                if (totalPlayers === 4 || totalPlayers === 5) numGroups = 1;
+
+                const rawGroups: any[][] = Array.from({ length: numGroups }, () => []);
+                shuffled.forEach((p, index) => {
+                    rawGroups[index % numGroups].push(p);
+                });
+
+                groupsToUse = rawGroups.map((grp, idx) => ({
+                    name: `Grupo ${String.fromCharCode(65 + idx)}`,
+                    players: grp
+                }));
             }
-
-            // 2. Shuffle
-            const shuffled = [...players].sort(() => Math.random() - 0.5);
-
-            // 3. Determine Groups (Target size: 3 or 4)
-            const totalPlayers = shuffled.length;
-            let numGroups = Math.floor(totalPlayers / 3);
-            if (totalPlayers === 4 || totalPlayers === 5) numGroups = 1;
-
-            const groups: any[][] = Array.from({ length: numGroups }, () => []);
-
-            shuffled.forEach((p, index) => {
-                groups[index % numGroups].push(p);
-            });
 
             // 4. Generate Matches
             const matchesToInsert: any[] = [];
 
-            groups.forEach((group, groupIdx) => {
-                const groupName = `Grupo ${String.fromCharCode(65 + groupIdx)}`;
+            groupsToUse.forEach((groupObj, groupIdx) => {
+                const groupName = groupObj.name || `Grupo ${String.fromCharCode(65 + groupIdx)}`;
+                const group = groupObj.players;
 
                 for (let i = 0; i < group.length; i++) {
                     for (let j = i + 1; j < group.length; j++) {
@@ -511,10 +522,10 @@ export const api = {
 
                         matchesToInsert.push({
                             tournament_id: tournamentId,
-                            player1_id: p1.player_id,
-                            player1_name: p1.player_name,
-                            player2_id: p2.player_id,
-                            player2_name: p2.player_name,
+                            player1_id: p1.player_id || p1.id,
+                            player1_name: p1.player_name || p1.name,
+                            player2_id: p2.player_id || p2.id,
+                            player2_name: p2.player_name || p2.name,
                             round: 'Fase de Grupos',
                             group_number: groupIdx + 1,
                             proposal_data: { group_name: groupName },
