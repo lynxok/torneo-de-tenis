@@ -1,16 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { UserProfile, Institution, UserClubMembership } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { 
     User, Mail, Award, MapPin, Phone, Edit2, Shield, CreditCard, Calendar, X, Check, Save, 
-    AlertTriangle, Camera, UploadCloud, Loader2, Star, Plus, Trash2, Sparkles, Building as BuildingIcon, CheckCircle2, Smartphone 
+    AlertTriangle, Camera, UploadCloud, Loader2, Star, Plus, Trash2, Sparkles, Building as BuildingIcon, CheckCircle2, Smartphone, Trophy 
 } from 'lucide-react';
 import ImageCropper from '../components/ImageCropper';
 import imageCompression from 'browser-image-compression';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
+import { getUserRankInfo } from '../utils/ranking';
 
 interface ProfileProps {
     user: UserProfile;
@@ -21,6 +22,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
     const [saving, setSaving] = useState(false);
     const [institutions, setInstitutions] = useState<Institution[]>([]);
+    const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
     const { addToast } = useToast();
 
     // Memberships Modal State
@@ -60,6 +62,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         // Load institutions for the dropdown
         api.institutions.getAll().then(setInstitutions);
 
+        // Load all profiles for accurate ranking computation
+        api.auth.getAllProfiles().then(setAllProfiles).catch(() => {});
+
         // Load System Settings (Banner)
         api.settings.getConfig().then(config => {
             if (config.profile_banner_url) {
@@ -67,6 +72,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             }
         });
     }, []);
+
+    const rankInfo = useMemo(() => {
+        return getUserRankInfo(user.id, allProfiles.length > 0 ? allProfiles : [user]);
+    }, [user, allProfiles]);
 
     const userMemberships = api.memberships.getUserMemberships(user);
 
@@ -479,9 +488,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                     <Card className="bg-gradient-to-br from-card to-slate-800 border-primary/20 sticky top-24">
                         <div id="profile-stats">
                             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                <Award className="text-accent" /> Estadísticas
+                                <Award className="text-accent" /> Estadísticas & Ranking
                             </h3>
-                            <div className="space-y-4">
+                            <div className="space-y-3">
                                 <div className="flex justify-between items-center p-3 bg-black/20 rounded-xl border border-white/5">
                                     <span className="text-muted text-sm">Partidos Ganados</span>
                                     <span className="text-xl font-bold text-white">{user.matches_won || 0}</span>
@@ -490,9 +499,21 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                     <span className="text-muted text-sm">Torneos Ganados</span>
                                     <span className="text-xl font-bold text-accent">{user.tournaments_won || 0}</span>
                                 </div>
-                                <div className="p-4 bg-primary/10 rounded-xl border border-primary/20 text-center">
-                                    <div className="text-3xl font-bold text-primary mb-1">#{Math.floor(Math.random() * 100) + 1}</div>
-                                    <div className="text-xs text-muted uppercase tracking-wider">Ranking Global</div>
+                                <div className="flex justify-between items-center p-3 bg-black/20 rounded-xl border border-white/5">
+                                    <span className="text-muted text-sm">Puntos Oficiales</span>
+                                    <span className="text-xl font-bold text-primary">{rankInfo.points} pts</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 pt-1">
+                                    <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 text-center">
+                                        <div className="text-2xl font-black text-primary mb-0.5">#{rankInfo.categoryRank}</div>
+                                        <div className="text-[10px] text-slate-300 font-bold uppercase tracking-wider">
+                                            {user.category ? `En ${user.category}` : 'En Categoría'}
+                                        </div>
+                                    </div>
+                                    <div className="p-3 bg-white/5 rounded-xl border border-white/10 text-center">
+                                        <div className="text-2xl font-black text-white mb-0.5">#{rankInfo.globalRank}</div>
+                                        <div className="text-[10px] text-muted font-bold uppercase tracking-wider">Ranking Global</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

@@ -1,11 +1,12 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
-import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar } from 'lucide-react';
+import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar, Trophy, Medal, LayoutList, Layers } from 'lucide-react';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
+import { computeRankings, normalizeCategoryKey, RankedPlayer } from '../utils/ranking';
 
 interface AdminUsersProps {
     user?: UserProfile;
@@ -17,6 +18,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
     const [activeTab, setActiveTab] = useState<'members' | 'pending'>('members');
+    const [selectedCategory, setSelectedCategory] = useState<string>('all');
+    const [viewGrouping, setViewGrouping] = useState<boolean>(true);
 
     // Quick Approval State
     const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
@@ -280,26 +283,196 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         }
     };
 
-    // Filter Logic:
-    const scopedUsers = users.filter(u => {
-        if (!isSuperAdmin && user?.institution_id) {
-            return u.institution_id === user.institution_id;
-        }
-        return true;
-    });
+    // Filter & Ranking Logic:
+    const scopedUsers = useMemo(() => {
+        return users.filter(u => {
+            if (!isSuperAdmin && user?.institution_id) {
+                return u.institution_id === user.institution_id;
+            }
+            return true;
+        });
+    }, [users, isSuperAdmin, user?.institution_id]);
 
-    const pendingUsers = scopedUsers.filter(u => !u.is_approved || u.member_status === 'pending');
-    const activeMembers = scopedUsers.filter(u => u.is_approved && u.member_status !== 'pending');
+    const pendingUsers = useMemo(() => {
+        return scopedUsers.filter(u => !u.is_approved || u.member_status === 'pending');
+    }, [scopedUsers]);
 
-    const displayedUsers = (activeTab === 'pending' ? pendingUsers : activeMembers).filter(u => {
+    const activeMembers = useMemo(() => {
+        return scopedUsers.filter(u => u.is_approved && u.member_status !== 'pending');
+    }, [scopedUsers]);
+
+    const rankedMembers = useMemo(() => {
+        return computeRankings(activeMembers);
+    }, [activeMembers]);
+
+    const categoryCounts = useMemo(() => {
+        const counts: Record<string, number> = { all: activeMembers.length };
+        NUMERIC_CATEGORIES.forEach(c => { counts[c] = 0; });
+        counts['Sin Asignar'] = 0;
+
+        activeMembers.forEach(m => {
+            const cat = normalizeCategoryKey(m.category);
+            counts[cat] = (counts[cat] || 0) + 1;
+        });
+        return counts;
+    }, [activeMembers]);
+
+    const displayedPending = useMemo(() => {
+        return pendingUsers.filter(u => {
+            return (
+                u.name.toLowerCase().includes(filter.toLowerCase()) ||
+                (u.lastname && u.lastname.toLowerCase().includes(filter.toLowerCase())) ||
+                u.email.toLowerCase().includes(filter.toLowerCase()) ||
+                (u.dni && u.dni.includes(filter)) ||
+                (u.member_number && u.member_number.includes(filter))
+            );
+        });
+    }, [pendingUsers, filter]);
+
+    const displayedMembers = useMemo(() => {
+        return rankedMembers.filter(u => {
+            const matchesFilter = (
+                u.name.toLowerCase().includes(filter.toLowerCase()) ||
+                (u.lastname && u.lastname.toLowerCase().includes(filter.toLowerCase())) ||
+                u.email.toLowerCase().includes(filter.toLowerCase()) ||
+                (u.dni && u.dni.includes(filter)) ||
+                (u.member_number && u.member_number.includes(filter))
+            );
+            if (!matchesFilter) return false;
+
+            if (selectedCategory === 'all') return true;
+            return normalizeCategoryKey(u.category).toLowerCase() === selectedCategory.toLowerCase();
+        });
+    }, [rankedMembers, filter, selectedCategory]);
+
+    const groupedMembers = useMemo(() => {
+        const order = ['1ra', '2da', '3ra', '4ta', '5ta', '6ta', '7ma', 'Open', 'Sin Asignar'];
+        const groups: { category: string; players: RankedPlayer[] }[] = [];
+
+        const activeCats = selectedCategory === 'all' ? order : [selectedCategory];
+
+        activeCats.forEach(cat => {
+            const playersInCat = displayedMembers.filter(p => normalizeCategoryKey(p.category) === cat);
+            if (playersInCat.length > 0 || selectedCategory !== 'all') {
+                groups.push({ category: cat, players: playersInCat });
+            }
+        });
+
+        return groups;
+    }, [displayedMembers, selectedCategory]);
+
+    const renderUserRow = (u: RankedPlayer) => {
+        const isPodium = u.category_rank <= 3;
+        const podiumBadge = u.category_rank === 1
+            ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 shadow-yellow-500/10'
+            : u.category_rank === 2
+                ? 'bg-slate-300/20 text-slate-200 border-slate-300/40 shadow-slate-300/10'
+                : u.category_rank === 3
+                    ? 'bg-amber-700/20 text-amber-300 border-amber-700/40 shadow-amber-700/10'
+                    : 'bg-white/5 text-slate-400 border-white/10';
+
+        const podiumIcon = u.category_rank === 1
+            ? '🥇'
+            : u.category_rank === 2
+                ? '🥈'
+                : u.category_rank === 3
+                    ? '🥉'
+                    : null;
+
         return (
-            u.name.toLowerCase().includes(filter.toLowerCase()) ||
-            (u.lastname && u.lastname.toLowerCase().includes(filter.toLowerCase())) ||
-            u.email.toLowerCase().includes(filter.toLowerCase()) ||
-            (u.dni && u.dni.includes(filter)) ||
-            (u.member_number && u.member_number.includes(filter))
+            <tr key={u.id} className="hover:bg-white/5 transition-colors text-sm">
+                <td className="p-3.5 text-center">
+                    <span className={`inline-flex items-center justify-center gap-0.5 px-2.5 py-1 rounded-xl text-xs font-black border shadow-sm ${podiumBadge}`}>
+                        {podiumIcon ? `${podiumIcon} #${u.category_rank}` : `#${u.category_rank}`}
+                    </span>
+                </td>
+                <td className="p-3.5">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white border border-white/10">
+                            {(u.name || 'U').charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                            <div className="font-bold text-white flex items-center gap-1.5">
+                                {formatPlayerName(u.name, u.lastname)}
+                                {u.is_member && (
+                                    <span className="bg-primary/20 text-primary border border-primary/30 text-[10px] px-1.5 py-0.2 rounded font-bold uppercase">
+                                        Socio {u.member_number ? `#${u.member_number}` : ''}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="text-xs text-muted">{u.email}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(u.gender)}`}>
+                                    {formatGender(u.gender)}
+                                </span>
+                                <span className="text-[11px] text-slate-400">
+                                    {getAgeCategoryLabel(u.birth_date)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </td>
+                <td className="p-3.5">
+                    <div className="flex flex-col">
+                        <span className="font-black text-primary text-sm flex items-center gap-1">
+                            <Award size={13} className="text-accent" /> {u.calculated_points} pts
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                            {u.matches_won || 0} PG • {u.tournaments_won || 0} TG
+                        </span>
+                    </div>
+                </td>
+                <td className="p-3.5">
+                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                        u.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                        u.role === 'superadmin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                        u.role === 'professor' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                        'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                    }`}>
+                        <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role}
+                    </span>
+                </td>
+                <td className="p-3.5 text-xs text-slate-300 hidden md:table-cell">
+                    {u.institution || <span className="text-muted italic">Sin asignar</span>}
+                </td>
+                <td className="p-3.5 text-xs text-muted hidden lg:table-cell">
+                    <div>{u.phone || '-'}</div>
+                    {u.dni && <div className="text-[11px] text-slate-400">DNI: {u.dni}</div>}
+                </td>
+                <td className="p-3.5 text-right">
+                    <div className="flex justify-end gap-2">
+                        {/* Role Select */}
+                        <select
+                            className="bg-slate-800 text-white text-xs py-1.5 px-2 rounded-lg border border-white/10 outline-none cursor-pointer hover:border-white/30 focus:border-primary transition-all shadow-sm"
+                            value={u.role}
+                            onChange={(e) => handleRoleUpdate(u.id, e.target.value as UserRole)}
+                            disabled={!isSuperAdmin && u.role === 'superadmin'}
+                        >
+                            <option value="player" className="bg-slate-800 text-white">Jugador</option>
+                            <option value="professor" className="bg-slate-800 text-white">Profesor</option>
+                            <option value="admin" className="bg-slate-800 text-white">Organizador / Admin</option>
+
+                            {isSuperAdmin && (
+                                <>
+                                    <option value="coordinator" className="bg-slate-800 text-white">Coordinador</option>
+                                    <option value="superadmin" className="bg-slate-800 text-white">Super Admin</option>
+                                </>
+                            )}
+                        </select>
+
+                        {/* Edit Profile Button */}
+                        <button
+                            onClick={() => openEditModal(u)}
+                            className="p-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all border border-blue-500/20"
+                            title="Editar datos del usuario"
+                        >
+                            <Edit2 size={16} />
+                        </button>
+                    </div>
+                </td>
+            </tr>
         );
-    });
+    };
 
     return (
         <div className="space-y-6 animate-fade-up">
@@ -388,7 +561,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             {/* TAB: SOLICITUDES PENDIENTES */}
             {activeTab === 'pending' && (
                 <div className="space-y-4">
-                    {displayedUsers.length === 0 ? (
+                    {displayedPending.length === 0 ? (
                         <div className="bg-card/40 border border-white/10 rounded-2xl p-12 text-center text-muted">
                             <CheckCheck size={40} className="mx-auto text-green-400 mb-3 opacity-80" />
                             <h3 className="text-lg font-bold text-white mb-1">¡Al día! No hay solicitudes pendientes</h3>
@@ -396,7 +569,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            {displayedUsers.map(u => (
+                            {displayedPending.map(u => (
                                 <div key={u.id} className="bg-card/70 border border-yellow-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between">
                                     <div className="flex items-start justify-between gap-3 mb-4">
                                         <div className="flex items-center gap-3">
@@ -448,8 +621,8 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                         value={approvalCategory}
                                                         onChange={e => setApprovalCategory(e.target.value)}
                                                     >
-                                                        {NUMERIC_CATEGORIES.map(cat => (
-                                                            <option key={cat} value={cat}>{cat} Categoría</option>
+                                                        {NUMERIC_CATEGORIES.map(c => (
+                                                            <option key={c} value={c}>{c === 'Open' ? 'Open' : `${c} Categoría`}</option>
                                                         ))}
                                                     </select>
                                                 </div>
@@ -458,7 +631,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                     <label className="text-[11px] text-muted font-bold block mb-1">N° de Socio (Opcional)</label>
                                                     <input
                                                         type="text"
-                                                        placeholder="Ej: 1450"
+                                                        placeholder="Ej: 1042"
                                                         className="w-full bg-slate-800 border border-white/10 rounded-lg p-2 text-white text-xs focus:border-primary outline-none"
                                                         value={approvalMemberNumber}
                                                         onChange={e => setApprovalMemberNumber(e.target.value)}
@@ -466,57 +639,44 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                 </div>
                                             </div>
 
-                                            <div className="flex items-center gap-2 p-2 bg-slate-800/50 rounded-lg border border-white/5">
+                                            <div className="flex items-center gap-2 pt-1">
                                                 <input
                                                     type="checkbox"
-                                                    id={`is-member-check-${u.id}`}
-                                                    className="accent-primary w-4 h-4 cursor-pointer"
+                                                    id={`approve-member-${u.id}`}
                                                     checked={approvalIsMember}
                                                     onChange={e => setApprovalIsMember(e.target.checked)}
+                                                    className="rounded bg-slate-800 border-white/20 text-primary focus:ring-0 cursor-pointer"
                                                 />
-                                                <label htmlFor={`is-member-check-${u.id}`} className="text-xs text-slate-300 cursor-pointer select-none">
-                                                    Es Socio Oficial del Club (Tarifa preferencial)
+                                                <label htmlFor={`approve-member-${u.id}`} className="text-xs text-white cursor-pointer select-none">
+                                                    Registrar como <strong>Socio Oficial</strong>
                                                 </label>
                                             </div>
 
-                                            <div className="flex justify-end gap-2 pt-2">
+                                            <div className="flex justify-end gap-2 pt-2 border-t border-white/10">
                                                 <button
                                                     onClick={() => setApprovingUserId(null)}
-                                                    className="px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white transition-colors"
+                                                    className="px-3 py-1.5 rounded-lg border border-white/10 text-muted hover:text-white text-xs"
+                                                    disabled={processingApproval}
                                                 >
                                                     Cancelar
                                                 </button>
                                                 <button
-                                                    onClick={() => handleQuickApprove(u)}
+                                                    onClick={() => handleConfirmApproval(u.id)}
+                                                    className="px-4 py-1.5 bg-green-500 hover:bg-green-600 text-dark text-xs font-bold rounded-lg flex items-center gap-1 shadow-lg shadow-green-500/20"
                                                     disabled={processingApproval}
-                                                    className="px-4 py-1.5 bg-green-500 hover:bg-green-600 text-white font-bold text-xs rounded-lg flex items-center gap-1 shadow-lg shadow-green-500/20"
                                                 >
-                                                    {processingApproval ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} Confirmar y Habilitar
+                                                    {processingApproval ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
+                                                    Confirmar y Homologar
                                                 </button>
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="space-y-3 pt-2 border-t border-white/10">
-                                            {/* Info de Club solicitado y Categoría pretendida */}
-                                            <div className="grid grid-cols-2 gap-2 text-xs">
-                                                <div className="flex items-center gap-1">
-                                                    <Building size={13} className="text-slate-400 shrink-0" />
-                                                    <span className="text-muted truncate">Club:</span>
-                                                    <span className="font-bold text-primary truncate">
-                                                        {u.institution || institutions.find(i => i.id === u.institution_id)?.name || 'Independiente'}
-                                                    </span>
-                                                </div>
+                                        <div className="flex items-center justify-between pt-3 border-t border-white/10 mt-auto">
+                                            <span className="text-xs text-muted">
+                                                Club solicitado: <strong className="text-white">{u.institution || 'Sin club'}</strong>
+                                            </span>
 
-                                                <div className="flex items-center gap-1 justify-end">
-                                                    <Award size={13} className="text-amber-400 shrink-0" />
-                                                    <span className="text-muted">Categoría:</span>
-                                                    <span className="font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded text-[11px]">
-                                                        {u.category || 'Sin declarar'}
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center justify-end gap-2">
+                                            <div className="flex gap-2">
                                                 <button
                                                     onClick={() => openEditModal(u)}
                                                     className="px-3 py-1.5 rounded-xl border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 text-xs font-semibold transition-colors flex items-center gap-1"
@@ -554,120 +714,180 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
 
             {/* TAB: SOCIOS Y JUGADORES ACTIVOS */}
             {activeTab === 'members' && (
-                <div className="bg-card/50 backdrop-blur border border-white/10 rounded-2xl overflow-hidden min-h-[300px]" id="users-table">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left border-collapse">
-                            <thead>
-                                <tr className="bg-white/5 border-b border-white/10 text-muted text-xs uppercase tracking-wider">
-                                    <th className="p-4">Usuario / Socio</th>
-                                    <th className="p-4">Tipo & Rol</th>
-                                    <th className="p-4 hidden md:table-cell">Institución</th>
-                                    <th className="p-4 hidden sm:table-cell">Categoría</th>
-                                    <th className="p-4 hidden lg:table-cell">Contacto</th>
-                                    <th className="p-4 text-right">Acciones</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-white/5">
-                                {loading ? (
-                                    <tr><td colSpan={6} className="p-8 text-center text-muted">Cargando usuarios...</td></tr>
-                                ) : displayedUsers.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={6} className="p-12 text-center text-muted">
-                                            <div className="flex flex-col items-center gap-2">
-                                                <AlertCircle size={32} className="opacity-50" />
-                                                <p>No se encontraron socios bajo tu gestión.</p>
-                                                {!isSuperAdmin && (
-                                                    <p className="text-xs max-w-md mx-auto">
-                                                        Solo puedes ver usuarios asignados a <strong>{user?.institution}</strong>.
-                                                    </p>
-                                                )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : displayedUsers.map((u, index) => (
-                                    <tr key={u.id} className="hover:bg-white/5 transition-colors text-sm">
-                                        <td className="p-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white border border-white/10">
-                                                    {(u.name || 'U').charAt(0).toUpperCase()}
-                                                </div>
-                                                <div>
-                                                    <div className="font-bold text-white flex items-center gap-1.5">
-                                                        {formatPlayerName(u.name, u.lastname)}
-                                                        {u.is_member && (
-                                                            <span className="bg-primary/20 text-primary border border-primary/30 text-[10px] px-1.5 py-0.2 rounded font-bold uppercase">
-                                                                Socio {u.member_number ? `#${u.member_number}` : ''}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-xs text-muted">{u.email}</div>
-                                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                                        <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(u.gender)}`}>
-                                                            {formatGender(u.gender)}
-                                                        </span>
-                                                        <span className="text-[11px] text-slate-400">
-                                                            {getAgeCategoryLabel(u.birth_date)}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="p-4">
-                                            <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
-                                                u.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                                                u.role === 'superadmin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                                                u.role === 'professor' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                                                'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                                            }`}>
-                                                <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role}
-                                            </span>
-                                        </td>
-                                        <td className="p-4 text-xs text-slate-300 hidden md:table-cell">
-                                            {u.institution || <span className="text-muted italic">Sin asignar</span>}
-                                        </td>
-                                        <td className="p-4 text-xs font-semibold text-primary hidden sm:table-cell">
-                                            {u.category ? `${u.category} Categoría` : <span className="text-muted font-normal">Sin Asignar</span>}
-                                        </td>
-                                        <td className="p-4 text-xs text-muted hidden lg:table-cell">
-                                            <div>{u.phone || '-'}</div>
-                                            {u.dni && <div className="text-[11px] text-slate-400">DNI: {u.dni}</div>}
-                                        </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex justify-end gap-2">
-                                                {/* Role Select */}
-                                                <select
-                                                    className="bg-slate-800 text-white text-xs py-1.5 px-2 rounded-lg border border-white/10 outline-none cursor-pointer hover:border-white/30 focus:border-primary transition-all shadow-sm"
-                                                    value={u.role}
-                                                    onChange={(e) => handleRoleUpdate(u.id, e.target.value as UserRole)}
-                                                    disabled={!isSuperAdmin && u.role === 'superadmin'}
-                                                >
-                                                    <option value="player" className="bg-slate-800 text-white">Jugador</option>
-                                                    <option value="professor" className="bg-slate-800 text-white">Profesor</option>
-                                                    <option value="admin" className="bg-slate-800 text-white">Organizador / Admin</option>
+                <div className="space-y-6">
+                    {/* Category Filter Pills & View Toggle */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-card/40 p-3 rounded-2xl border border-white/10">
+                        {/* Horizontal Category Selector */}
+                        <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 scrollbar-thin">
+                            <button
+                                onClick={() => setSelectedCategory('all')}
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                                    selectedCategory === 'all'
+                                        ? 'bg-primary text-dark shadow-md shadow-primary/20'
+                                        : 'bg-white/5 text-muted hover:text-white hover:bg-white/10'
+                                }`}
+                            >
+                                <Users size={13} /> Todas las Categorías
+                                <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${selectedCategory === 'all' ? 'bg-black/20 text-dark' : 'bg-white/10 text-white'}`}>
+                                    {categoryCounts['all'] || 0}
+                                </span>
+                            </button>
 
-                                                    {isSuperAdmin && (
-                                                        <>
-                                                            <option value="coordinator" className="bg-slate-800 text-white">Coordinador</option>
-                                                            <option value="superadmin" className="bg-slate-800 text-white">Super Admin</option>
-                                                        </>
-                                                    )}
-                                                </select>
+                            {NUMERIC_CATEGORIES.map(cat => {
+                                const count = categoryCounts[cat] || 0;
+                                const isSelected = selectedCategory === cat;
+                                return (
+                                    <button
+                                        key={cat}
+                                        onClick={() => setSelectedCategory(cat)}
+                                        className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                                            isSelected
+                                                ? 'bg-primary text-dark shadow-md shadow-primary/20'
+                                                : 'bg-white/5 text-muted hover:text-white hover:bg-white/10'
+                                        }`}
+                                    >
+                                        <Trophy size={12} className={isSelected ? 'text-dark' : 'text-amber-400'} />
+                                        {cat === 'Open' ? 'Open' : `${cat}`}
+                                        <span className={`px-1.5 py-0.2 rounded-full text-[10px] ${isSelected ? 'bg-black/20 text-dark' : 'bg-white/10 text-white'}`}>
+                                            {count}
+                                        </span>
+                                    </button>
+                                );
+                            })}
 
-                                                {/* Edit Profile Button */}
-                                                <button
-                                                    onClick={() => openEditModal(u)}
-                                                    className="p-2 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all border border-blue-500/20"
-                                                    title="Editar datos del usuario"
-                                                >
-                                                    <Edit2 size={16} />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                            {(categoryCounts['Sin Asignar'] || 0) > 0 && (
+                                <button
+                                    onClick={() => setSelectedCategory('Sin Asignar')}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all flex items-center gap-1.5 ${
+                                        selectedCategory === 'Sin Asignar'
+                                            ? 'bg-primary text-dark shadow-md shadow-primary/20'
+                                            : 'bg-white/5 text-muted hover:text-white hover:bg-white/10'
+                                    }`}
+                                >
+                                    Sin Asignar
+                                    <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-white/10 text-white">
+                                        {categoryCounts['Sin Asignar']}
+                                    </span>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* View Mode Toggle (Grouped by Category vs Flat Table) */}
+                        <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10 shrink-0">
+                            <button
+                                onClick={() => setViewGrouping(true)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                                    viewGrouping ? 'bg-primary text-dark shadow' : 'text-muted hover:text-white'
+                                }`}
+                                title="Ver agrupado por categorías"
+                            >
+                                <Layers size={13} /> Agrupado
+                            </button>
+                            <button
+                                onClick={() => setViewGrouping(false)}
+                                className={`px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 transition-all ${
+                                    !viewGrouping ? 'bg-primary text-dark shadow' : 'text-muted hover:text-white'
+                                }`}
+                                title="Ver tabla continua unificada"
+                            >
+                                <LayoutList size={13} /> Lista
+                            </button>
+                        </div>
                     </div>
+
+                    {/* USERS TABLES / GROUPED VIEW */}
+                    {loading ? (
+                        <div className="bg-card/50 border border-white/10 rounded-2xl p-12 text-center text-muted">
+                            <Loader2 className="animate-spin mx-auto text-primary mb-2" size={32} />
+                            <p>Cargando socios y rankings...</p>
+                        </div>
+                    ) : displayedMembers.length === 0 ? (
+                        <div className="bg-card/50 border border-white/10 rounded-2xl p-12 text-center text-muted">
+                            <AlertCircle size={36} className="mx-auto opacity-50 mb-2" />
+                            <p className="font-bold text-white">No se encontraron socios en este criterio.</p>
+                            <p className="text-xs text-muted mt-1">Prueba cambiando de categoría o ajustando el término de búsqueda.</p>
+                        </div>
+                    ) : viewGrouping ? (
+                        /* GROUPED VIEW */
+                        <div className="space-y-6">
+                            {groupedMembers.map(group => (
+                                <div key={group.category} className="bg-card/50 backdrop-blur border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+                                    {/* Category Header */}
+                                    <div className="p-4 bg-gradient-to-r from-white/10 via-white/5 to-transparent border-b border-white/10 flex flex-wrap justify-between items-center gap-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center font-bold">
+                                                <Trophy size={16} />
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-white text-base">
+                                                    {group.category === 'Open' || group.category === 'Sin Asignar' ? group.category : `${group.category} Categoría`}
+                                                </h3>
+                                                <p className="text-[11px] text-muted">
+                                                    {group.players.length} {group.players.length === 1 ? 'jugador registrado' : 'jugadores registrados'} en este nivel
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {group.players.length > 0 && group.players[0].calculated_points > 0 && (
+                                            <div className="flex items-center gap-1.5 px-3 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-xl text-xs font-bold">
+                                                <span>👑 Líder de Categoría:</span>
+                                                <span className="text-white">{formatPlayerName(group.players[0].name, group.players[0].lastname)}</span>
+                                                <span className="text-primary font-black">({group.players[0].calculated_points} pts)</span>
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Table for this Category */}
+                                    {group.players.length === 0 ? (
+                                        <div className="p-6 text-center text-xs text-muted italic">
+                                            Sin jugadores asignados en {group.category}.
+                                        </div>
+                                    ) : (
+                                        <div className="overflow-x-auto">
+                                            <table className="w-full text-left border-collapse">
+                                                <thead>
+                                                    <tr className="bg-white/5 border-b border-white/10 text-muted text-[11px] uppercase tracking-wider">
+                                                        <th className="p-3.5 text-center w-24">Ranking</th>
+                                                        <th className="p-3.5">Usuario / Socio</th>
+                                                        <th className="p-3.5">Puntos Oficiales</th>
+                                                        <th className="p-3.5">Tipo & Rol</th>
+                                                        <th className="p-3.5 hidden md:table-cell">Institución</th>
+                                                        <th className="p-3.5 hidden lg:table-cell">Contacto</th>
+                                                        <th className="p-3.5 text-right">Acciones</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-white/5">
+                                                    {group.players.map(u => renderUserRow(u))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        /* FLAT UNIFIED TABLE */
+                        <div className="bg-card/50 backdrop-blur border border-white/10 rounded-2xl overflow-hidden shadow-xl" id="users-table">
+                            <div className="overflow-x-auto">
+                                <table className="w-full text-left border-collapse">
+                                    <thead>
+                                        <tr className="bg-white/5 border-b border-white/10 text-muted text-[11px] uppercase tracking-wider">
+                                            <th className="p-3.5 text-center w-24">Ranking</th>
+                                            <th className="p-3.5">Usuario / Socio</th>
+                                            <th className="p-3.5">Puntos Oficiales</th>
+                                            <th className="p-3.5">Tipo & Rol</th>
+                                            <th className="p-3.5 hidden md:table-cell">Institución</th>
+                                            <th className="p-3.5 hidden lg:table-cell">Contacto</th>
+                                            <th className="p-3.5 text-right">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-white/5">
+                                        {displayedMembers.map(u => renderUserRow(u))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
