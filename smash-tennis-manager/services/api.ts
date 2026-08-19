@@ -583,29 +583,40 @@ export const api = {
 
             return true;
         },
-        async generatePlayoffs(tournamentId: string) {
-            // Simplified logic: Generate Quarter Finals for Top 8 (or random 8)
-            const { data: players } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
-
-            if (!players || players.length < 2) throw new Error("Insuficientes jugadores");
-
-            const shuffled = [...players].sort(() => Math.random() - 0.5).slice(0, 8); // Top 8
+        async generatePlayoffs(tournamentId: string, customMatches?: { round: string; player1: { id: string; name: string }; player2: { id: string; name: string } }[]) {
             const matchesToInsert: any[] = [];
 
-            // If less than 8, maybe do Semis? For now, stick to Quarters logic or Semis
-            const roundName = shuffled.length > 4 ? 'Cuartos de Final' : 'Semifinal';
-
-            for (let i = 0; i < shuffled.length; i += 2) {
-                if (i + 1 < shuffled.length) {
+            if (customMatches && customMatches.length > 0) {
+                for (const cm of customMatches) {
                     matchesToInsert.push({
                         tournament_id: tournamentId,
-                        player1_id: shuffled[i].player_id,
-                        player1_name: shuffled[i].player_name,
-                        player2_id: shuffled[i + 1].player_id,
-                        player2_name: shuffled[i + 1].player_name,
-                        round: roundName,
+                        player1_id: cm.player1.id,
+                        player1_name: formatPlayerName(cm.player1.name),
+                        player2_id: cm.player2.id,
+                        player2_name: formatPlayerName(cm.player2.name),
+                        round: cm.round,
                         scheduling_status: 'confirmed'
                     });
+                }
+            } else {
+                const { data: players } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
+                if (!players || players.length < 2) throw new Error("Insuficientes jugadores");
+
+                const shuffled = [...players].sort(() => Math.random() - 0.5).slice(0, 8); // Top 8
+                const roundName = shuffled.length > 4 ? 'Cuartos de Final' : 'Semifinal';
+
+                for (let i = 0; i < shuffled.length; i += 2) {
+                    if (i + 1 < shuffled.length) {
+                        matchesToInsert.push({
+                            tournament_id: tournamentId,
+                            player1_id: shuffled[i].player_id || shuffled[i].id,
+                            player1_name: formatPlayerName(shuffled[i].player_name || shuffled[i].name),
+                            player2_id: shuffled[i + 1].player_id || shuffled[i + 1].id,
+                            player2_name: formatPlayerName(shuffled[i + 1].player_name || shuffled[i + 1].name),
+                            round: roundName,
+                            scheduling_status: 'confirmed'
+                        });
+                    }
                 }
             }
 
