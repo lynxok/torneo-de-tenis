@@ -133,6 +133,35 @@ export const api = {
                 .eq('id', userId)
                 .single();
             if (error) throw error;
+
+            // Auto-heal missing profile fields from auth user_metadata if available
+            try {
+                const { data: authData } = await supabase.auth.getUser();
+                if (authData?.user && authData.user.id === userId && authData.user.user_metadata) {
+                    const meta = authData.user.user_metadata;
+                    const updates: any = {};
+                    if (!data.lastname && meta.lastname) updates.lastname = meta.lastname.trim();
+                    if (!data.phone && meta.phone) updates.phone = meta.phone.trim();
+                    if (!data.dni && meta.dni) updates.dni = meta.dni.trim();
+                    if ((!data.category || data.category === 'C') && meta.category && meta.category !== 'C') updates.category = meta.category.trim();
+                    if (!data.institution_id && meta.institution_id && meta.institution_id !== 'none') updates.institution_id = meta.institution_id;
+                    if ((!data.name || data.name === 'Usuario') && meta.name) updates.name = meta.name.trim();
+
+                    if (Object.keys(updates).length > 0) {
+                        await supabase.from('profiles').update(updates).eq('id', userId);
+                        Object.assign(data, updates);
+                        if (updates.institution_id && !data.institutions?.name) {
+                            const { data: inst } = await supabase.from('institutions').select('name').eq('id', updates.institution_id).single();
+                            if (inst) {
+                                data.institutions = inst;
+                            }
+                        }
+                    }
+                }
+            } catch (healErr) {
+                console.warn("Auto-heal profile fallback:", healErr);
+            }
+
             return { ...data, institution: data.institutions?.name } as UserProfile;
         },
         async getAllProfiles(page = 1, pageSize = 50) {
@@ -193,17 +222,56 @@ export const api = {
 
 
         async signUp(email: string, password: string, meta: any) {
-            return await supabase.auth.signUp({ email, password, options: { data: meta } });
+            const res = await supabase.auth.signUp({ email, password, options: { data: meta } });
+            if (res.error) return res;
+
+            // If user was created and session is available, sync to profiles immediately
+            if (res.data?.user) {
+                const user = res.data.user;
+                const profileUpdates: any = {
+                    name: meta.name?.trim() || '',
+                    lastname: meta.lastname?.trim() || '',
+                    phone: meta.phone?.trim() || '',
+                    dni: meta.dni?.trim() || '',
+                    category: meta.category || '6ta',
+                    role: meta.role || 'player',
+                    institution_id: (meta.institution_id && meta.institution_id !== 'none') ? meta.institution_id : null,
+                    is_approved: false
+                };
+                try {
+                    await supabase.from('profiles').update(profileUpdates).eq('id', user.id);
+                } catch (profErr) {
+                    console.warn("Profile instant sync notice:", profErr);
+                }
+            }
+            return res;
         },
         async adminCreateUser(email: string, password: string, userData: any) {
             // Note: This only works with Service Role Key on backend, specific client-side call limitation
-            const { data, error } = await supabase.auth.signUp({
+            const res = await supabase.auth.signUp({
                 email,
                 password,
                 options: { data: userData }
             });
-            if (error) throw error;
-            return data;
+            if (res.error) throw res.error;
+            if (res.data?.user) {
+                const profileUpdates: any = {
+                    name: userData.name?.trim() || '',
+                    lastname: userData.lastname?.trim() || '',
+                    phone: userData.phone?.trim() || '',
+                    dni: userData.dni?.trim() || '',
+                    category: userData.category || '4ta',
+                    role: userData.role || 'player',
+                    institution_id: (userData.institution_id && userData.institution_id !== 'none') ? userData.institution_id : null,
+                    is_approved: userData.is_approved ?? true
+                };
+                try {
+                    await supabase.from('profiles').update(profileUpdates).eq('id', res.data.user.id);
+                } catch (profErr) {
+                    console.warn("Admin create profile sync notice:", profErr);
+                }
+            }
+            return res.data;
         },
         async updateUserPassword(userId: string, newPassword: string) {
             // Note: client-side supabase.auth.updateUser updates the CURRENT LOGGED IN USER password.
