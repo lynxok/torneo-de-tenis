@@ -9,9 +9,9 @@ import {
     Clock, CheckCircle2, LayoutList, LayoutGrid, ChevronRight, MoreHorizontal, Building, 
     Sparkles, Zap, Smartphone, Loader2, Lock, AlertTriangle 
 } from 'lucide-react';
-import { getCategoryRank, NUMERIC_CATEGORIES } from '../utils/categories';
+import { getCategoryRank, NUMERIC_CATEGORIES, getEquivalentCategory } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
-import { formatGender, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
+import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass, isJuniorPlayer } from '../utils/demographics';
 
 interface PlayersProps {
     user: UserProfile;
@@ -29,6 +29,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [institutionFilter, setInstitutionFilter] = useState('');
   const [genderFilter, setGenderFilter] = useState('');
+  const [ageFilter, setAgeFilter] = useState('');
   
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list'); 
   
@@ -104,27 +105,36 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
 
 
   const filteredPlayers = useMemo(() => {
-    // 1. Base Filter (by search name, category dropdown, institution dropdown)
+    // 1. Base Filter (by search name, category dropdown, institution dropdown, gender and age)
     let result = players.filter(p => {
       // If viewer is player, exclude admins/coordinators/professors
       if (user.role === 'player' && (p.role === 'admin' || p.role === 'superadmin' || p.role === 'coordinator' || p.role === 'professor')) {
         return false;
       }
 
-      const matchesName = p.name.toLowerCase().includes(filter.toLowerCase()) || 
-                          (p.lastname && p.lastname.toLowerCase().includes(filter.toLowerCase()));
+      const cleanFilter = filter.trim().toLowerCase();
+      const matchesName = !cleanFilter || 
+                          (p.name && p.name.toLowerCase().includes(cleanFilter)) || 
+                          (p.lastname && p.lastname.toLowerCase().includes(cleanFilter)) ||
+                          (p.dni && p.dni.includes(cleanFilter));
       
-      const matchesCategory = categoryFilter ? p.category === categoryFilter : true;
+      const matchesCategory = !categoryFilter || 
+                              p.category === categoryFilter || 
+                              getEquivalentCategory(p.category || '', 'numeric') === categoryFilter ||
+                              getCategoryRank(p.category) === getCategoryRank(categoryFilter);
       
-      const matchesInstitution = institutionFilter 
-          ? (p.institution_id === institutionFilter) 
-          : true;
+      const matchesInstitution = !institutionFilter || p.institution_id === institutionFilter;
 
-      const matchesGender = genderFilter 
-          ? (formatGender(p.gender).toLowerCase() === genderFilter.toLowerCase())
-          : true;
+      const playerGender = formatGender(p.gender).toLowerCase();
+      const matchesGender = !genderFilter || playerGender === genderFilter.toLowerCase();
 
-      return matchesName && matchesCategory && matchesInstitution && matchesGender;
+      const matchesAge = !ageFilter 
+          ? true 
+          : ageFilter === 'junior' 
+            ? isJuniorPlayer(p.birth_date) 
+            : !isJuniorPlayer(p.birth_date);
+
+      return matchesName && matchesCategory && matchesInstitution && matchesGender && matchesAge;
     });
 
     // 2. Custom Category Sorting Order (uses global category rank)
@@ -162,7 +172,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
     });
 
     return result;
-  }, [players, user, filter, categoryFilter, institutionFilter]);
+  }, [players, user, filter, categoryFilter, institutionFilter, genderFilter, ageFilter]);
 
   const handleOpenProfile = (player: UserProfile) => {
     setSelectedPlayer(player);
@@ -199,7 +209,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
           </div>
       )}
       
-      {!loading && suggestions.length > 0 && !filter && !categoryFilter && !institutionFilter && (
+      {!loading && suggestions.length > 0 && !filter && !categoryFilter && !institutionFilter && !genderFilter && !ageFilter && (
           <div className="space-y-4">
               <div className="flex items-center gap-2">
                   <div className="p-1.5 bg-yellow-500/10 rounded-lg text-yellow-400 border border-yellow-500/20">
@@ -310,17 +320,43 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                     <option value="masculino">Masculino (Caballeros)</option>
                     <option value="femenino">Femenino (Damas)</option>
                 </select>
+
+                <select 
+                    className="bg-card border border-white/10 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-primary transition-colors cursor-pointer text-sm"
+                    value={ageFilter}
+                    onChange={(e) => setAgeFilter(e.target.value)}
+                >
+                    <option value="">Todas las Edades</option>
+                    <option value="adult">Adultos / Mayores</option>
+                    <option value="junior">Menores / Infantiles</option>
+                </select>
                 
                 <div className="relative flex-1 sm:w-64 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
                     <input 
                         type="text" 
-                        placeholder="Buscar por nombre..." 
+                        placeholder="Buscar por nombre o DNI..." 
                         className="w-full bg-card border border-white/10 rounded-xl pl-10 pr-4 py-2.5 text-white focus:outline-none focus:border-primary transition-colors text-sm"
                         value={filter}
                         onChange={(e) => setFilter(e.target.value)}
                     />
                 </div>
+
+                {(filter || categoryFilter || institutionFilter || genderFilter || ageFilter) && (
+                    <button
+                        onClick={() => {
+                            setFilter('');
+                            setCategoryFilter('');
+                            setInstitutionFilter('');
+                            setGenderFilter('');
+                            setAgeFilter('');
+                        }}
+                        className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1 shrink-0"
+                        title="Restablecer todos los filtros"
+                    >
+                        <X size={14} /> Limpiar
+                    </button>
+                )}
             </div>
         </div>
 
