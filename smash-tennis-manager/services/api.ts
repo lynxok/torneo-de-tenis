@@ -374,7 +374,7 @@ export const api = {
                 // Continue with decommissioning
             }
 
-            // 3. Robust Fallback: Decommission / Inactive profile in database
+            // 3. Robust Fallback: Decommission profile in database
             // This immediately hides and disables the user across all app lists (AdminUsers, Directory, Rankings)
             const { error: updateError } = await supabase
                 .from('profiles')
@@ -382,7 +382,7 @@ export const api = {
                     name: '[Usuario Eliminado]',
                     lastname: '',
                     is_approved: false,
-                    role: 'inactive' as any,
+                    role: 'player',
                     category: null,
                     institution_id: null
                 })
