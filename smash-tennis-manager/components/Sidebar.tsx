@@ -10,11 +10,13 @@ import {
   LogOut,
   UserCircle,
   BookOpen,
-  Sliders
+  Sliders,
+  Smartphone
 } from 'lucide-react';
 import { UserRole } from '../types';
 import packageInfo from '../package.json';
 import { formatPlayerName } from '../utils/formatters';
+import { triggerPWAInstall } from './PWAInstallPrompt';
 
 interface SidebarProps {
   role: UserRole;
@@ -112,7 +114,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ role, activeView, onNavigate, 
         )}
       </nav>
 
-      <div className="mt-auto pt-6 border-t border-white/10 space-y-4">
+      <div className="mt-auto pt-6 border-t border-white/10 space-y-3">
+        <button
+          onClick={triggerPWAInstall}
+          className="flex items-center gap-3 w-full p-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary hover:text-white transition-all text-xs font-bold border border-primary/25 shadow-sm group"
+        >
+          <Smartphone size={18} className="text-primary group-hover:scale-110 transition-transform" />
+          <span>Instalar App en Celular</span>
+        </button>
+
         <NavButton view="tutorials" icon={BookOpen} label="Tutoriales / Ayuda" />
 
         <button
