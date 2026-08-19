@@ -345,6 +345,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const groupMatches = matches.filter(m => m.round === 'Fase de Grupos' || m.group_number);
     const playoffMatches = matches.filter(m => m.round !== 'Fase de Grupos' && !m.group_number);
+    const displayedMatches = activeTab === 'groups' ? groupMatches : activeTab === 'playoffs' ? playoffMatches : matches;
 
     const isCommissionWaived = Boolean(
         tournament.is_commission_waived ?? 
