@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Helper utilities for player demographics, age calculation, and categories
  */
 
@@ -27,9 +27,9 @@ export function getAgeCategoryLabel(birthDate?: string | null, threshold: number
     const age = calculateAge(birthDate);
     if (age === null) return 'Adulto / Mayor';
     if (age <= threshold) {
-        return Menor ( años);
+        return `Menor (${age} años)`;
     }
-    return Mayor ( años);
+    return `Mayor (${age} años)`;
 }
 
 export function formatGender(gender?: string | null): string {
