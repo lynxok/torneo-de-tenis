@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { getCategoriesForInstitution } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
+import { formatPlayerName } from '../utils/formatters';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -764,7 +765,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                         >
                                                             <span className="flex items-center gap-2">
                                                                 <ArrowLeftRight size={13} className={isP1SelectedForSwap ? "text-amber-400" : "text-muted"} />
-                                                                {m.player1_name || 'A definir'}
+                                                                {formatPlayerName(m.player1_name) || 'A definir'}
                                                             </span>
                                                             <span className="text-[11px] text-amber-300/80 font-normal">
                                                                 {isP1SelectedForSwap ? '✓ Seleccionado' : 'Click para mover'}
@@ -772,7 +773,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                         </button>
                                                     ) : (
                                                         <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                            <span>{m.player1_name || 'A definir'}</span>
+                                                            <span>{formatPlayerName(m.player1_name) || 'A definir'}</span>
                                                             {m.winner_id === m.player1_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
                                                         </div>
                                                     )}
@@ -790,7 +791,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                         >
                                                             <span className="flex items-center gap-2">
                                                                 <ArrowLeftRight size={13} className={isP2SelectedForSwap ? "text-amber-400" : "text-muted"} />
-                                                                {m.player2_name || 'A definir'}
+                                                                {formatPlayerName(m.player2_name) || 'A definir'}
                                                             </span>
                                                             <span className="text-[11px] text-amber-300/80 font-normal">
                                                                 {isP2SelectedForSwap ? '✓ Seleccionado' : 'Click para mover'}
@@ -798,7 +799,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                         </button>
                                                     ) : (
                                                         <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                            <span>{m.player2_name || 'A definir'}</span>
+                                                            <span>{formatPlayerName(m.player2_name) || 'A definir'}</span>
                                                             {m.winner_id === m.player2_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
                                                         </div>
                                                     )}
@@ -858,7 +859,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 <div className="text-muted text-sm text-center py-6">Aún no hay jugadores inscritos.</div>
                             ) : (
                                 players.map((p, i) => {
-                                    const pDisplayName = p.name || p.player_name || 'Jugador';
+                                    const pDisplayName = formatPlayerName(p.name || p.player_name);
                                     const isPaid = p.payment_status === 'paid';
 
                                     return (
@@ -1026,7 +1027,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             }`}
                                                         >
                                                             <div className="min-w-0 flex-1">
-                                                                <div className="font-bold truncate">{p.name} {p.lastname || ''}</div>
+                                                                <div className="font-bold truncate">{formatPlayerName(p.name, p.lastname)}</div>
                                                                 <div className="text-[10px] text-muted truncate">
                                                                     {p.category ? `${p.category} Cat.` : 'Sin Cat.'} {p.institution ? `• ${p.institution}` : ''}
                                                                 </div>

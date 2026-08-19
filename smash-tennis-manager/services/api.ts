@@ -1,6 +1,7 @@
 
 import { supabase } from './supabaseClient';
 import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, StoryLayer } from '../types';
+import { formatPlayerName } from '../utils/formatters';
 
 export const api = {
     settings: {
@@ -414,23 +415,55 @@ export const api = {
 
             if (error) throw error;
 
-            // Fetch Players
+            // Fetch Players with auto-healed profile names
             const { data: players } = await supabase
                 .from('tournament_players')
                 .select('*')
-                .eq('tournament_id', id);
+                .eq('tournament_id', id)
+                .order('enrolled_at', { ascending: true });
 
-            // Fetch Matches
+            const playerIds = (players || []).map(p => p.player_id).filter(Boolean);
+            const profileMap = new Map();
+            if (playerIds.length > 0) {
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, name, lastname, category')
+                    .in('id', playerIds);
+                (profiles || []).forEach(p => profileMap.set(p.id, p));
+            }
+
+            const formattedPlayers = (players || []).map(p => {
+                const prof = profileMap.get(p.player_id);
+                const rawName = prof ? prof.name : (p.name || p.player_name);
+                const rawLastname = prof ? prof.lastname : '';
+                const formattedName = formatPlayerName(rawName, rawLastname);
+                const category = prof?.category || p.category || '4ta';
+
+                return {
+                    ...p,
+                    player_name: formattedName,
+                    name: formattedName,
+                    category
+                };
+            });
+
+            // Fetch Matches with formatted player names
             const { data: matches } = await supabase
                 .from('matches')
                 .select('*')
                 .eq('tournament_id', id)
                 .order('group_number', { ascending: true });
 
+            const formattedMatches = (matches || []).map(m => ({
+                ...m,
+                player1_name: formatPlayerName(m.player1_name),
+                player2_name: formatPlayerName(m.player2_name)
+            }));
+
             return {
                 ...tournament,
-                tournament_players: players || [],
-                matches: matches || []
+                tournament_players: formattedPlayers,
+                matches: formattedMatches
             };
         },
         async create(tournament: Partial<Tournament>) {
@@ -705,11 +738,24 @@ export const api = {
     },
     players: {
         async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number) {
+            let finalName = formatPlayerName(playerName);
+            let finalCat = category;
+
+            try {
+                const { data: prof } = await supabase.from('profiles').select('name, lastname, category').eq('id', playerId).single();
+                if (prof) {
+                    finalName = formatPlayerName(prof.name, prof.lastname);
+                    finalCat = prof.category || finalCat;
+                }
+            } catch (e) {
+                console.log("Fallback to raw playerName");
+            }
+
             const { error } = await supabase.from('tournament_players').insert({
                 tournament_id: tournamentId,
                 player_id: playerId,
-                player_name: playerName,
-                category,
+                player_name: finalName,
+                category: finalCat,
                 payment_status: 'pending',
                 fee_amount: fee || 0
             });
@@ -722,10 +768,23 @@ export const api = {
             fee?: number;
             paymentStatus?: 'pending' | 'paid';
         }) {
+            let finalName = formatPlayerName(params.playerName);
+            let finalCat = params.category;
+
+            if (params.playerId) {
+                try {
+                    const { data: prof } = await supabase.from('profiles').select('name, lastname, category').eq('id', params.playerId).single();
+                    if (prof) {
+                        finalName = formatPlayerName(prof.name, prof.lastname);
+                        finalCat = prof.category || finalCat;
+                    }
+                } catch (e) {}
+            }
+
             const insertData: any = {
                 tournament_id: tournamentId,
-                player_name: params.playerName.trim(),
-                category: params.category,
+                player_name: finalName,
+                category: finalCat,
                 payment_status: params.paymentStatus || 'pending',
                 fee_amount: params.fee || 0
             };
@@ -757,9 +816,26 @@ export const api = {
             return true;
         },
         async getByTournament(tournamentId: string) {
-            const { data, error } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
+            const { data: players, error } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
             if (error) throw error;
-            return data;
+
+            const playerIds = (players || []).map(p => p.player_id).filter(Boolean);
+            const profileMap = new Map();
+            if (playerIds.length > 0) {
+                const { data: profiles } = await supabase.from('profiles').select('id, name, lastname, category').in('id', playerIds);
+                (profiles || []).forEach(p => profileMap.set(p.id, p));
+            }
+
+            return (players || []).map(p => {
+                const prof = profileMap.get(p.player_id);
+                const rawName = prof ? prof.name : (p.name || p.player_name);
+                const rawLastname = prof ? prof.lastname : '';
+                return {
+                    ...p,
+                    player_name: formatPlayerName(rawName, rawLastname),
+                    category: prof?.category || p.category
+                };
+            });
         }
     },
     matches: {

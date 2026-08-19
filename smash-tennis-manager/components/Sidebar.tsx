@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { UserRole } from '../types';
 import packageInfo from '../package.json';
+import { formatPlayerName } from '../utils/formatters';
 
 interface SidebarProps {
   role: UserRole;
@@ -71,7 +72,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ role, activeView, onNavigate, 
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-bold text-white truncate">{userName}</div>
+            <div className="text-sm font-bold text-white truncate">{formatPlayerName(userName)}</div>
             <div className="text-[10px] text-muted capitalize">{role}</div>
           </div>
         </div>

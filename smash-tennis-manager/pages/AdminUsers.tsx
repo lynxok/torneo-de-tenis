@@ -4,6 +4,7 @@ import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
 import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard } from 'lucide-react';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
+import { formatPlayerName } from '../utils/formatters';
 
 interface AdminUsersProps {
     user?: UserProfile;
@@ -384,10 +385,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                     <div className="flex items-start justify-between gap-3 mb-4">
                                         <div className="flex items-center gap-3">
                                             <div className="w-12 h-12 rounded-2xl bg-slate-700 flex items-center justify-center font-bold text-lg text-white border border-white/10">
-                                                {u.name.charAt(0)}
+                                                {(u.name || 'U').charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="font-bold text-white text-base">{u.name} {u.lastname}</h4>
+                                                <h4 className="font-bold text-white text-base">{formatPlayerName(u.name, u.lastname)}</h4>
                                                 <p className="text-xs text-muted">{u.email}</p>
                                                 <div className="flex items-center gap-3 mt-1 text-xs text-slate-300">
                                                     {u.phone && <span className="flex items-center gap-1"><Phone size={12} className="text-green-400" /> {u.phone}</span>}
@@ -572,11 +573,11 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white border border-white/10">
-                                                    {u.name.charAt(0)}
+                                                    {(u.name || 'U').charAt(0).toUpperCase()}
                                                 </div>
                                                 <div>
                                                     <div className="font-bold text-white flex items-center gap-1.5">
-                                                        {u.name} {u.lastname}
+                                                        {formatPlayerName(u.name, u.lastname)}
                                                         {u.is_member && (
                                                             <span className="bg-primary/20 text-primary border border-primary/30 text-[10px] px-1.5 py-0.2 rounded font-bold uppercase">
                                                                 Socio {u.member_number ? `#${u.member_number}` : ''}

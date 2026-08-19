@@ -4,6 +4,7 @@ import { UserProfile } from '../types';
 import { api } from '../services/api';
 import { Medal, Trophy, Search, User, Info, X, Zap, Target, Star, ChevronDown, ChevronUp, History, TrendingUp, Calculator } from 'lucide-react';
 import { getEquivalentCategory, NUMERIC_CATEGORIES } from '../utils/categories';
+import { formatPlayerName } from '../utils/formatters';
 
 interface RankingsProps {
     user: UserProfile;
@@ -248,12 +249,12 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
                                                     ? 'bg-primary text-dark border-primary'
                                                     : 'bg-gradient-to-br from-slate-700 to-slate-600 text-white border-white/10'
                                                     }`}>
-                                                    {player.name.charAt(0)}
+                                                    {(player.name || 'U').charAt(0).toUpperCase()}
                                                 </div>
                                                 <div>
                                                     <div className={`font-bold transition-colors ${isCurrentUser ? 'text-primary' : 'text-white group-hover:text-primary'
                                                         }`}>
-                                                        {player.name} {player.lastname} {isCurrentUser && <span className="text-[10px] bg-primary text-dark px-1.5 py-0.5 rounded ml-2 uppercase">Tú</span>}
+                                                        {formatPlayerName(player.name, player.lastname)} {isCurrentUser && <span className="text-[10px] bg-primary text-dark px-1.5 py-0.5 rounded ml-2 uppercase">Tú</span>}
                                                     </div>
                                                 </div>
                                             </div>
@@ -394,7 +395,7 @@ const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, 
                             <Zap size={12} className="text-yellow-400" /> Desglose de Puntaje
                         </div>
                         <h3 className="text-2xl font-bold text-white mb-1">
-                            {player.name} {player.lastname}
+                            {formatPlayerName(player.name, player.lastname)}
                         </h3>
                         <p className="text-sm text-slate-300">
                             {isMe ? 'Así se compone tu puntaje actual.' : 'Detalle de puntos acumulados en base al historial.'}

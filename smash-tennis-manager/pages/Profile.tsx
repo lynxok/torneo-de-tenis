@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import ImageCropper from '../components/ImageCropper';
 import imageCompression from 'browser-image-compression';
+import { formatPlayerName } from '../utils/formatters';
 
 interface ProfileProps {
     user: UserProfile;
@@ -285,7 +286,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
 
                         {/* Basic Info (Name & Category) - Positioned next to avatar */}
                         <div className="mb-4 pb-1 hidden md:block animate-fade-up">
-                            <h1 className="text-4xl font-black text-white tracking-tight drop-shadow-lg">{user.name} {user.lastname}</h1>
+                            <h1 className="text-4xl font-black text-white tracking-tight drop-shadow-lg">{formatPlayerName(user.name, user.lastname)}</h1>
                             <div className="flex items-center gap-3 mt-2 text-slate-300">
                                 <span className="flex items-center gap-1.5 bg-white/10 px-3 py-1 rounded-full text-sm font-bold backdrop-blur-md border border-white/10">
                                     <Award size={14} className="text-primary" />
@@ -307,7 +308,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
 
                     {/* Mobile Name Display (visible only on small screens) */}
                     <div className="md:hidden space-y-2 mb-6 text-center">
-                        <h1 className="text-3xl font-bold text-white">{user.name} {user.lastname}</h1>
+                        <h1 className="text-3xl font-bold text-white">{formatPlayerName(user.name, user.lastname)}</h1>
                         <div className="flex flex-wrap justify-center items-center gap-2">
                             <span className="bg-primary/10 text-primary border border-primary/20 px-3 py-1 rounded-full text-xs font-bold uppercase">
                                 Categoría {user.category || 'N/A'}
