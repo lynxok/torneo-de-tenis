@@ -44,16 +44,16 @@ export interface RankedPlayer extends UserProfile {
 
 export function normalizeCategoryKey(cat?: string | null): string {
     if (!cat) return 'Sin Asignar';
-    const c = cat.toLowerCase().trim();
-    if (['1ra', 'primera', '1', '1ª', 'a1', 'a'].some(v => c === v || c.includes(v))) return '1ra';
-    if (['2da', 'segunda', '2', '2ª', 'a2'].some(v => c === v || c.includes(v))) return '2da';
-    if (['3ra', 'tercera', '3', '3ª', 'b1', 'b'].some(v => c === v || c.includes(v))) return '3ra';
-    if (['4ta', 'cuarta', '4', '4ª', 'b2'].some(v => c === v || c.includes(v))) return '4ta';
-    if (['5ta', 'quinta', '5', '5ª', 'c1', 'c'].some(v => c === v || c.includes(v))) return '5ta';
-    if (['6ta', 'sexta', '6', '6ª', 'c2'].some(v => c === v || c.includes(v))) return '6ta';
-    if (['7ma', 'septima', '7', '7ª', 'd1', 'd2', 'd'].some(v => c === v || c.includes(v))) return '7ma';
-    if (['open', 'libre'].includes(c)) return 'Open';
-    return getEquivalentCategory(cat, 'numeric') || cat;
+    const clean = cat.toLowerCase().replace(/categor[ií]a|divisi[oó]n/gi, '').trim();
+    if (['1ra', 'primera', '1', '1ª', 'a1', 'a'].includes(clean)) return '1ra';
+    if (['2da', 'segunda', '2', '2ª', 'a2'].includes(clean)) return '2da';
+    if (['3ra', 'tercera', '3', '3ª', 'b1', 'b'].includes(clean)) return '3ra';
+    if (['4ta', 'cuarta', '4', '4ª', 'b2'].includes(clean)) return '4ta';
+    if (['5ta', 'quinta', '5', '5ª', 'c1', 'c'].includes(clean)) return '5ta';
+    if (['6ta', 'sexta', '6', '6ª', 'c2'].includes(clean)) return '6ta';
+    if (['7ma', 'septima', '7', '7ª', 'd1', 'd2', 'd'].includes(clean)) return '7ma';
+    if (['open', 'libre', 'abierta'].includes(clean)) return 'Open';
+    return getEquivalentCategory(cat, 'numeric') || cat.trim();
 }
 
 /**

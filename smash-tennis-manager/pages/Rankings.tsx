@@ -3,42 +3,16 @@ import React, { useEffect, useState } from 'react';
 import { UserProfile } from '../types';
 import { api } from '../services/api';
 import { Medal, Trophy, Search, User, Info, X, Zap, Target, Star, ChevronDown, ChevronUp, History, TrendingUp, Calculator } from 'lucide-react';
-import { getEquivalentCategory, NUMERIC_CATEGORIES } from '../utils/categories';
+import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
+import { calculatePointsDetails, computeRankings, normalizeCategoryKey, RankedPlayer } from '../utils/ranking';
 
 interface RankingsProps {
     user: UserProfile;
 }
 
-// Helper to simulate point calculation based on profile stats
-const calculatePointsDetails = (player: UserProfile) => {
-    const wins = player.matches_won || 0;
-    const tourneys = player.tournaments_won || 0;
-
-    // Logic: 
-    // 1000 pts per Tournament Win
-    // 100 pts per Match Win
-    // We simulate "Matches Played" as Wins * 1.5 (assuming some losses) -> 20pts per presentation
-    const estimatedLosses = Math.floor(wins * 0.5);
-
-    const pointsFromTournaments = tourneys * 1000;
-    const pointsFromWins = wins * 100;
-    const pointsFromParticipation = estimatedLosses * 20;
-
-    const total = pointsFromTournaments + pointsFromWins + pointsFromParticipation;
-
-    return {
-        total,
-        breakdown: {
-            tournaments: { count: tourneys, points: pointsFromTournaments },
-            wins: { count: wins, points: pointsFromWins },
-            participation: { count: estimatedLosses, points: pointsFromParticipation }
-        }
-    };
-};
-
 export const Rankings: React.FC<RankingsProps> = ({ user }) => {
-    const [players, setPlayers] = useState<UserProfile[]>([]);
+    const [players, setPlayers] = useState<RankedPlayer[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
     const [activeCategory, setActiveCategory] = useState('Global');
@@ -50,41 +24,10 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
 
     const categories = ['Global', ...NUMERIC_CATEGORIES];
 
-    const normalizeCategory = (cat?: string): string => {
-        if (!cat) return 'Unassigned';
-        const c = cat.toLowerCase().trim();
-        // Standard variations mapping
-        if (['1ra', 'primera', '1', '1ª', 'a1', 'a'].some(v => c === v || c.includes(v))) return '1ra';
-        if (['2da', 'segunda', '2', '2ª', 'a2'].some(v => c === v || c.includes(v))) return '2da';
-        if (['3ra', 'tercera', '3', '3ª', 'b1', 'b'].some(v => c === v || c.includes(v))) return '3ra';
-        if (['4ta', 'cuarta', '4', '4ª', 'b2'].some(v => c === v || c.includes(v))) return '4ta';
-        if (['5ta', 'quinta', '5', '5ª', 'c1', 'c'].some(v => c === v || c.includes(v))) return '5ta';
-        if (['6ta', 'sexta', '6', '6ª', 'c2'].some(v => c === v || c.includes(v))) return '6ta';
-        if (['7ma', 'septima', '7', '7ª', 'd1', 'd2', 'd'].some(v => c === v || c.includes(v))) return '7ma';
-        if (['open', 'libre'].includes(c)) return 'Open';
-
-        return getEquivalentCategory(cat, 'numeric') || cat; // Fallback with equivalence helper
-    };
-
     useEffect(() => {
         api.auth.getAllProfiles().then(data => {
-            // Calculate points dynamically for sorting
-            const playersWithPoints = data.map(p => {
-                const stats = calculatePointsDetails(p);
-                return { ...p, calculated_points: stats.total };
-            });
-
-            const sorted = playersWithPoints.sort((a, b) => b.calculated_points - a.calculated_points);
-            setPlayers(sorted);
-
-            // Auto-select user category if not global default preference
-            if (user.category && activeCategory === 'Global') {
-                const userCatNormalized = normalizeCategory(user.category);
-                if (categories.includes(userCatNormalized)) {
-                    // Optional: enable auto-switch
-                    // setActiveCategory(userCatNormalized); 
-                }
-            }
+            const ranked = computeRankings(data);
+            setPlayers(ranked);
         }).finally(() => setLoading(false));
     }, []);
 
@@ -94,8 +37,8 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
             (p.lastname || '').toLowerCase().includes(filter.toLowerCase());
 
         // 2. Category Filter
-        const playerCat = normalizeCategory(p.category);
-        const matchesCategory = activeCategory === 'Global' ? true : playerCat === activeCategory;
+        const playerCat = normalizeCategoryKey(p.category);
+        const matchesCategory = activeCategory === 'Global' ? true : playerCat.toLowerCase() === activeCategory.toLowerCase();
 
         return matchesSearch && matchesCategory;
     });
