@@ -346,6 +346,27 @@ export const api = {
                 return data;
             }
         },
+        async deleteUser(userId: string) {
+            // Delete from profiles
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .delete()
+                .eq('id', userId);
+
+            if (profileError) {
+                console.error("Error deleting from profiles:", profileError);
+                throw profileError;
+            }
+
+            // Also attempt cleanup in auth if RPC is available
+            try {
+                await supabase.rpc('admin_delete_user', { target_user_id: userId });
+            } catch (e) {
+                // Non-blocking if RPC does not exist
+            }
+
+            return { success: true };
+        },
         async signIn(email: string, password: string) {
             return await supabase.auth.signInWithPassword({ email, password });
         },

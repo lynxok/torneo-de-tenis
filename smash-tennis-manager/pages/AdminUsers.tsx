@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
-import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar, Trophy, Medal, LayoutList, Layers } from 'lucide-react';
+import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar, Trophy, Medal, LayoutList, Layers, Trash2 } from 'lucide-react';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
@@ -20,6 +20,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
     const [activeTab, setActiveTab] = useState<'members' | 'pending'>('members');
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [viewGrouping, setViewGrouping] = useState<boolean>(true);
+    const [deletingUserId, setDeletingUserId] = useState<string | null>(null);
 
     // Quick Approval State
     const [approvingUserId, setApprovingUserId] = useState<string | null>(null);
@@ -229,6 +230,44 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             loadUsers();
         } catch (e: any) {
             alert('Error: ' + e.message);
+        }
+    };
+
+    const handleDeleteUser = async (targetUser: UserProfile) => {
+        if (!isSuperAdmin) {
+            alert('Solo los Super Administradores tienen permisos para eliminar usuarios.');
+            return;
+        }
+
+        if (targetUser.id === user?.id) {
+            alert('No puedes eliminar tu propia cuenta de Super Administrador.');
+            return;
+        }
+
+        const fullName = formatPlayerName(targetUser.name, targetUser.lastname);
+        const confirmed = confirm(
+            `⚠️ ¿CONFIRMAR ELIMINACIÓN PERMANENTE?\n\n` +
+            `Vas a eliminar permanentemente al usuario: ${fullName}\n` +
+            `Email: ${targetUser.email}\n` +
+            `Rol: ${targetUser.role}\n\n` +
+            `Esta acción borrará el registro de la base de datos de forma irreversible.\n¿Deseas continuar?`
+        );
+
+        if (!confirmed) return;
+
+        try {
+            setDeletingUserId(targetUser.id);
+            await api.auth.deleteUser(targetUser.id);
+            alert(`El usuario ${fullName} ha sido eliminado correctamente.`);
+            if (showEditModal && editingUser?.id === targetUser.id) {
+                setShowEditModal(false);
+            }
+            loadUsers();
+        } catch (error: any) {
+            console.error("Error al eliminar usuario:", error);
+            alert('Error al eliminar usuario: ' + (error.message || error));
+        } finally {
+            setDeletingUserId(null);
         }
     };
 
@@ -468,6 +507,18 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                         >
                             <Edit2 size={16} />
                         </button>
+
+                        {/* Delete User Button (Super Admin Only) */}
+                        {isSuperAdmin && (
+                            <button
+                                onClick={() => handleDeleteUser(u)}
+                                disabled={u.id === user?.id || deletingUserId === u.id}
+                                className="p-2 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all border border-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed"
+                                title={u.id === user?.id ? "No puedes eliminar tu propia cuenta" : "Eliminar usuario permanentemente"}
+                            >
+                                {deletingUserId === u.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                            </button>
+                        )}
                     </div>
                 </td>
             </tr>
@@ -1082,21 +1133,36 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                 </div>
                             )}
 
-                            <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowEditModal(false)}
-                                    className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={updating}
-                                    className="px-6 py-2 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
-                                >
-                                    {updating ? <><Loader2 className="animate-spin" size={18} /> Guardando...</> : <><Save size={18} /> Guardar Cambios</>}
-                                </button>
+                            <div className="pt-4 flex justify-between items-center border-t border-white/10">
+                                {isSuperAdmin && editingUser && editingUser.id !== user?.id ? (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleDeleteUser(editingUser)}
+                                        disabled={deletingUserId === editingUser.id}
+                                        className="px-3.5 py-2 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/20 font-bold text-xs flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                        title="Eliminar permanentemente este usuario"
+                                    >
+                                        {deletingUserId === editingUser.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                                        Eliminar Usuario
+                                    </button>
+                                ) : <div />}
+
+                                <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowEditModal(false)}
+                                        className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={updating}
+                                        className="px-6 py-2 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl flex items-center gap-2 transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                                    >
+                                        {updating ? <><Loader2 className="animate-spin" size={18} /> Guardando...</> : <><Save size={18} /> Guardar Cambios</>}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>
