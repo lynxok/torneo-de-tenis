@@ -715,7 +715,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                     Cancelar
                                                 </button>
                                                 <button
-                                                    onClick={() => handleConfirmApproval(u.id)}
+                                                    onClick={() => handleQuickApprove(u)}
                                                     className="px-4 py-1.5 bg-green-500 hover:bg-green-600 text-dark text-xs font-bold rounded-lg flex items-center gap-1 shadow-lg shadow-green-500/20"
                                                     disabled={processingApproval}
                                                 >
