@@ -1001,6 +1001,102 @@ export const api = {
             if (error) throw error;
             return true;
         },
+        async replacePlayer(tournamentId: string, oldPlayer: { id: string; player_id?: string; player_name?: string; name?: string }, newParams: {
+            playerId?: string;
+            playerName: string;
+            category: string;
+            partnerId?: string;
+            partnerName?: string;
+        }) {
+            let finalName = formatPlayerName(newParams.playerName);
+            let finalCat = newParams.category;
+            let finalPartnerName = newParams.partnerName ? formatPlayerName(newParams.partnerName) : undefined;
+
+            if (newParams.playerId) {
+                try {
+                    const { data: prof } = await supabase.from('profiles').select('name, lastname, category').eq('id', newParams.playerId).single();
+                    if (prof) {
+                        finalName = formatPlayerName(prof.name, prof.lastname);
+                        finalCat = prof.category || finalCat;
+                    }
+                } catch (e) {}
+            }
+
+            if (newParams.partnerId) {
+                try {
+                    const { data: pProf } = await supabase.from('profiles').select('name, lastname').eq('id', newParams.partnerId).single();
+                    if (pProf) {
+                        finalPartnerName = formatPlayerName(pProf.name, pProf.lastname);
+                    }
+                } catch (e) {}
+            }
+
+            const teamName = finalPartnerName ? `${finalName} / ${finalPartnerName}` : finalName;
+
+            // 1. Update tournament_players row
+            const updatePayload: any = {
+                player_id: newParams.playerId || null,
+                player_name: finalName,
+                category: finalCat,
+                partner_id: newParams.partnerId || null,
+                partner_name: finalPartnerName || null,
+                team_name: teamName,
+                is_doubles_pair: Boolean(newParams.partnerId || newParams.partnerName)
+            };
+
+            const { error: tpError } = await supabase
+                .from('tournament_players')
+                .update(updatePayload)
+                .eq('id', oldPlayer.id);
+
+            if (tpError) throw tpError;
+
+            // 2. Update matches of this tournament where old player is player1 or player2
+            const oldIds = [oldPlayer.player_id, oldPlayer.id].filter(Boolean) as string[];
+            const oldRawName = oldPlayer.player_name || oldPlayer.name;
+
+            const { data: matches, error: mError } = await supabase
+                .from('matches')
+                .select('*')
+                .eq('tournament_id', tournamentId);
+
+            if (!mError && matches && matches.length > 0) {
+                const newPlayerId = newParams.playerId || oldPlayer.id;
+
+                for (const m of matches) {
+                    const updates: any = {};
+
+                    const isP1 = (m.player1_id && oldIds.includes(m.player1_id)) || (oldRawName && m.player1_name === oldRawName);
+                    const isP2 = (m.player2_id && oldIds.includes(m.player2_id)) || (oldRawName && m.player2_name === oldRawName);
+
+                    if (isP1) {
+                        updates.player1_id = newPlayerId;
+                        updates.player1_name = teamName;
+                        if (newParams.partnerId || finalPartnerName) {
+                            updates.player1_partner_id = newParams.partnerId || null;
+                            updates.player1_partner_name = finalPartnerName || null;
+                            updates.team1_name = teamName;
+                        }
+                    }
+
+                    if (isP2) {
+                        updates.player2_id = newPlayerId;
+                        updates.player2_name = teamName;
+                        if (newParams.partnerId || finalPartnerName) {
+                            updates.player2_partner_id = newParams.partnerId || null;
+                            updates.player2_partner_name = finalPartnerName || null;
+                            updates.team2_name = teamName;
+                        }
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        await supabase.from('matches').update(updates).eq('id', m.id);
+                    }
+                }
+            }
+
+            return true;
+        },
         async getByTournament(tournamentId: string) {
             const { data: players, error } = await supabase.from('tournament_players').select('*').eq('tournament_id', tournamentId);
             if (error) throw error;
