@@ -1780,26 +1780,26 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                                                 {/* Action Buttons for Admin */}
                                                 {isClubAdmin && (
-                                                    <div className="flex items-center gap-1">
+                                                    <div className="flex items-center gap-1.5 ml-1">
                                                         <button
                                                             onClick={() => handleOpenReplaceModal(p)}
-                                                            className="p-1 text-slate-400 hover:text-primary hover:bg-primary/10 rounded-lg transition-colors"
+                                                            className="p-1.5 bg-primary/15 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
                                                             title="Sustituir / Reemplazar jugador en el torneo"
                                                         >
-                                                            <RefreshCw size={13} />
+                                                            <RefreshCw size={14} />
                                                         </button>
 
                                                         {matches.length === 0 && (
                                                             <button
                                                                 onClick={() => handleUnenrollPlayer(p)}
                                                                 disabled={deletingPlayerId === p.id}
-                                                                className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
+                                                                className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
                                                                 title="Dar de baja / Quitar inscripto"
                                                             >
                                                                 {deletingPlayerId === p.id ? (
-                                                                    <Loader2 size={13} className="animate-spin text-red-400" />
+                                                                    <Loader2 size={14} className="animate-spin text-red-400" />
                                                                 ) : (
-                                                                    <Trash2 size={13} />
+                                                                    <Trash2 size={14} />
                                                                 )}
                                                             </button>
                                                         )}
