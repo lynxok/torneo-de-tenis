@@ -918,14 +918,12 @@ export const api = {
             const { error } = await supabase.from('tournament_players').insert({
                 tournament_id: tournamentId,
                 player_id: playerId,
-                player_name: finalName,
+                player_name: teamName,
+                name: teamName,
                 category: finalCat,
                 payment_status: 'pending',
                 fee_amount: fee || 0,
-                partner_id: partnerId || null,
-                partner_name: finalPartnerName || null,
-                team_name: teamName,
-                is_doubles_pair: Boolean(partnerId || partnerName)
+                paid: false
             });
             if (error) throw error;
         },
@@ -965,14 +963,12 @@ export const api = {
 
             const insertData: any = {
                 tournament_id: tournamentId,
-                player_name: finalName,
+                player_name: teamName,
+                name: teamName,
                 category: finalCat,
                 payment_status: params.paymentStatus || 'pending',
                 fee_amount: params.fee || 0,
-                partner_id: params.partnerId || null,
-                partner_name: finalPartnerName || null,
-                team_name: teamName,
-                is_doubles_pair: Boolean(params.partnerId || params.partnerName)
+                paid: params.paymentStatus === 'paid'
             };
             if (params.playerId) {
                 insertData.player_id = params.playerId;
@@ -1036,12 +1032,9 @@ export const api = {
             // 1. Update tournament_players row
             const updatePayload: any = {
                 player_id: newParams.playerId || null,
-                player_name: finalName,
-                category: finalCat,
-                partner_id: newParams.partnerId || null,
-                partner_name: finalPartnerName || null,
-                team_name: teamName,
-                is_doubles_pair: Boolean(newParams.partnerId || newParams.partnerName)
+                player_name: teamName,
+                name: teamName,
+                category: finalCat
             };
 
             const { error: tpError } = await supabase
