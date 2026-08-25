@@ -176,7 +176,7 @@ export const api = {
                     .from('matches')
                     .select('id', { count: 'exact', head: true })
                     .eq('is_played', true)
-                    .or(`winner_id.eq.${userId},winner_partner_id.eq.${userId}`);
+                    .eq('winner_id', userId);
                 if (realWins !== null && realWins !== undefined) {
                     data.matches_won = realWins;
                 }
@@ -187,29 +187,30 @@ export const api = {
             return { ...data, institution: data.institutions?.name } as UserProfile;
         },
         async getAllProfiles(page = 1, pageSize = 50) {
-            const [
-                { data, error },
-                { data: wonMatches }
-            ] = await Promise.all([
-                supabase
-                    .from('profiles')
-                    .select('*, institutions:institutions(id, name)', { count: 'exact' })
-                    .order('created_at', { ascending: false })
-                    .range((page - 1) * pageSize, page * pageSize - 1),
-                supabase
+            let wonMatchesData: any[] = [];
+            try {
+                const { data: wm } = await supabase
                     .from('matches')
-                    .select('winner_id, winner_partner_id')
+                    .select('winner_id')
                     .eq('is_played', true)
-                    .not('winner_id', 'is', null)
-            ]);
+                    .not('winner_id', 'is', null);
+                if (wm) wonMatchesData = wm;
+            } catch (e) {
+                console.warn("Could not query won matches directly:", e);
+            }
+
+            const { data, error } = await supabase
+                .from('profiles')
+                .select('*, institutions:institutions(id, name)', { count: 'exact' })
+                .order('created_at', { ascending: false })
+                .range((page - 1) * pageSize, page * pageSize - 1);
 
             if (error) throw error;
 
             // Map real won match counts per player
             const winCountMap: Record<string, number> = {};
-            (wonMatches || []).forEach((m: any) => {
+            wonMatchesData.forEach((m: any) => {
                 if (m.winner_id) winCountMap[m.winner_id] = (winCountMap[m.winner_id] || 0) + 1;
-                if (m.winner_partner_id) winCountMap[m.winner_partner_id] = (winCountMap[m.winner_partner_id] || 0) + 1;
             });
 
             // Enrich with current user metadata if available
@@ -231,7 +232,7 @@ export const api = {
                 .filter((p: any) => p.role !== 'inactive' && p.member_status !== 'deleted' && !p.name?.includes('[Usuario Eliminado]') && !p.name?.includes('[Eliminado]'))
                 .map((p: any) => ({
                     ...p,
-                    matches_won: winCountMap[p.id] !== undefined ? winCountMap[p.id] : (p.matches_won || 0),
+                    matches_won: winCountMap[p.id] || 0,
                     gender: p.gender || 'masculino',
                     institution: p.institutions?.name || null
                 })) as UserProfile[];
