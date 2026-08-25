@@ -1688,8 +1688,79 @@ export const api = {
                 return [];
             }
 
-            const allBookings = (data || []) as Booking[];
-            return allBookings.filter(b => {
+            const rawBookings = (data || []) as Booking[];
+
+            // Collect user IDs to resolve profiles
+            const userIds = new Set<string>();
+            rawBookings.forEach(b => {
+                if (b.user_id) userIds.add(b.user_id);
+                const parts = b.participants || (b.extras as any)?.participants;
+                if (Array.isArray(parts)) {
+                    parts.forEach((p: any) => {
+                        if (p.user_id) userIds.add(p.user_id);
+                    });
+                }
+            });
+
+            const profileMap = new Map<string, any>();
+            if (userIds.size > 0) {
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, name, lastname, avatar_url, profile_picture_url, category')
+                    .in('id', Array.from(userIds));
+                (profiles || []).forEach(p => profileMap.set(p.id, p));
+            }
+
+            const enriched = rawBookings.map(b => {
+                let parts: BookingParticipant[] = b.participants || (b.extras as any)?.participants || [];
+                const creatorProf = profileMap.get(b.user_id);
+                const creatorFormatted = creatorProf ? formatPlayerName(creatorProf.name, creatorProf.lastname) : undefined;
+
+                if (parts && parts.length > 0) {
+                    parts = parts.map(p => {
+                        if (p.user_id && profileMap.has(p.user_id)) {
+                            const prof = profileMap.get(p.user_id);
+                            return {
+                                ...p,
+                                name: formatPlayerName(prof.name, prof.lastname),
+                                lastname: prof.lastname || p.lastname,
+                                avatar_url: prof.profile_picture_url || prof.avatar_url || p.avatar_url
+                            };
+                        }
+                        return { ...p, name: formatPlayerName(p.name, p.lastname) };
+                    });
+                } else if (creatorProf) {
+                    parts = [{
+                        user_id: creatorProf.id,
+                        name: creatorFormatted || 'Jugador',
+                        lastname: creatorProf.lastname,
+                        is_registered: true,
+                        avatar_url: creatorProf.profile_picture_url || creatorProf.avatar_url
+                    }];
+                }
+
+                const genericTitles = ['reserva de cancha', 'alquiler', 'guest', 'turno de cancha', 'turno', ''];
+                let resolvedTitle = b.title;
+                const isGeneric = !resolvedTitle || genericTitles.includes(resolvedTitle.trim().toLowerCase());
+
+                if (isGeneric) {
+                    if (parts && parts.length > 0) {
+                        resolvedTitle = parts.map(p => p.name).join(' vs ');
+                    } else if (creatorFormatted) {
+                        resolvedTitle = creatorFormatted;
+                    }
+                }
+
+                return {
+                    ...b,
+                    participants: parts,
+                    user_name: creatorFormatted,
+                    title: resolvedTitle,
+                    profiles: creatorProf
+                };
+            });
+
+            return enriched.filter(b => {
                 if (b.deleted_by_user) return false;
                 if (b.user_id === userId) return true;
                 if (b.participants && Array.isArray(b.participants)) {
@@ -1706,7 +1777,79 @@ export const api = {
                 .eq('date', date);
 
             if (error) throw error;
-            return (data || []) as Booking[];
+            const rawBookings = (data || []) as Booking[];
+
+            // Collect all user IDs to resolve profiles (creator and participants)
+            const userIds = new Set<string>();
+            rawBookings.forEach(b => {
+                if (b.user_id) userIds.add(b.user_id);
+                const parts = b.participants || (b.extras as any)?.participants;
+                if (Array.isArray(parts)) {
+                    parts.forEach((p: any) => {
+                        if (p.user_id) userIds.add(p.user_id);
+                    });
+                }
+            });
+
+            const profileMap = new Map<string, any>();
+            if (userIds.size > 0) {
+                const { data: profiles } = await supabase
+                    .from('profiles')
+                    .select('id, name, lastname, avatar_url, profile_picture_url, category')
+                    .in('id', Array.from(userIds));
+                (profiles || []).forEach(p => profileMap.set(p.id, p));
+            }
+
+            return rawBookings.map(b => {
+                let parts: BookingParticipant[] = b.participants || (b.extras as any)?.participants || [];
+                const creatorProf = profileMap.get(b.user_id);
+                const creatorFormatted = creatorProf ? formatPlayerName(creatorProf.name, creatorProf.lastname) : undefined;
+
+                if (parts && parts.length > 0) {
+                    parts = parts.map(p => {
+                        if (p.user_id && profileMap.has(p.user_id)) {
+                            const prof = profileMap.get(p.user_id);
+                            return {
+                                ...p,
+                                name: formatPlayerName(prof.name, prof.lastname),
+                                lastname: prof.lastname || p.lastname,
+                                avatar_url: prof.profile_picture_url || prof.avatar_url || p.avatar_url
+                            };
+                        }
+                        return { ...p, name: formatPlayerName(p.name, p.lastname) };
+                    });
+                } else if (creatorProf) {
+                    parts = [{
+                        user_id: creatorProf.id,
+                        name: creatorFormatted || 'Jugador',
+                        lastname: creatorProf.lastname,
+                        is_registered: true,
+                        avatar_url: creatorProf.profile_picture_url || creatorProf.avatar_url
+                    }];
+                }
+
+                const genericTitles = ['reserva de cancha', 'alquiler', 'guest', 'turno de cancha', 'turno', ''];
+                let resolvedTitle = b.title;
+                const isGeneric = !resolvedTitle || genericTitles.includes(resolvedTitle.trim().toLowerCase());
+
+                if (isGeneric) {
+                    if (parts && parts.length > 0) {
+                        resolvedTitle = parts.map(p => p.name).join(' vs ');
+                    } else if (creatorFormatted) {
+                        resolvedTitle = creatorFormatted;
+                    } else {
+                        resolvedTitle = b.booking_type === 'class' ? 'Clase' : b.booking_type === 'tournament' ? 'Torneo' : b.booking_type === 'maintenance' ? 'Mantenimiento' : 'Reserva';
+                    }
+                }
+
+                return {
+                    ...b,
+                    participants: parts,
+                    user_name: creatorFormatted,
+                    title: resolvedTitle,
+                    profiles: creatorProf
+                };
+            }) as Booking[];
         },
         async create(booking: Partial<Booking>, creatorProfile?: UserProfile | null) {
             let data: any;

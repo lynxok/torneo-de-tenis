@@ -358,6 +358,8 @@ export interface Booking {
   payment_status?: string;
   institutions?: { name: string };
   participants?: BookingParticipant[];
+  user_name?: string;
+  profiles?: { id: string; name: string; lastname?: string; avatar_url?: string; profile_picture_url?: string };
   deleted_by_user?: boolean;
   
   // Tournament specific

@@ -855,6 +855,18 @@ const PlayerNewBookingModal = ({
                 const paymentStatus = paymentMethod === 'mp' ? 'completed' : 'pending';
                 const bookingStatus = paymentMethod === 'mp' ? 'confirmed' : 'pending';
 
+                const creatorFormattedName = formatPlayerName(user.name, user.lastname);
+                const finalParticipants = participants.length > 0 ? participants : [{
+                    user_id: user.id,
+                    name: creatorFormattedName,
+                    lastname: user.lastname,
+                    is_registered: true,
+                    avatar_url: user.profile_picture_url || (user as any).avatar_url
+                }];
+                const resolvedTitle = finalParticipants.length > 1 
+                    ? finalParticipants.map(p => p.name).join(' vs ') 
+                    : finalParticipants[0]?.name || creatorFormattedName;
+
                 const bookingData = {
                     user_id: user.id,
                     institution_id: selectedInstId,
@@ -864,11 +876,11 @@ const PlayerNewBookingModal = ({
                     court_name: selectedSlot.court_name,
                     status: bookingStatus as any, 
                     booking_type: 'guest' as const,
-                    title: participants.length > 1 ? participants.map(p => p.name).join(' vs ') : 'Reserva de Cancha',
+                    title: resolvedTitle,
                     total_price: totalPrice,
-                    extras: extras,
+                    extras: { ...(extras || {}), participants: finalParticipants },
                     payment_status: paymentStatus,
-                    participants: participants
+                    participants: finalParticipants
                 };
 
                 if (isReschedule && existingBooking) {
@@ -1401,13 +1413,23 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
         }
         const status: Booking['status'] = (type === 'maintenance' || type === 'class') ? 'blocked' : 'confirmed';
         
-        let baseTitle = bookingTitle;
+        let baseTitle = bookingTitle.trim();
+        const finalParticipants = [...participants];
         if (!baseTitle) {
-            if (participants.length > 0) {
-                baseTitle = participants.map(p => p.name).join(' vs ');
+            if (finalParticipants.length > 0) {
+                baseTitle = finalParticipants.map(p => p.name).join(' vs ');
             } else {
-                baseTitle = type === 'maintenance' ? 'Mantenimiento' : type === 'tournament' ? 'Partido Torneo' : type === 'class' ? 'Clase / Escuela' : 'Alquiler';
+                baseTitle = type === 'maintenance' ? 'Mantenimiento' : type === 'tournament' ? 'Partido Torneo' : type === 'class' ? 'Clase / Escuela' : (formatPlayerName(user.name, user.lastname) || 'Alquiler');
             }
+        }
+
+        if (finalParticipants.length === 0 && type === 'guest') {
+            finalParticipants.push({
+                user_id: user.id,
+                name: formatPlayerName(user.name, user.lastname),
+                lastname: user.lastname,
+                is_registered: true
+            });
         }
 
         let duration = 90; 
@@ -1428,8 +1450,8 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
             title: baseTitle,
             total_price: price,
             payment_status: type === 'guest' ? 'pending' : 'n/a',
-            extras: type === 'guest' ? extras : undefined,
-            participants: participants
+            extras: type === 'guest' ? { ...(extras || {}), participants: finalParticipants } : undefined,
+            participants: finalParticipants
         };
 
         try {
@@ -1596,36 +1618,74 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                         const booking = getBookingForSlot(time, court);
                                         const isStart = booking?.start_time === time;
                                         const visualType = booking ? getBookingType(booking) : 'guest';
+
+                                        // Determine player names to display
+                                        let playerNamesList: string[] = [];
+                                        if (booking?.participants && booking.participants.length > 0) {
+                                            playerNamesList = booking.participants.map(p => p.name);
+                                        } else if (booking?.user_name) {
+                                            playerNamesList = [booking.user_name];
+                                        } else if (booking?.title && !['reserva de cancha', 'alquiler', 'guest', 'turno de cancha', 'turno'].includes(booking.title.trim().toLowerCase())) {
+                                            playerNamesList = [booking.title];
+                                        } else if (booking?.title) {
+                                            playerNamesList = [booking.title];
+                                        }
+
+                                        const mainDisplayName = playerNamesList.length > 0 
+                                            ? playerNamesList.join(' vs ') 
+                                            : (visualType === 'maintenance' ? 'Mantenimiento' : visualType === 'class' ? 'Clase' : 'Reserva');
+
                                         return (
-                                            <div key={court} className="p-0.5 border-r border-white/5 last:border-0 min-h-[44px] relative">
+                                            <div key={court} className="p-0.5 border-r border-white/5 last:border-0 min-h-[46px] relative">
                                                 {booking ? (
                                                     <div 
                                                         onClick={() => handleSlotClick(time, court, booking)} 
-                                                        className={`h-full w-full rounded flex flex-col justify-center cursor-pointer transition-all px-2 py-1 relative z-0 overflow-hidden ${
-                                                            visualType === 'tournament' ? 'bg-amber-600/60 border-l-2 border-amber-400 hover:bg-amber-600/75' : 
-                                                            visualType === 'class' ? 'bg-indigo-600/60 border-l-2 border-indigo-400 hover:bg-indigo-600/75' : 
-                                                            visualType === 'maintenance' ? 'bg-slate-700/80 border-l-2 border-slate-500 hover:bg-slate-700' : 
-                                                            'bg-primary/20 border-l-2 border-primary hover:bg-primary/30'
+                                                        title={`Reserva: ${mainDisplayName} (${booking.start_time} - ${booking.end_time}) • ${court}`}
+                                                        className={`h-full w-full rounded-lg flex flex-col justify-center cursor-pointer transition-all px-2.5 py-1 relative z-0 overflow-hidden shadow-sm ${
+                                                            visualType === 'tournament' ? 'bg-amber-600/70 border-l-4 border-amber-400 hover:bg-amber-600/90 text-white' : 
+                                                            visualType === 'class' ? 'bg-indigo-600/70 border-l-4 border-indigo-400 hover:bg-indigo-600/90 text-white' : 
+                                                            visualType === 'maintenance' ? 'bg-slate-700/85 border-l-4 border-slate-400 hover:bg-slate-700 text-slate-200' : 
+                                                            'bg-primary/25 border-l-4 border-primary hover:bg-primary/35 text-white'
                                                         }`}
                                                     >
-                                                        {isStart && (
+                                                        {isStart ? (
                                                             <div className="flex flex-col justify-center space-y-0.5 z-10 leading-tight">
-                                                                {booking.participants && booking.participants.length > 0 ? (
-                                                                    booking.participants.map((p, pIdx) => (
-                                                                        <div key={pIdx} className="text-[10.5px] font-black text-white truncate tracking-tight uppercase">
-                                                                            {p.name}
-                                                                        </div>
-                                                                    ))
-                                                                ) : (
-                                                                    <div className="truncate text-[11px] font-bold text-white leading-tight">
-                                                                        {booking.title}
+                                                                <div className="flex items-center gap-1.5">
+                                                                    {visualType === 'class' ? (
+                                                                        <GraduationCap size={12} className="text-indigo-300 shrink-0" />
+                                                                    ) : visualType === 'tournament' ? (
+                                                                        <Trophy size={12} className="text-amber-300 shrink-0" />
+                                                                    ) : visualType === 'maintenance' ? (
+                                                                        <Lock size={12} className="text-slate-300 shrink-0" />
+                                                                    ) : (
+                                                                        <Users size={12} className="text-primary shrink-0" />
+                                                                    )}
+                                                                    <span className="text-[11.5px] font-black text-white truncate tracking-tight uppercase">
+                                                                        {playerNamesList.length > 0 ? playerNamesList[0] : mainDisplayName}
+                                                                    </span>
+                                                                </div>
+                                                                {playerNamesList.length > 1 && (
+                                                                    <div className="text-[10px] font-bold text-white/90 truncate pl-4 tracking-tight uppercase">
+                                                                        vs {playerNamesList.slice(1).join(' / ')}
                                                                     </div>
                                                                 )}
+                                                                <div className="text-[9.5px] text-white/60 font-semibold pl-4 truncate">
+                                                                    {booking.start_time} - {booking.end_time}
+                                                                </div>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="flex items-center gap-1.5 opacity-65 text-[10px] font-semibold text-white/80 truncate">
+                                                                <span className="text-primary font-black">↳</span>
+                                                                <span className="truncate">{mainDisplayName}</span>
+                                                                <span className="text-[9px] text-white/50">({booking.start_time}-{booking.end_time})</span>
                                                             </div>
                                                         )}
                                                     </div>
                                                 ) : (
-                                                    <button onClick={() => handleSlotClick(time, court)} className="w-full h-full rounded border border-transparent hover:border-white/10 hover:bg-white/5 transition-colors"></button>
+                                                    <button 
+                                                        onClick={() => handleSlotClick(time, court)} 
+                                                        className="w-full h-full rounded-lg border border-transparent hover:border-white/10 hover:bg-white/5 transition-colors"
+                                                    ></button>
                                                 )}
                                             </div>
                                         );
@@ -1652,7 +1712,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                         </div>
 
                         {/* Display Participants */}
-                        {viewingBooking.participants && viewingBooking.participants.length > 0 && (
+                        {viewingBooking.participants && viewingBooking.participants.length > 0 ? (
                             <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2">
                                 <div className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
                                     <Users size={14} className="text-primary" /> Jugadores en Cancha ({viewingBooking.participants.length})
@@ -1666,7 +1726,17 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                     ))}
                                 </div>
                             </div>
-                        )}
+                        ) : viewingBooking.user_name ? (
+                            <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2">
+                                <div className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
+                                    <Users size={14} className="text-primary" /> Reservado por
+                                </div>
+                                <div className="flex items-center justify-between p-2 rounded-lg bg-black/30 border border-white/5 text-xs font-bold text-white">
+                                    <span>{viewingBooking.user_name}</span>
+                                    <span className="text-[10px] bg-primary/20 text-primary px-2 py-0.5 rounded-full font-bold">Titular</span>
+                                </div>
+                            </div>
+                        ) : null}
 
                         <div className="flex gap-3 pt-2">
                             <button 
