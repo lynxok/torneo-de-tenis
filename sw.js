@@ -1,13 +1,21 @@
-const CACHE_NAME = 'smash-tennis-v1.2.0';
+const CACHE_NAME = 'smash-tennis-v1.2.3';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
+  '/version.json',
   '/favicon.png',
   '/Smash.png',
   '/profile-banner.jpg',
   '/tennis-balls-banner.jpg',
   '/manifest.json'
 ];
+
+// Message listener: Immediate skipWaiting when client requests update
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // Install: Cache critical assets
 self.addEventListener('install', (event) => {
@@ -33,7 +41,10 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch: Network first with cache fallback for API / Supabase, Cache first for assets
+// Fetch:
+// 1. Navigation requests (HTML) & version.json -> Network-First (always freshest version when online)
+// 2. Supabase API calls / non-GET -> bypass cache
+// 3. Static assets -> Stale-While-Revalidate
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
@@ -42,22 +53,48 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // version.json -> ALWAYS NETWORK ONLY with cache bypass
+  if (url.pathname === '/version.json') {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' }).catch(() => caches.match('/version.json'))
+    );
+    return;
+  }
+
+  // HTML / Navigation -> Network-First (crucial for mobile auto-updates)
+  if (event.request.mode === 'navigate' || url.pathname === '/' || url.pathname === '/index.html') {
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // Other assets (images, css, js bundles) -> Cache-first with background revalidation
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
       if (cachedResponse) {
-        // Fetch in background to revalidate cache
-        fetch(event.request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(event.request, networkResponse.clone());
-            });
-          }
-        }).catch(() => {});
+        fetch(event.request)
+          .then((networkResponse) => {
+            if (networkResponse && networkResponse.status === 200) {
+              caches.open(CACHE_NAME).then((cache) => {
+                cache.put(event.request, networkResponse.clone());
+              });
+            }
+          })
+          .catch(() => {});
         return cachedResponse;
       }
 
       return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+        if (!networkResponse || networkResponse.status !== 200) {
           return networkResponse;
         }
 
@@ -67,11 +104,6 @@ self.addEventListener('fetch', (event) => {
         });
 
         return networkResponse;
-      }).catch(() => {
-        // Offline fallback for navigation requests
-        if (event.request.mode === 'navigate') {
-          return caches.match('/index.html');
-        }
       });
     })
   );

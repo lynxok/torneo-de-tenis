@@ -19,8 +19,9 @@ import { AdminSettings } from './pages/AdminSettings';
 import { Reports } from './pages/Reports';
 import { TutorialsPage, TUTORIALS } from './pages/TutorialsPage';
 import { TutorialOverlay } from './components/TutorialOverlay';
-import { ToastProvider } from './components/ui/Toast'; // Import ToastProvider
+import { ToastProvider } from './components/ui/Toast';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
+import { VersionUpdatePrompt } from './components/VersionUpdatePrompt';
 import { Menu, ShieldAlert, User, Shield } from 'lucide-react';
 
 const AppContent = () => {
@@ -357,6 +358,7 @@ const App = () => (
   <ToastProvider>
     <AppContent />
     <PWAInstallPrompt />
+    <VersionUpdatePrompt />
   </ToastProvider>
 );
 
