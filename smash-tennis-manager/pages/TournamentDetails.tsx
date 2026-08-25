@@ -63,12 +63,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [submittingEnroll, setSubmittingEnroll] = useState(false);
     const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
 
-    // Replace / Substitute Player State
+    // Replace / Substitute Player State (Singles & Doubles)
     const [playerToReplace, setPlayerToReplace] = useState<TournamentPlayer | null>(null);
     const [replaceMode, setReplaceMode] = useState<'member' | 'guest'>('member');
     const [selectedUserForReplace, setSelectedUserForReplace] = useState<UserProfile | null>(null);
     const [searchUserReplaceQuery, setSearchUserReplaceQuery] = useState('');
     const [replaceGuestName, setReplaceGuestName] = useState('');
+    const [replacePartnerMode, setReplacePartnerMode] = useState<'member' | 'guest'>('guest');
+    const [selectedPartnerForReplace, setSelectedPartnerForReplace] = useState<UserProfile | null>(null);
+    const [searchPartnerReplaceQuery, setSearchPartnerReplaceQuery] = useState('');
+    const [replaceGuestPartnerName, setReplaceGuestPartnerName] = useState('');
     const [replaceCategory, setReplaceCategory] = useState('4ta');
     const [isSubmittingReplace, setIsSubmittingReplace] = useState(false);
 
@@ -372,7 +376,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         setReplaceMode('member');
         setSelectedUserForReplace(null);
         setSearchUserReplaceQuery('');
-        setReplaceGuestName('');
+        
+        // Parse doubles pair if tournament is doubles
+        const rawName = player.player_name || player.name || '';
+        const parts = rawName.split(' / ');
+        setReplaceGuestName(parts[0]?.trim() || '');
+        setReplaceGuestPartnerName(parts[1]?.trim() || '');
+        setReplacePartnerMode('guest');
+        setSelectedPartnerForReplace(null);
+        setSearchPartnerReplaceQuery('');
+
         setReplaceCategory(player.category || tournament?.category || '4ta');
         if (allProfiles.length === 0) {
             setLoadingProfiles(true);
@@ -390,21 +403,44 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         let pName = '';
         let pCat = replaceCategory;
 
-        if (replaceMode === 'member') {
-            if (!selectedUserForReplace) {
-                addToast("Por favor selecciona un socio de la lista.", 'error');
+        if (tournament.type === 'doubles') {
+            const p1 = replaceMode === 'member' && selectedUserForReplace
+                ? formatPlayerName(selectedUserForReplace.name, selectedUserForReplace.lastname)
+                : replaceGuestName.trim();
+            const p2 = replacePartnerMode === 'member' && selectedPartnerForReplace
+                ? formatPlayerName(selectedPartnerForReplace.name, selectedPartnerForReplace.lastname)
+                : replaceGuestPartnerName.trim();
+
+            if (!p1) {
+                addToast("Ingresa o selecciona al Jugador 1.", 'error');
                 return;
             }
-            pId = selectedUserForReplace.id;
-            pName = formatPlayerName(selectedUserForReplace.name, selectedUserForReplace.lastname);
-            pCat = replaceCategory || selectedUserForReplace.category || '4ta';
+            if (!p2) {
+                addToast("Ingresa o selecciona al Jugador 2 (Pareja).", 'error');
+                return;
+            }
+
+            pName = `${p1} / ${p2}`;
+            if (replaceMode === 'member' && selectedUserForReplace) {
+                pId = selectedUserForReplace.id;
+            }
         } else {
-            if (!replaceGuestName.trim()) {
-                addToast("Ingresa el nombre y apellido del nuevo jugador.", 'error');
-                return;
+            if (replaceMode === 'member') {
+                if (!selectedUserForReplace) {
+                    addToast("Por favor selecciona un socio de la lista.", 'error');
+                    return;
+                }
+                pId = selectedUserForReplace.id;
+                pName = formatPlayerName(selectedUserForReplace.name, selectedUserForReplace.lastname);
+                pCat = replaceCategory || selectedUserForReplace.category || '4ta';
+            } else {
+                if (!replaceGuestName.trim()) {
+                    addToast("Ingresa el nombre y apellido del nuevo jugador.", 'error');
+                    return;
+                }
+                pName = replaceGuestName.trim();
+                pCat = replaceCategory || tournament.category || '4ta';
             }
-            pName = replaceGuestName.trim();
-            pCat = replaceCategory || tournament.category || '4ta';
         }
 
         const oldName = playerToReplace.player_name || playerToReplace.name || 'el jugador';
@@ -2387,36 +2423,182 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             </button>
                         </div>
 
-                        {/* Mode Selector */}
-                        <div className="p-4 pb-0">
-                            <div className="grid grid-cols-2 p-1 bg-slate-900/80 rounded-2xl border border-white/10 text-xs">
-                                <button
-                                    type="button"
-                                    onClick={() => setReplaceMode('member')}
-                                    className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
-                                        replaceMode === 'member'
-                                            ? 'bg-primary text-white shadow-md shadow-primary/30'
-                                            : 'text-muted hover:text-white'
-                                    }`}
-                                >
-                                    <UserCheck size={14} /> Socio Registrado
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setReplaceMode('guest')}
-                                    className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
-                                        replaceMode === 'guest'
-                                            ? 'bg-primary text-white shadow-md shadow-primary/30'
-                                            : 'text-muted hover:text-white'
-                                    }`}
-                                >
-                                    <Users size={14} /> Jugador Externo / Invitado
-                                </button>
+                        {/* Mode Selector (Singles) */}
+                        {tournament.type !== 'doubles' && (
+                            <div className="p-4 pb-0">
+                                <div className="grid grid-cols-2 p-1 bg-slate-900/80 rounded-2xl border border-white/10 text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => setReplaceMode('member')}
+                                        className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                            replaceMode === 'member'
+                                                ? 'bg-primary text-white shadow-md shadow-primary/30'
+                                                : 'text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        <UserCheck size={14} /> Socio Registrado
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setReplaceMode('guest')}
+                                        className={`py-2 px-3 rounded-xl font-bold transition-all flex items-center justify-center gap-1.5 ${
+                                            replaceMode === 'guest'
+                                                ? 'bg-primary text-white shadow-md shadow-primary/30'
+                                                : 'text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        <Users size={14} /> Jugador Externo / Invitado
+                                    </button>
+                                </div>
                             </div>
-                        </div>
+                        )}
 
                         <form onSubmit={handleReplacePlayerSubmit} className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
-                            {replaceMode === 'member' ? (
+                            {tournament.type === 'doubles' ? (
+                                <div className="space-y-4">
+                                    {/* JUGADOR 1 */}
+                                    <div className="p-3 bg-slate-900/90 border border-white/10 rounded-2xl space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-primary flex items-center gap-1.5">
+                                                <UserCheck size={14} /> Jugador 1
+                                            </span>
+                                            <div className="flex gap-1 text-[11px]">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReplaceMode('member')}
+                                                    className={`px-2 py-0.5 rounded-lg font-semibold ${replaceMode === 'member' ? 'bg-primary text-white' : 'text-muted hover:text-white'}`}
+                                                >
+                                                    Socio
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReplaceMode('guest')}
+                                                    className={`px-2 py-0.5 rounded-lg font-semibold ${replaceMode === 'guest' ? 'bg-primary text-white' : 'text-muted hover:text-white'}`}
+                                                >
+                                                    Invitado
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {replaceMode === 'member' ? (
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar Jugador 1 por nombre o DNI..."
+                                                    value={searchUserReplaceQuery}
+                                                    onChange={e => setSearchUserReplaceQuery(e.target.value)}
+                                                    className="w-full bg-sidebar border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-primary outline-none"
+                                                />
+                                                <div className="max-h-32 overflow-y-auto space-y-1 border border-white/5 rounded-xl p-1.5 bg-black/20 custom-scrollbar">
+                                                    {allProfiles
+                                                        .filter(p => {
+                                                            const query = searchUserReplaceQuery.toLowerCase().trim();
+                                                            if (!query) return true;
+                                                            return `${p.name} ${p.lastname || ''}`.toLowerCase().includes(query) || (p.dni && p.dni.includes(query));
+                                                        })
+                                                        .slice(0, 15)
+                                                        .map(p => (
+                                                            <button
+                                                                key={p.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedUserForReplace(p);
+                                                                    setReplaceGuestName(formatPlayerName(p.name, p.lastname));
+                                                                }}
+                                                                className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between ${
+                                                                    selectedUserForReplace?.id === p.id ? 'bg-primary/20 text-primary font-bold' : 'hover:bg-white/5 text-white'
+                                                                }`}
+                                                            >
+                                                                <span className="truncate">{formatPlayerName(p.name, p.lastname)}</span>
+                                                                {selectedUserForReplace?.id === p.id && <CheckCircle2 size={14} className="text-primary shrink-0" />}
+                                                            </button>
+                                                        ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                placeholder="Nombre y Apellido del Jugador 1"
+                                                value={replaceGuestName}
+                                                onChange={e => setReplaceGuestName(e.target.value)}
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-primary outline-none"
+                                                required
+                                            />
+                                        )}
+                                    </div>
+
+                                    {/* JUGADOR 2 (PAREJA) */}
+                                    <div className="p-3 bg-slate-900/90 border border-white/10 rounded-2xl space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-accent flex items-center gap-1.5">
+                                                <Users size={14} /> Jugador 2 (Pareja de Dobles)
+                                            </span>
+                                            <div className="flex gap-1 text-[11px]">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReplacePartnerMode('member')}
+                                                    className={`px-2 py-0.5 rounded-lg font-semibold ${replacePartnerMode === 'member' ? 'bg-primary text-white' : 'text-muted hover:text-white'}`}
+                                                >
+                                                    Socio
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setReplacePartnerMode('guest')}
+                                                    className={`px-2 py-0.5 rounded-lg font-semibold ${replacePartnerMode === 'guest' ? 'bg-primary text-white' : 'text-muted hover:text-white'}`}
+                                                >
+                                                    Invitado
+                                                </button>
+                                            </div>
+                                        </div>
+
+                                        {replacePartnerMode === 'member' ? (
+                                            <div className="space-y-2">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar Pareja por nombre o DNI..."
+                                                    value={searchPartnerReplaceQuery}
+                                                    onChange={e => setSearchPartnerReplaceQuery(e.target.value)}
+                                                    className="w-full bg-sidebar border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 focus:border-primary outline-none"
+                                                />
+                                                <div className="max-h-32 overflow-y-auto space-y-1 border border-white/5 rounded-xl p-1.5 bg-black/20 custom-scrollbar">
+                                                    {allProfiles
+                                                        .filter(p => {
+                                                            const query = searchPartnerReplaceQuery.toLowerCase().trim();
+                                                            if (!query) return true;
+                                                            return `${p.name} ${p.lastname || ''}`.toLowerCase().includes(query) || (p.dni && p.dni.includes(query));
+                                                        })
+                                                        .slice(0, 15)
+                                                        .map(p => (
+                                                            <button
+                                                                key={p.id}
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    setSelectedPartnerForReplace(p);
+                                                                    setReplaceGuestPartnerName(formatPlayerName(p.name, p.lastname));
+                                                                }}
+                                                                className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between ${
+                                                                    selectedPartnerForReplace?.id === p.id ? 'bg-primary/20 text-primary font-bold' : 'hover:bg-white/5 text-white'
+                                                                }`}
+                                                            >
+                                                                <span className="truncate">{formatPlayerName(p.name, p.lastname)}</span>
+                                                                {selectedPartnerForReplace?.id === p.id && <CheckCircle2 size={14} className="text-primary shrink-0" />}
+                                                            </button>
+                                                        ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <input
+                                                type="text"
+                                                placeholder="Nombre y Apellido de la Pareja"
+                                                value={replaceGuestPartnerName}
+                                                onChange={e => setReplaceGuestPartnerName(e.target.value)}
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl px-3 py-2 text-xs text-white focus:border-primary outline-none"
+                                                required
+                                            />
+                                        )}
+                                    </div>
+                                </div>
+                            ) : replaceMode === 'member' ? (
                                 <div className="space-y-3">
                                     <label className="text-xs text-muted font-bold uppercase block">Buscar Nuevo Jugador (Socio)</label>
                                     <div className="relative">
@@ -2505,7 +2687,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                             {/* Category Selector */}
                             <div>
-                                <label className="text-xs text-muted font-bold uppercase block mb-1">Categoría del Nuevo Jugador</label>
+                                <label className="text-xs text-muted font-bold uppercase block mb-1">Categoría</label>
                                 <select
                                     value={replaceCategory}
                                     onChange={e => setReplaceCategory(e.target.value)}
@@ -2524,7 +2706,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 <Info size={16} className="text-amber-400 shrink-0 mt-0.5" />
                                 <div>
                                     <strong className="block text-amber-300 mb-0.5">Información de la Sustitución</strong>
-                                    El nuevo jugador ocupará la misma posición/zona de <strong>{playerToReplace.player_name || playerToReplace.name}</strong> y sus partidos pendientes se actualizarán automáticamente.
+                                    {tournament.type === 'doubles' ? (
+                                        <span>La dupla ocupará la misma posición/zona de <strong>{playerToReplace.player_name || playerToReplace.name}</strong> y sus partidos pendientes se actualizarán con los nuevos integrantes.</span>
+                                    ) : (
+                                        <span>El nuevo jugador ocupará la misma posición/zona de <strong>{playerToReplace.player_name || playerToReplace.name}</strong> y sus partidos pendientes se actualizarán automáticamente.</span>
+                                    )}
                                 </div>
                             </div>
 
@@ -2539,7 +2725,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </button>
                                 <button
                                     type="submit"
-                                    disabled={isSubmittingReplace || (replaceMode === 'member' && !selectedUserForReplace) || (replaceMode === 'guest' && !replaceGuestName.trim())}
+                                    disabled={isSubmittingReplace || (tournament.type !== 'doubles' && replaceMode === 'member' && !selectedUserForReplace) || (tournament.type !== 'doubles' && replaceMode === 'guest' && !replaceGuestName.trim())}
                                     className="px-5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
                                 >
                                     {isSubmittingReplace ? (
