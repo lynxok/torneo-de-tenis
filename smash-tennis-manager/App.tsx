@@ -274,6 +274,7 @@ const AppContent = () => {
           unreadCount={unreadCount}
           userName={effectiveUser.name}
           userAvatar={effectiveUser.profile_picture_url}
+          onCloseMobile={() => setMobileMenuOpen(false)}
         />
       </div>
 

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smash-tennis-v1.2.7';
+const CACHE_NAME = 'smash-tennis-v1.2.8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',

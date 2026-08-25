@@ -1,13 +1,14 @@
-
 import React, { useEffect, useState } from 'react';
-import { Booking, UserProfile, Institution } from '../types';
+import { Booking, UserProfile, Institution, BookingParticipant } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
+import { formatPlayerName } from '../utils/formatters';
 import { 
     Calendar, Clock, MapPin, X, Loader2, CheckCircle2, DollarSign, Lock, ChevronLeft, ChevronRight, 
     Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
-    ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning
+    ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, 
+    Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning, Users, Check
 } from 'lucide-react';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
@@ -17,11 +18,189 @@ export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   return <PlayerBookings user={user} />;
 };
 
+const formatFriendlyDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+
+    const [y, m, d] = dateStr.split('-').map(Number);
+    const dateObj = new Date(y, m - 1, d);
+    const weekdays = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const weekday = weekdays[dateObj.getDay()] || 'Día';
+    const dayStr = String(d).padStart(2, '0');
+    const monthStr = String(m).padStart(2, '0');
+
+    if (dateStr === todayStr) {
+        return `Hoy - ${weekday} ${dayStr}/${monthStr}`;
+    } else if (dateStr === tomorrowStr) {
+        return `Mañana - ${weekday} ${dayStr}/${monthStr}`;
+    } else {
+        return `${weekday} ${dayStr}/${monthStr}/${y}`;
+    }
+};
+
+const ParticipantSelector: React.FC<{
+    participants: BookingParticipant[];
+    onChange: (participants: BookingParticipant[]) => void;
+    currentUser?: UserProfile;
+    maxPlayers?: number;
+}> = ({ participants, onChange, currentUser, maxPlayers = 4 }) => {
+    const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [isOpenDropdown, setIsOpenDropdown] = useState(false);
+
+    useEffect(() => {
+        api.auth.getAllProfiles(1, 100).then(setAllProfiles).catch(console.error);
+    }, []);
+
+    const filteredProfiles = allProfiles.filter(p => {
+        const full = `${p.name} ${p.lastname || ''} ${p.category || ''} ${p.institution || ''}`.toLowerCase();
+        const matches = full.includes(searchTerm.toLowerCase());
+        const alreadyAdded = participants.some(item => item.user_id === p.id);
+        return matches && !alreadyAdded;
+    }).slice(0, 6);
+
+    const handleAddRegistered = (p: UserProfile) => {
+        if (participants.length >= maxPlayers) return;
+        const formatted = formatPlayerName(p.name, p.lastname);
+        const newPart: BookingParticipant = {
+            user_id: p.id,
+            name: formatted,
+            lastname: p.lastname,
+            is_registered: true,
+            avatar_url: p.profile_picture_url || p.avatar_url
+        };
+        onChange([...participants, newPart]);
+        setSearchTerm('');
+        setIsOpenDropdown(false);
+    };
+
+    const handleAddCustom = () => {
+        if (!searchTerm.trim() || participants.length >= maxPlayers) return;
+        const newPart: BookingParticipant = {
+            name: formatPlayerName(searchTerm.trim()),
+            is_registered: false
+        };
+        onChange([...participants, newPart]);
+        setSearchTerm('');
+        setIsOpenDropdown(false);
+    };
+
+    const handleRemove = (index: number) => {
+        onChange(participants.filter((_, i) => i !== index));
+    };
+
+    return (
+        <div className="space-y-3 bg-white/5 p-3.5 rounded-xl border border-white/10">
+            <div className="flex justify-between items-center">
+                <label className="text-xs text-muted uppercase font-bold flex items-center gap-1.5">
+                    <Users size={14} className="text-primary" /> Jugadores Participantes ({participants.length}/{maxPlayers})
+                </label>
+                <span className="text-[10px] text-muted">
+                    {participants.length === 0 ? 'Sin jugadores asignados' : `${participants.length} jugador(es)`}
+                </span>
+            </div>
+
+            {/* List of current participants */}
+            <div className="flex flex-wrap gap-2 min-h-[32px]">
+                {participants.length === 0 ? (
+                    <span className="text-xs text-muted italic">Ningún jugador seleccionado</span>
+                ) : (
+                    participants.map((p, idx) => {
+                        const isSelf = currentUser && p.user_id === currentUser.id;
+                        return (
+                            <div 
+                                key={idx} 
+                                className="bg-primary/15 border border-primary/30 text-white pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm"
+                            >
+                                <span className="truncate max-w-[150px]">{p.name}</span>
+                                {isSelf ? (
+                                    <span className="text-[9px] bg-primary text-dark font-black px-1.5 py-0.2 rounded uppercase">Tú</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        onClick={() => handleRemove(idx)}
+                                        className="p-0.5 text-muted hover:text-red-400 rounded transition-colors"
+                                        title="Quitar jugador"
+                                    >
+                                        <X size={13} />
+                                    </button>
+                                )}
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+
+            {/* Add player controls */}
+            {participants.length < maxPlayers && (
+                <div className="space-y-2 relative">
+                    <div className="relative">
+                        <Search className="absolute left-3 top-2.5 text-muted" size={14} />
+                        <input
+                            type="text"
+                            placeholder="Buscar socio por nombre / apellido o escribir invitado..."
+                            className="w-full bg-sidebar border border-white/10 rounded-xl pl-8 pr-3 py-2 text-xs text-white focus:outline-none focus:border-primary"
+                            value={searchTerm}
+                            onChange={e => {
+                                setSearchTerm(e.target.value);
+                                setIsOpenDropdown(true);
+                            }}
+                            onFocus={() => setIsOpenDropdown(true)}
+                        />
+                    </div>
+
+                    {/* Suggestions dropdown */}
+                    {isOpenDropdown && (searchTerm.trim().length > 0 || filteredProfiles.length > 0) && (
+                        <div className="absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-white/20 rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto p-1 space-y-1">
+                            {filteredProfiles.map(p => (
+                                <button
+                                    key={p.id}
+                                    type="button"
+                                    onClick={() => handleAddRegistered(p)}
+                                    className="w-full text-left p-2 hover:bg-white/10 rounded-lg flex items-center justify-between text-xs transition-colors"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-[10px]">
+                                            {p.name.charAt(0)}
+                                        </div>
+                                        <span className="font-bold text-white">{formatPlayerName(p.name, p.lastname)}</span>
+                                        {p.category && <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-muted">{p.category}</span>}
+                                        {p.institution && <span className="text-[10px] text-muted truncate max-w-[100px]">({p.institution})</span>}
+                                    </div>
+                                    <Plus size={14} className="text-primary" />
+                                </button>
+                            ))}
+
+                            {/* Option to add custom guest name */}
+                            {searchTerm.trim().length > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={handleAddCustom}
+                                    className="w-full text-left p-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-primary text-xs font-bold flex items-center justify-between border-t border-white/5"
+                                >
+                                    <span>+ Agregar Invitado: "{formatPlayerName(searchTerm.trim())}"</span>
+                                    <Plus size={14} />
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    );
+};
+
 const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'my_bookings' | 'clubs_catalog'>('my_bookings');
+  const [statusFilter, setStatusFilter] = useState<'active' | 'history'>('active');
   const [clubSearch, setClubSearch] = useState('');
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [selectedClubIdForBooking, setSelectedClubIdForBooking] = useState<string | undefined>(undefined);
@@ -61,13 +240,25 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   };
 
   const handleCancel = async (booking: Booking) => {
-      if (!confirm('¿Estás seguro de cancelar esta reserva? Esta acción no se puede deshacer.')) return;
+      if (!confirm('¿Estás seguro de cancelar esta reserva? Esta acción liberará la cancha.')) return;
       try {
           await api.bookings.update(booking.id, { status: 'cancelled' });
-          addToast('Reserva cancelada correctamente.', 'info');
-          loadData();
+          addToast('Reserva cancelada correctamente. Se movió a tu historial.', 'info');
+          setBookings(prev => prev.map(b => b.id === booking.id ? { ...b, status: 'cancelled' } : b));
       } catch (e) {
           addToast('Error al cancelar la reserva.', 'error');
+      }
+  };
+
+  const handleDeletePermanently = async (booking: Booking) => {
+      if (!confirm('¿Deseas eliminar definitivamente este turno de tu historial?')) return;
+      try {
+          setBookings(prev => prev.filter(b => b.id !== booking.id));
+          await api.bookings.delete(booking.id);
+          addToast('Reserva eliminada definitivamente del historial.', 'success');
+      } catch (e) {
+          addToast('Error al eliminar la reserva.', 'error');
+          loadData();
       }
   };
 
@@ -87,6 +278,10 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
       inst.name.toLowerCase().includes(clubSearch.toLowerCase()) ||
       (inst.city && inst.city.toLowerCase().includes(clubSearch.toLowerCase()))
   );
+
+  const activeBookings = bookings.filter(b => b.status !== 'cancelled' && b.status !== 'rejected');
+  const historyBookings = bookings.filter(b => b.status === 'cancelled' || b.status === 'rejected');
+  const displayedBookings = statusFilter === 'active' ? activeBookings : historyBookings;
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -136,95 +331,151 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
         <div className="text-center py-20 text-muted">Cargando información...</div>
       ) : activeTab === 'my_bookings' ? (
         /* MY BOOKINGS TAB */
-        bookings.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
-                <Calendar size={48} className="mb-4 opacity-50 text-primary" />
-                <p className="font-semibold text-white">No tienes turnos reservados.</p>
-                <p className="text-xs text-muted mt-1">Explora los clubes y reserva tu cancha en el horario que prefieras.</p>
-                <div className="flex gap-3 mt-4">
-                    <button onClick={() => setActiveTab('clubs_catalog')} className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-colors">
-                        Ver Tarifario de Clubes
-                    </button>
-                    <button onClick={() => { setBookingToReschedule(null); setSelectedClubIdForBooking(undefined); setShowNewBooking(true); }} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-colors">
-                        Hacer una Reserva
-                    </button>
-                </div>
+        <div className="space-y-4">
+            {/* Sub-pills for Active vs History */}
+            <div className="flex items-center gap-2 bg-slate-900/60 p-1 rounded-xl border border-white/10 w-fit text-xs font-bold">
+                <button
+                    onClick={() => setStatusFilter('active')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                        statusFilter === 'active' 
+                            ? 'bg-primary text-white shadow-sm' 
+                            : 'text-muted hover:text-white'
+                    }`}
+                >
+                    Turnos Próximos ({activeBookings.length})
+                </button>
+                <button
+                    onClick={() => setStatusFilter('history')}
+                    className={`px-3 py-1.5 rounded-lg transition-all ${
+                        statusFilter === 'history' 
+                            ? 'bg-primary text-white shadow-sm' 
+                            : 'text-muted hover:text-white'
+                    }`}
+                >
+                    Historial / Cancelados ({historyBookings.length})
+                </button>
             </div>
-        ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {bookings.map(booking => {
-                    const canModify = isModifiable(booking);
-                    const isCancelled = booking.status === 'cancelled';
 
-                    return (
-                        <Card key={booking.id} className={`relative overflow-hidden group hover:border-white/20 transition-all ${isCancelled ? 'opacity-60 grayscale' : ''}`}>
-                            <div className={`absolute left-0 top-0 bottom-0 w-1 ${isCancelled ? 'bg-red-500' : booking.status === 'confirmed' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
-                            <div className="pl-2">
-                                <div className="flex justify-between items-start mb-2">
-                                    <div className="text-xs font-bold uppercase text-muted flex items-center gap-1">
-                                        <Calendar size={12} /> {new Date(booking.date).toLocaleDateString()}
-                                    </div>
-                                    <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-bold ${
-                                        isCancelled ? 'bg-red-500/20 text-red-400' :
-                                        booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400' : 'bg-yellow-500/20 text-yellow-400'
-                                    }`}>
-                                        {isCancelled ? 'Cancelada' : booking.status === 'confirmed' ? 'Confirmada' : 'Pendiente'}
-                                    </span>
-                                </div>
-                                
-                                <h3 className="font-bold text-white text-xl leading-none mb-1">
-                                    {booking.start_time} <span className="text-sm text-muted font-normal">- {booking.end_time}</span>
-                                </h3>
-                                <div className="text-sm text-primary font-bold mb-2">{booking.institutions?.name}</div>
-                                
-                                <div className="flex items-center gap-2 text-xs text-slate-300 bg-white/5 p-2 rounded-lg">
-                                    <MapPin size={12} /> {booking.court_name}
-                                </div>
+            {displayedBookings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16 border border-dashed border-white/10 rounded-2xl text-muted">
+                    <Calendar size={44} className="mb-3 opacity-40 text-primary" />
+                    <p className="font-bold text-white text-base">
+                        {statusFilter === 'active' ? 'No tienes turnos próximos activos.' : 'No tienes reservas en el historial.'}
+                    </p>
+                    <p className="text-xs text-muted mt-1">
+                        {statusFilter === 'active' ? 'Explora los clubes y reserva tu cancha en el horario que prefieras.' : 'Tus reservas canceladas o pasadas se listarán aquí.'}
+                    </p>
+                    {statusFilter === 'active' && (
+                        <div className="flex gap-3 mt-4">
+                            <button onClick={() => setActiveTab('clubs_catalog')} className="px-4 py-2 bg-white/5 border border-white/10 hover:bg-white/10 text-white rounded-xl text-xs font-bold transition-colors">
+                                Ver Tarifario de Clubes
+                            </button>
+                            <button onClick={() => { setBookingToReschedule(null); setSelectedClubIdForBooking(undefined); setShowNewBooking(true); }} className="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded-xl text-xs font-bold transition-colors">
+                                Hacer una Reserva
+                            </button>
+                        </div>
+                    )}
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {displayedBookings.map(booking => {
+                        const canModify = isModifiable(booking);
+                        const isCancelled = booking.status === 'cancelled' || booking.status === 'rejected';
 
-                                {booking.total_price > 0 && (
-                                    <div className="mt-3 pt-3 border-t border-white/5 flex justify-between items-center">
-                                        <span className="text-xs text-muted">Total abonado / estimado</span>
-                                        <span className="text-sm font-bold text-white">${booking.total_price}</span>
+                        return (
+                            <Card key={booking.id} className={`relative overflow-hidden group hover:border-white/20 transition-all ${isCancelled ? 'opacity-70 grayscale-[30%]' : ''}`}>
+                                <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${isCancelled ? 'bg-red-500' : booking.status === 'confirmed' ? 'bg-green-500' : 'bg-yellow-500'}`}></div>
+                                <div className="pl-2">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <div className="text-xs font-bold uppercase text-muted flex items-center gap-1">
+                                            <Calendar size={12} className="text-primary" /> {formatFriendlyDate(booking.date)}
+                                        </div>
+                                        <span className={`text-[10px] px-2 py-0.5 rounded uppercase font-black ${
+                                            isCancelled ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                                            booking.status === 'confirmed' ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
+                                        }`}>
+                                            {isCancelled ? 'Cancelada' : booking.status === 'confirmed' ? 'Confirmada' : 'Pendiente'}
+                                        </span>
                                     </div>
-                                )}
-                                {booking.extras && (
-                                    <div className="mt-2 text-[10px] text-muted flex flex-wrap gap-2">
-                                        {booking.extras.rackets > 0 && <span className="bg-white/5 px-1.5 py-0.5 rounded">Raquetas: {booking.extras.rackets}</span>}
-                                        {booking.extras.balls && <span className="bg-white/5 px-1.5 py-0.5 rounded">Pelotas: Sí</span>}
+                                    
+                                    <h3 className="font-extrabold text-white text-xl leading-none mb-1">
+                                        {booking.start_time} <span className="text-sm text-muted font-normal">- {booking.end_time}</span>
+                                    </h3>
+                                    <div className="text-sm text-primary font-bold mb-2">{booking.institutions?.name}</div>
+                                    
+                                    <div className="flex items-center gap-2 text-xs text-slate-300 bg-white/5 p-2 rounded-lg">
+                                        <MapPin size={12} className="text-primary" /> {booking.court_name}
                                     </div>
-                                )}
 
-                                {!isCancelled && (
-                                    <div className="mt-4 pt-3 border-t border-white/10 flex gap-2">
-                                        {canModify ? (
-                                            <>
-                                                <button 
-                                                    onClick={() => handleRescheduleClick(booking)}
-                                                    className="flex-1 py-2 bg-white/5 hover:bg-primary/20 hover:text-primary text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
-                                                >
-                                                    <Edit size={14} /> Reprogramar
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleCancel(booking)}
-                                                    className="py-2 px-3 bg-white/5 hover:bg-red-500/20 hover:text-red-400 text-white text-xs font-bold rounded-lg transition-colors"
-                                                    title="Cancelar Reserva"
-                                                >
-                                                    <CalendarX size={14} />
-                                                </button>
-                                            </>
-                                        ) : (
-                                            <div className="w-full py-2 text-[10px] text-center text-muted bg-white/5 rounded-lg flex items-center justify-center gap-1 opacity-70">
-                                                <AlertTriangle size={12} /> Cambios cerrados (24h)
+                                    {/* Participating Players Tags */}
+                                    {booking.participants && booking.participants.length > 0 && (
+                                        <div className="mt-2.5 bg-white/5 p-2 rounded-lg border border-white/5 space-y-1">
+                                            <div className="text-[10px] text-muted font-bold uppercase flex items-center gap-1">
+                                                <Users size={11} className="text-primary" /> Jugadores ({booking.participants.length}):
                                             </div>
+                                            <div className="flex flex-wrap gap-1">
+                                                {booking.participants.map((p, idx) => (
+                                                    <span key={idx} className="bg-primary/20 border border-primary/30 text-white text-[10.5px] px-2 py-0.5 rounded-md font-bold truncate max-w-full">
+                                                        {p.name} {p.user_id === user.id ? '(Tú)' : ''}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {booking.total_price > 0 && (
+                                        <div className="mt-3 pt-2.5 border-t border-white/5 flex justify-between items-center">
+                                            <span className="text-xs text-muted">Total abonado / estimado</span>
+                                            <span className="text-sm font-bold text-white">${booking.total_price}</span>
+                                        </div>
+                                    )}
+                                    {booking.extras && (
+                                        <div className="mt-2 text-[10px] text-muted flex flex-wrap gap-2">
+                                            {booking.extras.rackets > 0 && <span className="bg-white/5 px-1.5 py-0.5 rounded">Raquetas: {booking.extras.rackets}</span>}
+                                            {booking.extras.balls && <span className="bg-white/5 px-1.5 py-0.5 rounded">Pelotas: Sí</span>}
+                                        </div>
+                                    )}
+
+                                    {/* Action Buttons */}
+                                    <div className="mt-3 pt-3 border-t border-white/10 flex gap-2">
+                                        {!isCancelled ? (
+                                            canModify ? (
+                                                <>
+                                                    <button 
+                                                        onClick={() => handleRescheduleClick(booking)}
+                                                        className="flex-1 py-2 bg-white/5 hover:bg-primary/20 hover:text-primary text-white text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1"
+                                                    >
+                                                        <Edit size={14} /> Reprogramar
+                                                    </button>
+                                                    <button 
+                                                        onClick={() => handleCancel(booking)}
+                                                        className="py-2 px-3 bg-white/5 hover:bg-red-500/20 hover:text-red-400 text-white text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
+                                                        title="Cancelar Reserva"
+                                                    >
+                                                        <CalendarX size={14} /> Cancelar
+                                                    </button>
+                                                </>
+                                            ) : (
+                                                <div className="w-full py-2 text-[10px] text-center text-muted bg-white/5 rounded-lg flex items-center justify-center gap-1 opacity-70">
+                                                    <AlertTriangle size={12} /> Cambios cerrados (24h)
+                                                </div>
+                                            )
+                                        ) : (
+                                            <button
+                                                onClick={() => handleDeletePermanently(booking)}
+                                                className="w-full py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 text-xs font-bold rounded-lg transition-colors flex items-center justify-center gap-1.5 border border-red-500/20"
+                                            >
+                                                <Trash2 size={14} /> Eliminar del historial
+                                            </button>
                                         )}
                                     </div>
-                                )}
-                            </div>
-                        </Card>
-                    );
-                })}
-            </div>
-        )
+                                </div>
+                            </Card>
+                        );
+                    })}
+                </div>
+            )}
+        </div>
       ) : (
         /* ALL CLUBS & TARIFFS CATALOG TAB */
         <div className="space-y-6">
@@ -444,6 +695,7 @@ const PlayerNewBookingModal = ({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [extras, setExtras] = useState({ rackets: 0, balls: false });
     const [durationMultiplier, setDurationMultiplier] = useState(1);
+    const [participants, setParticipants] = useState<BookingParticipant[]>([]);
     const { addToast } = useToast();
 
     // Payment Flow State
@@ -451,6 +703,21 @@ const PlayerNewBookingModal = ({
     const [paymentMethod, setPaymentMethod] = useState<'mp' | 'cash'>('mp');
 
     const isReschedule = !!existingBooking;
+
+    useEffect(() => {
+        const selfName = formatPlayerName(user.name, user.lastname);
+        if (existingBooking?.participants && existingBooking.participants.length > 0) {
+            setParticipants(existingBooking.participants);
+        } else {
+            setParticipants([{
+                user_id: user.id,
+                name: selfName,
+                lastname: user.lastname,
+                is_registered: true,
+                avatar_url: user.profile_picture_url || (user as any).avatar_url
+            }]);
+        }
+    }, [user, existingBooking]);
 
     useEffect(() => {
         api.institutions.getAll().then(data => {
@@ -497,6 +764,31 @@ const PlayerNewBookingModal = ({
             setDurationMultiplier(1);
         }
     }, [selectedInstId]);
+
+    const handlePrevDay = () => {
+        if (!date) return;
+        const [y, m, d] = date.split('-').map(Number);
+        const dateObj = new Date(y, m - 1, d);
+        dateObj.setDate(dateObj.getDate() - 1);
+        const newStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (newStr >= todayStr || isReschedule) {
+            setDate(newStr);
+        }
+    };
+
+    const handleNextDay = () => {
+        if (!date) return;
+        const [y, m, d] = date.split('-').map(Number);
+        const dateObj = new Date(y, m - 1, d);
+        dateObj.setDate(dateObj.getDate() + 1);
+        const newStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        setDate(newStr);
+    };
+
+    const handleToday = () => {
+        setDate(new Date().toISOString().split('T')[0]);
+    };
 
     const selectedInst = institutions.find(i => i.id === selectedInstId);
     
@@ -552,17 +844,14 @@ const PlayerNewBookingModal = ({
     const handleConfirm = async () => {
         if (!selectedSlot || !selectedInstId) return;
         
-        // POINT 3: Payment Simulation Flow
         setIsSubmitting(true);
         setPaymentStep('processing');
 
-        // Simulate API/Gateway delay
         setTimeout(async () => {
             try {
                 const totalDuration = minDuration * durationMultiplier;
                 const totalPrice = calculateTotal();
                 
-                // Determine status based on payment
                 const paymentStatus = paymentMethod === 'mp' ? 'completed' : 'pending';
                 const bookingStatus = paymentMethod === 'mp' ? 'confirmed' : 'pending';
 
@@ -575,36 +864,35 @@ const PlayerNewBookingModal = ({
                     court_name: selectedSlot.court_name,
                     status: bookingStatus as any, 
                     booking_type: 'guest' as const,
-                    title: 'Reserva Web',
+                    title: participants.length > 1 ? participants.map(p => p.name).join(' vs ') : 'Reserva de Cancha',
                     total_price: totalPrice,
                     extras: extras,
-                    payment_status: paymentStatus
+                    payment_status: paymentStatus,
+                    participants: participants
                 };
 
                 if (isReschedule && existingBooking) {
                     await api.bookings.update(existingBooking.id, bookingData);
                     addToast('Reserva reprogramada con éxito.', 'success');
                 } else {
-                    await api.bookings.create(bookingData);
+                    await api.bookings.create(bookingData, user);
                     if (paymentMethod === 'mp') {
-                        addToast('¡Pago exitoso! Reserva confirmada.', 'success');
+                        addToast('¡Pago exitoso! Reserva confirmada y jugadores notificados.', 'success');
                     } else {
                         addToast('Reserva solicitada. Paga en el club para confirmar.', 'info');
                     }
                 }
                 
                 setPaymentStep('success');
-                setTimeout(() => onSuccess(), 1500); // Wait a bit to show success screen
+                setTimeout(() => onSuccess(), 1500);
 
             } catch (e: any) {
                 addToast('Error al procesar: ' + e.message, 'error');
                 setIsSubmitting(false);
                 setPaymentStep('select');
             }
-        }, 2000); // 2 second delay for simulation
+        }, 1500);
     };
-
-    const otherInstitutions = institutions.filter(i => i.id !== selectedInstId);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
@@ -613,24 +901,24 @@ const PlayerNewBookingModal = ({
                 <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
                     <div>
                         <h3 className="text-lg font-bold text-white">
-                            {isReschedule ? 'Reprogramar Reserva' : 'Nueva Reserva'}
+                            {isReschedule ? 'Reprogramar Reserva' : 'Nueva Reserva de Cancha'}
                         </h3>
                         <p className="text-xs text-muted">
-                            {isReschedule ? 'Selecciona la nueva fecha y horario' : 'Selecciona club, fecha y horario'}
+                            {isReschedule ? 'Selecciona la nueva fecha, jugadores y horario' : 'Selecciona club, fecha, compañeros y horario'}
                         </p>
                     </div>
                     {!isSubmitting && <button onClick={onClose} className="text-muted hover:text-white"><X size={20}/></button>}
                 </div>
 
-                <div className="p-6 space-y-5 overflow-y-auto">
+                <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
                     
-                    {/* PAYMENT PROCESSING VIEW (POINT 3) */}
+                    {/* PAYMENT PROCESSING VIEW */}
                     {paymentStep === 'processing' && (
                         <div className="flex flex-col items-center justify-center py-10 space-y-4 animate-in fade-in">
                             <Loader2 className="animate-spin text-primary" size={48} />
                             <div className="text-center">
-                                <h3 className="font-bold text-white text-lg">Procesando Pago...</h3>
-                                <p className="text-muted text-sm">Conectando con Mercado Pago</p>
+                                <h3 className="font-bold text-white text-lg">Procesando Reserva...</h3>
+                                <p className="text-muted text-sm">Guardando turno y enviando notificaciones</p>
                             </div>
                         </div>
                     )}
@@ -641,8 +929,11 @@ const PlayerNewBookingModal = ({
                                 <CheckCircle2 className="text-white" size={32} />
                             </div>
                             <div className="text-center">
-                                <h3 className="font-bold text-white text-xl">¡Reserva Exitosa!</h3>
-                                <p className="text-green-400 text-sm font-bold">Tu cancha ha sido reservada.</p>
+                                <h3 className="font-bold text-white text-xl">¡Reserva Confirmada!</h3>
+                                <p className="text-green-400 text-sm font-bold">Tu cancha ha sido reservada con éxito.</p>
+                                {participants.length > 1 && (
+                                    <p className="text-xs text-muted mt-1">Se enviaron notificaciones a los jugadores añadidos.</p>
+                                )}
                             </div>
                         </div>
                     )}
@@ -650,9 +941,10 @@ const PlayerNewBookingModal = ({
                     {/* SELECTION FORM VIEW */}
                     {paymentStep === 'select' && (
                         <>
+                            {/* Club selector */}
                             <div className="space-y-2">
                                 <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                    <BuildingIcon size={14} /> Club / Sede
+                                    <BuildingIcon size={14} className="text-primary" /> Club / Sede
                                 </label>
                                 <select 
                                     className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
@@ -663,91 +955,78 @@ const PlayerNewBookingModal = ({
                                     {institutions.map(inst => (
                                         <option key={inst.id} value={inst.id}>
                                             {inst.name} {inst.city ? `- ${inst.city}` : ''} 
-                                            {inst.id === user.institution_id ? ' (Mi Club)' : ''}
+                                            {inst.id === user.institution_id ? ' (Mi Club Principal)' : ''}
                                         </option>
                                     ))}
                                 </select>
-
-                                {selectedInst && (
-                                    <div className="bg-primary/5 border border-primary/20 p-3.5 rounded-xl space-y-2.5 mt-2">
-                                        <div className="flex flex-wrap items-center justify-between gap-1">
-                                            <div className="text-xs font-bold text-primary flex items-center gap-1.5">
-                                                <Award size={14} /> Tarifario y Condiciones del Club
-                                            </div>
-                                            {isUserMemberOfInst ? (
-                                                <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-bold">
-                                                    ✓ Socio Oficial (Tarifa Preferencial)
-                                                </span>
-                                            ) : (
-                                                <span className="text-[10px] bg-white/10 text-muted px-2 py-0.5 rounded-full font-medium">
-                                                    Invitado (Tarifa General)
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        <p className="text-[11px] text-slate-300">
-                                            ℹ️ A los <strong>socios oficiales de {selectedInst.name}</strong> se les aplica una <strong>tarifa preferencial</strong> en todos los turnos.
-                                        </p>
-
-                                        <div className="grid grid-cols-2 gap-2 text-xs">
-                                            <div className={`p-2.5 rounded-lg border ${isUserMemberOfInst ? 'bg-primary/20 border-primary/40' : 'bg-black/30 border-white/5'}`}>
-                                                <div className="text-[10px] text-primary font-bold uppercase mb-1 flex justify-between">
-                                                    <span>Tarifa Socio</span>
-                                                    {isUserMemberOfInst && <span className="text-[9px] text-green-300">✓ Tu Tarifa</span>}
-                                                </div>
-                                                <div className="text-white flex justify-between text-[11px]">
-                                                    <span className="text-muted">Diurna:</span>
-                                                    <span className="font-bold">${selectedInst.price_member_day || selectedInst.price_day || 0}</span>
-                                                </div>
-                                                <div className="text-white flex justify-between text-[11px]">
-                                                    <span className="text-muted">Nocturna:</span>
-                                                    <span className="font-bold">${selectedInst.price_member_night || selectedInst.price_night || selectedInst.price_member_day || selectedInst.price_day || 0}</span>
-                                                </div>
-                                                <div className="text-[9px] text-muted mt-1">Costo por turno ({minDuration} min)</div>
-                                            </div>
-
-                                            <div className={`p-2.5 rounded-lg border ${!isUserMemberOfInst ? 'bg-white/10 border-white/20' : 'bg-black/30 border-white/5'}`}>
-                                                <div className="text-[10px] text-muted font-bold uppercase mb-1 flex justify-between">
-                                                    <span>Tarifa Invitado</span>
-                                                    {!isUserMemberOfInst && <span className="text-[9px] text-amber-300">✓ Tu Tarifa</span>}
-                                                </div>
-                                                <div className="text-white flex justify-between text-[11px]">
-                                                    <span className="text-muted">Diurna:</span>
-                                                    <span className="font-bold">${selectedInst.price_day || 0}</span>
-                                                </div>
-                                                <div className="text-white flex justify-between text-[11px]">
-                                                    <span className="text-muted">Nocturna:</span>
-                                                    <span className="font-bold">${selectedInst.price_night || selectedInst.price_day || 0}</span>
-                                                </div>
-                                                <div className="text-[9px] text-muted mt-1">Costo por turno ({minDuration} min)</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
                             </div>
 
+                            {/* Date Navigation Bar with < > arrows */}
                             <div className="space-y-2">
                                 <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                    <Calendar size={14} /> Fecha
+                                    <Calendar size={14} className="text-primary" /> Día de Reserva
                                 </label>
-                                <input 
-                                    type="date"
-                                    min={new Date().toISOString().split('T')[0]}
-                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm font-bold"
-                                    value={date}
-                                    onChange={e => setDate(e.target.value)}
-                                />
+                                
+                                <div className="flex flex-wrap items-center gap-2 bg-sidebar p-2 rounded-xl border border-white/10">
+                                    <div className="flex items-center gap-1">
+                                        <button
+                                            type="button"
+                                            onClick={handlePrevDay}
+                                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
+                                            title="Día anterior"
+                                        >
+                                            <ChevronLeft size={16} />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleNextDay}
+                                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
+                                            title="Día siguiente"
+                                        >
+                                            <ChevronRight size={16} />
+                                        </button>
+                                    </div>
+
+                                    <div className="flex-1 text-center font-black text-sm text-primary tracking-wide bg-white/5 py-1.5 px-3 rounded-lg border border-white/5">
+                                        {formatFriendlyDate(date)}
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleToday}
+                                        className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg text-xs font-bold transition-colors"
+                                    >
+                                        Hoy
+                                    </button>
+
+                                    <input 
+                                        type="date"
+                                        min={new Date().toISOString().split('T')[0]}
+                                        className="bg-card border border-white/10 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-primary text-xs font-bold"
+                                        value={date}
+                                        onChange={e => setDate(e.target.value)}
+                                    />
+                                </div>
                             </div>
+
+                            {/* Participant Selector */}
+                            <ParticipantSelector
+                                participants={participants}
+                                onChange={setParticipants}
+                                currentUser={user}
+                                maxPlayers={4}
+                            />
 
                             {selectedInst && (
                                 <div className="space-y-2">
                                     <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                        <Clock size={14} /> Duración
+                                        <Clock size={14} className="text-primary" /> Duración del Turno
                                     </label>
                                     <div className="flex gap-2">
                                         {Array.from({ length: maxSlots }, (_, i) => i + 1).map((num) => (
                                             <button
                                                 key={num}
+                                                type="button"
                                                 onClick={() => setDurationMultiplier(num)}
                                                 className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${
                                                     durationMultiplier === num
@@ -768,23 +1047,23 @@ const PlayerNewBookingModal = ({
                             <div>
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                        <Clock size={14} /> Horarios Disponibles
+                                        <Clock size={14} className="text-primary" /> Horarios Disponibles ({formatFriendlyDate(date)})
                                     </label>
                                 </div>
                                 {loadingSlots ? (
-                                    <div className="py-8 text-center text-muted"><Loader2 className="animate-spin mx-auto mb-2" /> Buscando canchas...</div>
+                                    <div className="py-8 text-center text-muted"><Loader2 className="animate-spin mx-auto mb-2 text-primary" /> Buscando canchas disponibles...</div>
                                 ) : slots.length === 0 ? (
-                                    <div className="space-y-4">
-                                        <div className="py-8 text-center text-muted border border-dashed border-white/10 rounded-xl flex flex-col items-center gap-2">
-                                            <Calendar size={24} className="opacity-50" />
-                                            <p>No hay horarios disponibles en esta sede.</p>
-                                        </div>
+                                    <div className="py-8 text-center text-muted border border-dashed border-white/10 rounded-xl flex flex-col items-center gap-2">
+                                        <Calendar size={24} className="opacity-50 text-primary" />
+                                        <p className="font-bold text-white">No hay horarios disponibles en esta fecha.</p>
+                                        <p className="text-xs text-muted">Prueba cambiando de día con las flechas superiores.</p>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
                                         {slots.map((slot, idx) => (
                                             <button
                                                 key={idx}
+                                                type="button"
                                                 disabled={!slot.is_active}
                                                 onClick={() => setSelectedSlot(slot)}
                                                 className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
@@ -834,9 +1113,10 @@ const PlayerNewBookingModal = ({
                                         </div>
                                     </div>
 
-                                    {/* Payment Method Selector (Point 3) */}
+                                    {/* Payment Method Selector */}
                                     <div className="grid grid-cols-2 gap-3">
                                         <button 
+                                            type="button"
                                             onClick={() => setPaymentMethod('mp')}
                                             className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
                                                 paymentMethod === 'mp' 
@@ -848,6 +1128,7 @@ const PlayerNewBookingModal = ({
                                             <span className="text-xs font-bold">Mercado Pago</span>
                                         </button>
                                         <button 
+                                            type="button"
                                             onClick={() => setPaymentMethod('cash')}
                                             className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
                                                 paymentMethod === 'cash' 
@@ -867,10 +1148,11 @@ const PlayerNewBookingModal = ({
 
                 {paymentStep === 'select' && (
                     <div className="p-5 border-t border-white/10 bg-white/5 flex justify-end gap-3">
-                        <button onClick={onClose} className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors">
+                        <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors">
                             Cancelar
                         </button>
                         <button 
+                            type="button"
                             onClick={handleConfirm}
                             disabled={!selectedSlot}
                             className={`px-6 py-2 rounded-xl text-white font-bold flex items-center gap-2 shadow-lg transition-all ${
@@ -887,12 +1169,7 @@ const PlayerNewBookingModal = ({
     );
 };
 
-// ... existing AdminBookingManager (UNCHANGED, kept for context) ...
 const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
-    // ... (This component remains exactly the same as previous version, stripped here to save space as no logic change requested for admin side, only player payment)
-    // For XML response validity, I will re-include the basic structure or assume it's preserved if I output the full file.
-    // To ensure correctness, I will include the full code of AdminBookingManager from previous state.
-    
     const [institution, setInstitution] = useState<Institution | null>(null);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
@@ -905,6 +1182,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     const [selectedSlot, setSelectedSlot] = useState<{time: string, court: string} | null>(null);
     const [actionType, setActionType] = useState<'guest' | 'tournament' | 'maintenance' | 'class' | null>(null);
     const [bookingTitle, setBookingTitle] = useState('');
+    const [participants, setParticipants] = useState<BookingParticipant[]>([]);
     const [matchResult, setMatchResult] = useState(''); 
     const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
     const [extras, setExtras] = useState({ rackets: 0, balls: false });
@@ -921,6 +1199,28 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     const [weatherActionLoading, setWeatherActionLoading] = useState(false);
 
     const { addToast } = useToast();
+
+    const handlePrevDay = () => {
+        if (!selectedDate) return;
+        const [y, m, d] = selectedDate.split('-').map(Number);
+        const dateObj = new Date(y, m - 1, d);
+        dateObj.setDate(dateObj.getDate() - 1);
+        const newStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        setSelectedDate(newStr);
+    };
+
+    const handleNextDay = () => {
+        if (!selectedDate) return;
+        const [y, m, d] = selectedDate.split('-').map(Number);
+        const dateObj = new Date(y, m - 1, d);
+        dateObj.setDate(dateObj.getDate() + 1);
+        const newStr = `${dateObj.getFullYear()}-${String(dateObj.getMonth() + 1).padStart(2, '0')}-${String(dateObj.getDate()).padStart(2, '0')}`;
+        setSelectedDate(newStr);
+    };
+
+    const handleToday = () => {
+        setSelectedDate(new Date().toISOString().split('T')[0]);
+    };
 
     const handleBulkCancelWeather = async () => {
         if (!institution) return;
@@ -1047,6 +1347,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
             setSelectedSlot({ time, court });
             setActionType(null);
             setBookingTitle('');
+            setParticipants([]);
             setExtras({ rackets: 0, balls: false });
             setTournamentFormat('3');
             const [year, month, day] = selectedDate.split('-').map(Number);
@@ -1092,13 +1393,23 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
             price = calculateGuestPrice(selectedSlot.time);
         }
         const status: Booking['status'] = (type === 'maintenance' || type === 'class') ? 'blocked' : 'confirmed';
-        const baseTitle = bookingTitle || (type === 'maintenance' ? 'Mantenimiento' : type === 'tournament' ? 'Partido Torneo' : type === 'class' ? 'Clase / Escuela' : 'Alquiler');
+        
+        let baseTitle = bookingTitle;
+        if (!baseTitle) {
+            if (participants.length > 0) {
+                baseTitle = participants.map(p => p.name).join(' vs ');
+            } else {
+                baseTitle = type === 'maintenance' ? 'Mantenimiento' : type === 'tournament' ? 'Partido Torneo' : type === 'class' ? 'Clase / Escuela' : 'Alquiler';
+            }
+        }
+
         let duration = 90; 
         if (type === 'tournament') {
             duration = tournamentFormat === '5' ? (institution.config_match_duration_5_sets || 150) : (institution.config_match_duration_3_sets || 90);
         } else if (type === 'guest' || type === 'class') {
             duration = institution.config_booking_min_duration || 60;
         }
+
         const bookingTemplate = {
             user_id: user.id, 
             institution_id: institution.id,
@@ -1110,8 +1421,10 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
             title: baseTitle,
             total_price: price,
             payment_status: type === 'guest' ? 'pending' : 'n/a',
-            extras: type === 'guest' ? extras : undefined
+            extras: type === 'guest' ? extras : undefined,
+            participants: participants
         };
+
         try {
             if ((type === 'class' || type === 'maintenance') && isRecurring && recurrenceEndDate) {
                 const bookingsToCreate: Partial<Booking>[] = [];
@@ -1127,33 +1440,34 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                     safetyCount++;
                 }
                 if (bookingsToCreate.length === 0) bookingsToCreate.push({ ...bookingTemplate, date: selectedDate });
-                await Promise.all(bookingsToCreate.map(b => api.bookings.create(b)));
+                await Promise.all(bookingsToCreate.map(b => api.bookings.create(b, user)));
                 addToast(`Se han programado ${bookingsToCreate.length} sesiones.`, 'success');
             } else {
-                await api.bookings.create({ ...bookingTemplate, date: selectedDate });
-                addToast('Reserva creada con éxito.', 'success');
+                await api.bookings.create({ ...bookingTemplate, date: selectedDate }, user);
+                addToast('Reserva creada con éxito y jugadores notificados.', 'success');
             }
             loadBookingsResult();
             setSelectedSlot(null);
             setBookingTitle('');
+            setParticipants([]);
         } catch (e: any) {
             addToast('Error al crear reserva: ' + e.message, 'error');
         }
     };
 
-    const handleUpdateResult = async () => {
-        if (!viewingBooking) return;
-        addToast(`Resultado actualizado localmente: ${matchResult}`, 'success');
-        setViewingBooking(null);
-    };
-
     const handleDeleteBooking = async () => {
         if (!viewingBooking) return;
-        if (confirm("¿Estás seguro de eliminar esta reserva?")) {
-            await api.bookings.delete(viewingBooking.id);
-            addToast('Reserva eliminada.', 'info');
-            loadBookingsResult();
-            setViewingBooking(null);
+        if (confirm("¿Estás seguro de eliminar esta reserva definitivamente?")) {
+            try {
+                setBookings(prev => prev.filter(b => b.id !== viewingBooking.id));
+                setViewingBooking(null);
+                await api.bookings.delete(viewingBooking.id);
+                addToast('Reserva eliminada definitivamente.', 'info');
+                loadBookingsResult();
+            } catch (e: any) {
+                addToast('Error al eliminar reserva: ' + e.message, 'error');
+                loadBookingsResult();
+            }
         }
     };
 
@@ -1167,32 +1481,84 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     return (
         <div className="space-y-8 animate-fade-up">
             <div className="flex justify-between items-center">
-                <div><h2 className="text-2xl font-bold text-white">Gestión de Canchas</h2><p className="text-muted text-sm">Administra la disponibilidad y bloquea horarios.</p></div>
-                {institution && (<div className="text-right"><div className="text-sm font-bold text-white">{institution.name}</div><div className="text-xs text-muted">{institution.city}</div></div>)}
+                <div>
+                    <h2 className="text-2xl font-black text-white">Gestión de Canchas</h2>
+                    <p className="text-muted text-sm">Administra la disponibilidad, asigna jugadores y bloquea horarios.</p>
+                </div>
+                {institution && (
+                    <div className="text-right">
+                        <div className="text-sm font-bold text-white">{institution.name}</div>
+                        <div className="text-xs text-muted">{institution.city}</div>
+                    </div>
+                )}
             </div>
+
             <div id="grid-container">
-                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-4">
-                    <h3 className="text-lg font-bold text-white flex items-center gap-2"><Calendar size={20} className="text-muted" /> Grilla Operativa</h3>
-                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                {/* Operational Grid Header with < > Day Navigation (Matching Screenshot 1) */}
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4 bg-slate-900/60 p-3 rounded-2xl border border-white/10">
+                    <div className="flex items-center gap-2">
+                        <Calendar size={20} className="text-primary" />
+                        <h3 className="text-lg font-black text-white">Grilla Operativa</h3>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+                        {/* Day Switcher Arrows < > */}
+                        <div className="flex items-center bg-card border border-white/10 rounded-xl p-1 shadow-inner">
+                            <button 
+                                type="button"
+                                onClick={handlePrevDay} 
+                                className="p-2 rounded-lg hover:bg-white/10 text-muted hover:text-white transition-colors"
+                                title="Día anterior"
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={handleNextDay} 
+                                className="p-2 rounded-lg hover:bg-white/10 text-muted hover:text-white transition-colors"
+                                title="Día siguiente"
+                            >
+                                <ChevronRight size={18} />
+                            </button>
+                            <div className="px-3 py-1 text-xs sm:text-sm font-black text-white tracking-wide border-l border-white/10 flex items-center gap-1.5">
+                                <span>{formatFriendlyDate(selectedDate)}</span>
+                            </div>
+                        </div>
+
+                        <button
+                            type="button"
+                            onClick={handleToday}
+                            className="px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-xl text-xs font-bold transition-colors"
+                        >
+                            Hoy
+                        </button>
+
+                        <input 
+                            type="date" 
+                            className="bg-card border border-white/10 rounded-xl px-3 py-2 text-white focus:border-primary focus:outline-none text-xs font-bold" 
+                            value={selectedDate} 
+                            onChange={e => setSelectedDate(e.target.value)} 
+                        />
+
                         <button 
                             onClick={() => setShowWeatherModal(true)}
-                            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-colors shadow-lg shadow-blue-900/20"
+                            className="bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 border border-blue-500/30 px-3 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors shadow-lg shadow-blue-900/20"
                             title="Cancelar reservas masivamente por mal tiempo o lluvia"
                         >
                             <CloudRain size={16} /> Suspensión Clima
                         </button>
-                        <input type="date" className="bg-card border border-white/10 rounded-xl px-4 py-2 text-white focus:border-primary focus:outline-none text-sm font-bold" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} />
                     </div>
                 </div>
+
                 <div className="overflow-x-auto bg-card border border-white/10 rounded-2xl mb-4 relative min-h-[400px]">
                     {loadingGrid && (<div className="absolute inset-0 bg-dark/50 backdrop-blur-sm flex items-center justify-center z-10"><Loader2 className="animate-spin text-primary" size={40} /></div>)}
                     {isDayClosed ? (
-                        <div className="flex flex-col items-center justify-center h-[400px] text-muted"><div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4"><Lock size={32} /></div><p className="font-bold text-white">Cerrado.</p></div>
+                        <div className="flex flex-col items-center justify-center h-[400px] text-muted"><div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4"><Lock size={32} /></div><p className="font-bold text-white">Cerrado en esta fecha.</p></div>
                     ) : (
                         <div className="min-w-[800px]">
-                            <div className="grid bg-white/5 border-b border-white/10 text-center py-2 sticky top-0 z-10 backdrop-blur-md" style={{ gridTemplateColumns: `70px repeat(${gridCourts.length}, 1fr)` }}>
+                            <div className="grid bg-white/5 border-b border-white/10 text-center py-2.5 sticky top-0 z-10 backdrop-blur-md" style={{ gridTemplateColumns: `70px repeat(${gridCourts.length}, 1fr)` }}>
                                 <div className="text-[10px] font-bold text-muted uppercase flex items-center justify-center">Hora</div>
-                                {gridCourts.map(court => (<div key={court} className="text-xs font-bold text-white uppercase">{court}</div>))}
+                                {gridCourts.map(court => (<div key={court} className="text-xs font-black text-white uppercase tracking-wider">{court}</div>))}
                             </div>
                             {gridSlots.map((time) => (
                                 <div key={time} className="grid border-b border-white/5 hover:bg-white/5 transition-colors group" style={{ gridTemplateColumns: `70px repeat(${gridCourts.length}, 1fr)` }}>
@@ -1202,10 +1568,32 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                         const isStart = booking?.start_time === time;
                                         const visualType = booking ? getBookingType(booking) : 'guest';
                                         return (
-                                            <div key={court} className="p-0.5 border-r border-white/5 last:border-0 h-10 relative">
+                                            <div key={court} className="p-0.5 border-r border-white/5 last:border-0 min-h-[44px] relative">
                                                 {booking ? (
-                                                    <div onClick={() => handleSlotClick(time, court, booking)} className={`h-full w-full rounded flex flex-col justify-center cursor-pointer transition-all px-2 relative z-0 ${visualType === 'tournament' ? 'bg-amber-600/60 border-l-2 border-amber-400' : visualType === 'class' ? 'bg-indigo-600/60 border-l-2 border-indigo-400' : visualType === 'maintenance' ? 'bg-slate-700/80 border-l-2 border-slate-500' : 'bg-primary/20 border-l-2 border-primary'}`}>
-                                                        {isStart && (<div className="truncate text-[10px] font-bold text-white leading-tight z-10">{booking.title}</div>)}
+                                                    <div 
+                                                        onClick={() => handleSlotClick(time, court, booking)} 
+                                                        className={`h-full w-full rounded flex flex-col justify-center cursor-pointer transition-all px-2 py-1 relative z-0 overflow-hidden ${
+                                                            visualType === 'tournament' ? 'bg-amber-600/60 border-l-2 border-amber-400 hover:bg-amber-600/75' : 
+                                                            visualType === 'class' ? 'bg-indigo-600/60 border-l-2 border-indigo-400 hover:bg-indigo-600/75' : 
+                                                            visualType === 'maintenance' ? 'bg-slate-700/80 border-l-2 border-slate-500 hover:bg-slate-700' : 
+                                                            'bg-primary/20 border-l-2 border-primary hover:bg-primary/30'
+                                                        }`}
+                                                    >
+                                                        {isStart && (
+                                                            <div className="flex flex-col justify-center space-y-0.5 z-10 leading-tight">
+                                                                {booking.participants && booking.participants.length > 0 ? (
+                                                                    booking.participants.map((p, pIdx) => (
+                                                                        <div key={pIdx} className="text-[10.5px] font-black text-white truncate tracking-tight uppercase">
+                                                                            {p.name}
+                                                                        </div>
+                                                                    ))
+                                                                ) : (
+                                                                    <div className="truncate text-[11px] font-bold text-white leading-tight">
+                                                                        {booking.title}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 ) : (
                                                     <button onClick={() => handleSlotClick(time, court)} className="w-full h-full rounded border border-transparent hover:border-white/10 hover:bg-white/5 transition-colors"></button>
@@ -1219,38 +1607,116 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                     )}
                 </div>
             </div>
+
             {/* VIEWING MODAL */}
             {viewingBooking && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
-                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative space-y-4">
                         <button onClick={() => setViewingBooking(null)} className="absolute top-4 right-4 text-muted hover:text-white"><X size={20}/></button>
-                        <div className="mb-4"><h3 className="text-xl font-bold text-white mt-2">{viewingBooking.title}</h3><div className="text-sm text-muted">{viewingBooking.court_name} • {viewingBooking.start_time}</div></div>
-                        <div className="flex gap-3"><button onClick={handleDeleteBooking} className="flex-1 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors"><Trash2 size={18} /> Eliminar</button></div>
-                    </div>
-                </div>
-            )}
-            {/* CREATE MODAL */}
-            {selectedSlot && !actionType && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
-                    <div id="booking-action-modal" className="bg-card border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative">
-                        <button onClick={() => setSelectedSlot(null)} className="absolute top-4 right-4 text-muted hover:text-white"><X size={20}/></button>
-                        <h3 className="text-center font-bold text-white mb-1">Nueva Reserva</h3>
-                        <div className="space-y-3 pt-2">
-                            <button onClick={() => setActionType('guest')} className="w-full py-3 bg-primary/10 text-primary font-bold rounded-xl border border-primary/20">Alquiler / Turno</button>
-                            <button onClick={() => setActionType('maintenance')} className="w-full py-3 bg-slate-700/30 text-slate-300 font-bold rounded-xl border border-slate-600/30">Bloquear Cancha</button>
+                        
+                        <div>
+                            <div className="text-xs font-bold text-primary uppercase tracking-wide">
+                                {viewingBooking.court_name} • {viewingBooking.start_time} - {viewingBooking.end_time} hs
+                            </div>
+                            <h3 className="text-xl font-black text-white mt-1">{viewingBooking.title}</h3>
+                            <div className="text-xs text-muted mt-0.5">{formatFriendlyDate(viewingBooking.date)}</div>
+                        </div>
+
+                        {/* Display Participants */}
+                        {viewingBooking.participants && viewingBooking.participants.length > 0 && (
+                            <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-2">
+                                <div className="text-xs font-bold text-muted uppercase flex items-center gap-1.5">
+                                    <Users size={14} className="text-primary" /> Jugadores en Cancha ({viewingBooking.participants.length})
+                                </div>
+                                <div className="space-y-1.5">
+                                    {viewingBooking.participants.map((p, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2 rounded-lg bg-black/30 border border-white/5 text-xs font-bold text-white">
+                                            <span>{p.name}</span>
+                                            {p.is_registered && <span className="text-[10px] bg-green-500/20 text-green-300 px-2 py-0.5 rounded-full">Socio Registrado</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex gap-3 pt-2">
+                            <button 
+                                onClick={handleDeleteBooking} 
+                                className="flex-1 py-3 bg-red-500/15 hover:bg-red-500/25 text-red-400 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors border border-red-500/20"
+                            >
+                                <Trash2 size={18} /> Eliminar Reserva
+                            </button>
                         </div>
                     </div>
                 </div>
             )}
-            {/* CREATE FORM */}
+
+            {/* CREATE ACTION SELECTION MODAL */}
+            {selectedSlot && !actionType && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
+                    <div id="booking-action-modal" className="bg-card border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative space-y-3">
+                        <button onClick={() => setSelectedSlot(null)} className="absolute top-4 right-4 text-muted hover:text-white"><X size={20}/></button>
+                        <div className="text-center">
+                            <h3 className="font-bold text-white text-lg">Nueva Reserva</h3>
+                            <p className="text-xs text-muted">{selectedSlot.court} • {selectedSlot.time} hs ({formatFriendlyDate(selectedDate)})</p>
+                        </div>
+                        <div className="space-y-2 pt-2">
+                            <button onClick={() => setActionType('guest')} className="w-full py-3 bg-primary/15 text-primary hover:bg-primary/25 font-bold rounded-xl border border-primary/30 transition-all text-sm">
+                                🎾 Alquiler / Turno de Cancha
+                            </button>
+                            <button onClick={() => setActionType('class')} className="w-full py-3 bg-indigo-500/15 text-indigo-300 hover:bg-indigo-500/25 font-bold rounded-xl border border-indigo-500/30 transition-all text-sm">
+                                🎓 Clase / Escuela
+                            </button>
+                            <button onClick={() => setActionType('maintenance')} className="w-full py-3 bg-slate-700/30 text-slate-300 hover:bg-slate-700/50 font-bold rounded-xl border border-slate-600/30 transition-all text-sm">
+                                🔒 Bloquear Cancha / Mantenimiento
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* CREATE FORM WITH PARTICIPANT SELECTION */}
             {selectedSlot && actionType && (
                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
-                    <div id="booking-form-modal" className="bg-card border border-white/10 rounded-2xl w-full max-w-sm p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+                    <div id="booking-form-modal" className="bg-card border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl relative max-h-[90vh] overflow-y-auto custom-scrollbar space-y-4">
                         <button onClick={() => setSelectedSlot(null)} className="absolute top-4 right-4 text-muted hover:text-white"><X size={20}/></button>
-                        <h3 className="text-center font-bold text-white mb-6">Confirmar</h3>
-                        <div className="space-y-4">
-                            <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white" placeholder="Título" value={bookingTitle} onChange={e => setBookingTitle(e.target.value)} />
-                            <button onClick={() => handleCreateBooking(actionType)} className="w-full py-3 bg-primary text-white font-bold rounded-xl shadow-lg">Confirmar</button>
+                        
+                        <div>
+                            <span className="text-xs font-bold text-primary uppercase">{selectedSlot.court} • {selectedSlot.time} hs</span>
+                            <h3 className="font-black text-white text-xl">
+                                {actionType === 'guest' ? 'Nuevo Turno / Alquiler' : actionType === 'class' ? 'Nueva Clase' : 'Bloquear Horario'}
+                            </h3>
+                            <div className="text-xs text-muted">{formatFriendlyDate(selectedDate)}</div>
+                        </div>
+
+                        <div className="space-y-4 pt-1">
+                            {/* Title (Optional override) */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-muted uppercase font-bold">Título o Motivo</label>
+                                <input 
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-primary" 
+                                    placeholder={actionType === 'guest' ? 'Ej: Turno Tarde o dejar vacío para usar nombres' : 'Título'} 
+                                    value={bookingTitle} 
+                                    onChange={e => setBookingTitle(e.target.value)} 
+                                />
+                            </div>
+
+                            {/* Participating Players Selection */}
+                            {actionType !== 'maintenance' && (
+                                <ParticipantSelector
+                                    participants={participants}
+                                    onChange={setParticipants}
+                                    currentUser={user}
+                                    maxPlayers={4}
+                                />
+                            )}
+
+                            <button 
+                                onClick={() => handleCreateBooking(actionType)} 
+                                className="w-full py-3.5 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl shadow-lg shadow-primary/20 transition-all flex items-center justify-center gap-2 text-sm"
+                            >
+                                <Check size={18} /> Confirmar Reserva
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1276,7 +1742,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                 <div className="space-y-1">
                                     <label className="text-[10px] text-muted uppercase font-bold">Fecha Seleccionada</label>
                                     <div className="bg-sidebar border border-white/10 rounded-xl p-3 text-white text-sm font-bold flex items-center justify-between">
-                                        <span>{new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
+                                        <span>{formatFriendlyDate(selectedDate)}</span>
                                         <span className="text-xs bg-white/10 px-2 py-0.5 rounded text-muted">{selectedDate}</span>
                                     </div>
                                 </div>
@@ -1332,11 +1798,6 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                         value={weatherReason}
                                         onChange={e => setWeatherReason(e.target.value)}
                                     />
-                                </div>
-
-                                <div className="bg-blue-500/10 border border-blue-500/20 rounded-xl p-3 text-[11px] text-blue-200 space-y-1">
-                                    <p className="font-bold flex items-center gap-1"><CloudLightning size={14} /> Información:</p>
-                                    <p>Las reservas afectadas cambiarán su estado a <strong>Cancelada</strong> y su título indicará la causa climática.</p>
                                 </div>
                             </div>
                         </div>

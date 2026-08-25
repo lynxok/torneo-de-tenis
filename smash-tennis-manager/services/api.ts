@@ -1506,10 +1506,22 @@ export const api = {
             const { data, error } = await supabase
                 .from('bookings')
                 .select('*, institutions(name)')
-                .eq('user_id', userId)
                 .order('date', { ascending: false });
-            if (error) throw error;
-            return data as Booking[];
+
+            if (error) {
+                console.error("Error fetching bookings:", error);
+                return [];
+            }
+
+            const allBookings = (data || []) as Booking[];
+            return allBookings.filter(b => {
+                if (b.deleted_by_user) return false;
+                if (b.user_id === userId) return true;
+                if (b.participants && Array.isArray(b.participants)) {
+                    return b.participants.some((p: any) => p.user_id === userId);
+                }
+                return false;
+            });
         },
         async getByInstitutionAndDate(institutionId: string, date: string) {
             const { data, error } = await supabase
@@ -1521,19 +1533,66 @@ export const api = {
             if (error) throw error;
             return (data || []) as Booking[];
         },
-        async create(booking: Partial<Booking>) {
+        async create(booking: Partial<Booking>, creatorProfile?: UserProfile | null) {
             const { data, error } = await supabase.from('bookings').insert(booking).select().single();
             if (error) throw error;
+
+            // Notify participants if any registered players were included
+            if (booking.participants && Array.isArray(booking.participants)) {
+                const creatorName = creatorProfile 
+                    ? formatPlayerName(creatorProfile.name, creatorProfile.lastname) 
+                    : 'Un organizador / usuario';
+
+                const targetParticipants = booking.participants.filter(
+                    (p: any) => p.user_id && p.user_id !== booking.user_id
+                );
+
+                for (const p of targetParticipants) {
+                    try {
+                        await api.messages.send({
+                            sender_id: booking.user_id || 'system',
+                            sender_name: creatorName,
+                            receiver_id: p.user_id,
+                            type: 'direct',
+                            institution_id: booking.institution_id,
+                            subject: `🎾 Cancha Reservada: ${booking.court_name || 'Cancha'} (${booking.date})`,
+                            content: `¡Hola ${p.name}! ${creatorName} te agregó como participante en una reserva de cancha para el día ${booking.date} de ${booking.start_time} a ${booking.end_time} hs en ${booking.court_name || 'la cancha'}.`,
+                            is_read: false
+                        });
+                    } catch (msgErr) {
+                        console.warn(`No se pudo enviar notificación al jugador ${p.name}:`, msgErr);
+                    }
+                }
+            }
+
             return data;
         },
         async update(id: string, updates: Partial<Booking>) {
-            const { data, error } = await supabase.from('bookings').update(updates).eq('id', id).select().single();
+            const { data, error } = await supabase.from('bookings').update(updates).eq('id', id).select();
             if (error) throw error;
-            return data;
+            return (data && data.length > 0) ? data[0] : updates;
         },
         async delete(id: string) {
-            const { error } = await supabase.from('bookings').delete().eq('id', id);
-            if (error) throw error;
+            try {
+                const { error } = await supabase.from('bookings').delete().eq('id', id);
+                if (error) throw error;
+                return { success: true };
+            } catch (e) {
+                // Fallback soft delete
+                await supabase.from('bookings').update({ status: 'cancelled', deleted_by_user: true }).eq('id', id);
+                return { success: true, method: 'soft_delete' };
+            }
+        },
+        async hideFromUser(id: string) {
+            try {
+                const { error } = await supabase.from('bookings').update({ deleted_by_user: true }).eq('id', id);
+                if (error) {
+                    await supabase.from('bookings').delete().eq('id', id);
+                }
+            } catch (e) {
+                console.error("Error hiding booking:", e);
+            }
+            return true;
         },
         async bulkCancelByWeather(institutionId: string, date: string, startTime?: string, reason?: string) {
             let query = supabase

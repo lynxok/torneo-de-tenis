@@ -329,6 +329,14 @@ export interface MatchmakingPost {
   matched_with_name?: string;
 }
 
+export interface BookingParticipant {
+  user_id?: string;
+  name: string;
+  lastname?: string;
+  is_registered?: boolean;
+  avatar_url?: string;
+}
+
 export interface Booking {
   id: string;
   user_id: string;
@@ -348,6 +356,8 @@ export interface Booking {
   };
   payment_status?: string;
   institutions?: { name: string };
+  participants?: BookingParticipant[];
+  deleted_by_user?: boolean;
   
   // Tournament specific
   match_score?: string; // e.g. "6-4 6-2" if played
