@@ -1151,12 +1151,19 @@ export const api = {
             const scoreStatus = isOrgOrSuperAdmin ? 'confirmed' : 'pending_confirmation';
             const nowIso = new Date().toISOString();
 
+            const submitterName = user ? (
+                user.role === 'superadmin' ? 'Administrador General' :
+                user.role === 'admin' ? `Admin (${user.name || 'Organizador'})` :
+                `${user.name || ''} ${user.lastname || ''}`.trim() || 'Jugador'
+            ) : 'Usuario del Sistema';
+
             const updatePayload: any = {
                 score,
                 winner_id: winnerId,
                 scheduling_status: 'confirmed',
                 score_status: scoreStatus,
                 score_submitted_by: user?.id || null,
+                score_submitted_by_name: submitterName,
                 score_submitted_at: nowIso,
                 played_at: nowIso,
                 is_played: true
@@ -1182,7 +1189,11 @@ export const api = {
             } catch (err: any) {
                 console.warn("Full match score update failed (schema cache mismatch), using resilient fallback payload:", err);
                 const safePayload: any = {
-                    score,
+                    score: {
+                        ...score,
+                        submitted_by_name: submitterName,
+                        submitted_at: nowIso
+                    },
                     winner_id: winnerId,
                     scheduling_status: 'confirmed',
                     played_at: nowIso,
@@ -1236,7 +1247,84 @@ export const api = {
                 }
             }
 
+            // If editing an existing finished match where winner changed, revert stats from old winner
+            if (matchData && matchData.is_played && matchData.winner_id && matchData.winner_id !== winnerId) {
+                try {
+                    const oldWinnerId = matchData.winner_id;
+                    const { data: oldWp } = await supabase.from('profiles').select('matches_won').eq('id', oldWinnerId).single();
+                    if (oldWp && (oldWp.matches_won || 0) > 0) {
+                        await supabase.from('profiles').update({ matches_won: oldWp.matches_won - 1 }).eq('id', oldWinnerId);
+                    }
+                    if (matchData.winner_partner_id) {
+                        const { data: oldPartner } = await supabase.from('profiles').select('matches_won').eq('id', matchData.winner_partner_id).single();
+                        if (oldPartner && (oldPartner.matches_won || 0) > 0) {
+                            await supabase.from('profiles').update({ matches_won: oldPartner.matches_won - 1 }).eq('id', matchData.winner_partner_id);
+                        }
+                    }
+                } catch (revertErr) {
+                    console.warn("Revert old winner stats fallback:", revertErr);
+                }
+            }
+
             return { scoreStatus };
+        },
+
+        async resetScore(matchId: string, user?: UserProfile) {
+            const { data: matchData } = await supabase.from('matches').select('*, tournaments(name, institution_id)').eq('id', matchId).single();
+            if (!matchData) throw new Error("Partido no encontrado");
+
+            // Revert winner matches_won count if was recorded
+            if (matchData.winner_id && matchData.is_played) {
+                try {
+                    const { data: wp } = await supabase.from('profiles').select('matches_won').eq('id', matchData.winner_id).single();
+                    if (wp && (wp.matches_won || 0) > 0) {
+                        await supabase.from('profiles').update({ matches_won: wp.matches_won - 1 }).eq('id', matchData.winner_id);
+                    }
+                    if (matchData.winner_partner_id) {
+                        const { data: partnerWp } = await supabase.from('profiles').select('matches_won').eq('id', matchData.winner_partner_id).single();
+                        if (partnerWp && (partnerWp.matches_won || 0) > 0) {
+                            await supabase.from('profiles').update({ matches_won: partnerWp.matches_won - 1 }).eq('id', matchData.winner_partner_id);
+                        }
+                    }
+                } catch (revertStatsErr) {
+                    console.warn("Could not revert winner matches_won on reset:", revertStatsErr);
+                }
+            }
+
+            const resetPayload: any = {
+                score: null,
+                winner_id: null,
+                winner_name: null,
+                winner_partner_id: null,
+                scheduling_status: 'confirmed',
+                score_status: null,
+                score_submitted_by: null,
+                score_submitted_by_name: null,
+                score_submitted_at: null,
+                score_confirmed_at: null,
+                score_dispute_reason: null,
+                played_at: null,
+                is_played: false
+            };
+
+            try {
+                const { error } = await supabase.from('matches').update(resetPayload).eq('id', matchId);
+                if (error) throw error;
+            } catch (err: any) {
+                console.warn("Full reset failed, using safe fallback:", err);
+                const safeReset = {
+                    score: null,
+                    winner_id: null,
+                    winner_name: null,
+                    scheduling_status: 'confirmed',
+                    played_at: null,
+                    is_played: false
+                };
+                const { error: fallbackErr } = await supabase.from('matches').update(safeReset).eq('id', matchId);
+                if (fallbackErr) throw fallbackErr;
+            }
+
+            return true;
         },
 
         async confirmScore(matchId: string, user: UserProfile) {

@@ -7,7 +7,7 @@ import {
     Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
-    Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw
+    Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
@@ -91,12 +91,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     // Score Modal State (with 24h confirmation & doubles support)
     const [selectedMatchForScore, setSelectedMatchForScore] = useState<Match | null>(null);
-    const [scoreP1Set1, setScoreP1Set1] = useState(6);
-    const [scoreP2Set1, setScoreP2Set1] = useState(4);
-    const [scoreP1Set2, setScoreP1Set2] = useState(6);
-    const [scoreP2Set2, setScoreP2Set2] = useState(3);
-    const [scoreP1Set3, setScoreP1Set3] = useState(0);
-    const [scoreP2Set3, setScoreP2Set3] = useState(0);
+    const [scoreP1Set1, setScoreP1Set1] = useState<number | ''>('');
+    const [scoreP2Set1, setScoreP2Set1] = useState<number | ''>('');
+    const [scoreP1Set2, setScoreP1Set2] = useState<number | ''>('');
+    const [scoreP2Set2, setScoreP2Set2] = useState<number | ''>('');
+    const [scoreP1Set3, setScoreP1Set3] = useState<number | ''>('');
+    const [scoreP2Set3, setScoreP2Set3] = useState<number | ''>('');
     const [hasSet3, setHasSet3] = useState(false);
     const [selectedWinnerId, setSelectedWinnerId] = useState<string>('');
     const [savingScore, setSavingScore] = useState(false);
@@ -200,18 +200,82 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
         setSelectedMatchForScore(m);
         setSelectedWinnerId(m.winner_id || m.player1_id || '');
-        setHasSet3(false);
-        setScoreP1Set1(6);
-        setScoreP2Set1(4);
-        setScoreP1Set2(6);
-        setScoreP2Set2(3);
-        setScoreP1Set3(0);
-        setScoreP2Set3(0);
+        
+        // If match has existing score, parse and preload values
+        if (m.score && m.is_played) {
+            if (typeof m.score === 'object') {
+                const s1 = (m.score.set1 || '').split('-').map(Number);
+                const s2 = (m.score.set2 || '').split('-').map(Number);
+                const s3 = (m.score.set3 || '').split('-').map(Number);
+                
+                setScoreP1Set1(!isNaN(s1[0]) ? s1[0] : '');
+                setScoreP2Set1(!isNaN(s1[1]) ? s1[1] : '');
+                setScoreP1Set2(!isNaN(s2[0]) ? s2[0] : '');
+                setScoreP2Set2(!isNaN(s2[1]) ? s2[1] : '');
+                
+                if (m.score.set3) {
+                    setHasSet3(true);
+                    setScoreP1Set3(!isNaN(s3[0]) ? s3[0] : '');
+                    setScoreP2Set3(!isNaN(s3[1]) ? s3[1] : '');
+                } else {
+                    setHasSet3(false);
+                    setScoreP1Set3('');
+                    setScoreP2Set3('');
+                }
+            } else {
+                setHasSet3(false);
+                setScoreP1Set1('');
+                setScoreP2Set1('');
+                setScoreP1Set2('');
+                setScoreP2Set2('');
+                setScoreP1Set3('');
+                setScoreP2Set3('');
+            }
+        } else {
+            // New / unplayed match: keep completely blank
+            setHasSet3(false);
+            setScoreP1Set1('');
+            setScoreP2Set1('');
+            setScoreP1Set2('');
+            setScoreP2Set2('');
+            setScoreP1Set3('');
+            setScoreP2Set3('');
+        }
+    };
+
+    const handleResetScore = async () => {
+        if (!selectedMatchForScore) return;
+        const confirmReset = window.confirm(
+            "⚠️ ¿Estás seguro de anular el resultado de este partido?\n\nEl partido volverá al estado 'Por Jugar' y se recalcularán automáticamente las posiciones del grupo y estadísticas."
+        );
+        if (!confirmReset) return;
+
+        setSavingScore(true);
+        try {
+            await api.matches.resetScore(selectedMatchForScore.id, user);
+            addToast("Resultado anulado. El partido volvió al estado 'Por Jugar'.", 'success');
+            setSelectedMatchForScore(null);
+            loadTournament();
+        } catch (e: any) {
+            addToast("Error al anular resultado: " + e.message, 'error');
+        } finally {
+            setSavingScore(false);
+        }
     };
 
     const handleSaveScore = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedMatchForScore) return;
+
+        if (scoreP1Set1 === '' || scoreP2Set1 === '' || scoreP1Set2 === '' || scoreP2Set2 === '') {
+            addToast("Por favor completa los resultados del Set 1 y Set 2.", 'error');
+            return;
+        }
+
+        if (hasSet3 && (scoreP1Set3 === '' || scoreP2Set3 === '')) {
+            addToast("Por favor completa los resultados del Set 3 o desactívalo.", 'error');
+            return;
+        }
 
         setSavingScore(true);
         try {
@@ -1324,10 +1388,26 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
                                                                     </div>
 
+                                                                    {/* Submitter info for played matches */}
+                                                                    {m.is_played && (m.score_submitted_by_name || m.score?.submitted_by_name || m.played_at) && (
+                                                                        <div className="flex items-center justify-between text-[10px] text-slate-400 border-t border-white/5 pt-1.5 px-0.5">
+                                                                            <span className="truncate">
+                                                                                Cargado por: <strong className="text-slate-300">{m.score_submitted_by_name || m.score?.submitted_by_name || 'Participante'}</strong>
+                                                                            </span>
+                                                                            <span className="text-[9px] text-slate-500 shrink-0 ml-2">
+                                                                                {m.score_submitted_at || m.score?.submitted_at || m.played_at 
+                                                                                    ? new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' hs (' + new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleDateString([], { day: '2-digit', month: '2-digit' }) + ')'
+                                                                                    : ''}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+
                                                                     {/* Rival Score Confirmation Banner */}
                                                                     {isOpponentPending && (
                                                                         <div className="mt-1 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-2">
-                                                                            <span className="text-[11px] text-amber-300 font-medium">¿Confirmas este marcador cargado por tu rival?</span>
+                                                                            <span className="text-[11px] text-amber-300 font-medium">
+                                                                                ¿Confirmas este marcador cargado por {m.score_submitted_by_name || m.score?.submitted_by_name || 'tu rival'}?
+                                                                            </span>
                                                                             <div className="flex items-center gap-1.5">
                                                                                 <button
                                                                                     onClick={() => handleConfirmScore(m.id)}
@@ -1555,6 +1635,13 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         )}
                                                                     </div>
 
+                                                                    {/* Submitter info */}
+                                                                    {m.is_played && (m.score_submitted_by_name || m.score?.submitted_by_name) && (
+                                                                        <div className="text-[9px] text-slate-400 border-t border-white/5 pt-1 truncate">
+                                                                            Cargado por: <strong className="text-slate-300">{m.score_submitted_by_name || m.score?.submitted_by_name}</strong>
+                                                                        </div>
+                                                                    )}
+
                                                                     {/* Rival Score Confirmation Banner */}
                                                                     {isOpponentPending && (
                                                                         <div className="mt-1 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-2">
@@ -1644,6 +1731,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                 {m.winner_id === m.player2_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
                                                             </div>
                                                         </div>
+
+                                                        {m.is_played && (m.score_submitted_by_name || m.score?.submitted_by_name || m.played_at) && (
+                                                            <div className="text-[10px] text-slate-400 pt-1 flex items-center gap-1">
+                                                                <span>Cargado por: <strong className="text-slate-300">{m.score_submitted_by_name || m.score?.submitted_by_name || 'Participante'}</strong></span>
+                                                                {(m.score_submitted_at || m.score?.submitted_at || m.played_at) && (
+                                                                    <span className="text-slate-500">
+                                                                        • {new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs ({new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleDateString([], { day: '2-digit', month: '2-digit' })})
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                     </div>
 
                                                     <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
@@ -2077,17 +2175,21 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         type="number"
                                         min={0}
                                         max={7}
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold"
+                                        placeholder="0"
+                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
                                         value={scoreP1Set1}
-                                        onChange={e => setScoreP1Set1(Number(e.target.value))}
+                                        onChange={e => setScoreP1Set1(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
+                                        required
                                     />
                                     <input
                                         type="number"
                                         min={0}
                                         max={7}
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold"
+                                        placeholder="0"
+                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
                                         value={scoreP2Set1}
-                                        onChange={e => setScoreP2Set1(Number(e.target.value))}
+                                        onChange={e => setScoreP2Set1(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
+                                        required
                                     />
                                 </div>
 
@@ -2098,39 +2200,56 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         type="number"
                                         min={0}
                                         max={7}
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold"
+                                        placeholder="0"
+                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
                                         value={scoreP1Set2}
-                                        onChange={e => setScoreP1Set2(Number(e.target.value))}
+                                        onChange={e => setScoreP1Set2(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
+                                        required
                                     />
                                     <input
                                         type="number"
                                         min={0}
                                         max={7}
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold"
+                                        placeholder="0"
+                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
                                         value={scoreP2Set2}
-                                        onChange={e => setScoreP2Set2(Number(e.target.value))}
+                                        onChange={e => setScoreP2Set2(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
+                                        required
                                     />
                                 </div>
 
                                 {/* Set 3 / Super Tiebreak */}
                                 {hasSet3 ? (
                                     <div className="grid grid-cols-3 items-center gap-2 bg-slate-900/60 p-3 rounded-xl border border-white/5 animate-fade-up">
-                                        <span className="text-xs font-bold text-white">Set 3 / STB</span>
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-xs font-bold text-white">Set 3 / STB</span>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => { setHasSet3(false); setScoreP1Set3(''); setScoreP2Set3(''); }} 
+                                                className="text-[10px] text-red-400 hover:text-red-300 font-bold"
+                                            >
+                                                Quitar
+                                            </button>
+                                        </div>
                                         <input
                                             type="number"
                                             min={0}
-                                            max={20}
-                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold"
+                                            max={30}
+                                            placeholder="0"
+                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
                                             value={scoreP1Set3}
-                                            onChange={e => setScoreP1Set3(Number(e.target.value))}
+                                            onChange={e => setScoreP1Set3(e.target.value === '' ? '' : Math.min(30, Math.max(0, Number(e.target.value))))}
+                                            required={hasSet3}
                                         />
                                         <input
                                             type="number"
                                             min={0}
-                                            max={20}
-                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold"
+                                            max={30}
+                                            placeholder="0"
+                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
                                             value={scoreP2Set3}
-                                            onChange={e => setScoreP2Set3(Number(e.target.value))}
+                                            onChange={e => setScoreP2Set3(e.target.value === '' ? '' : Math.min(30, Math.max(0, Number(e.target.value))))}
+                                            required={hasSet3}
                                         />
                                     </div>
                                 ) : (
@@ -2158,21 +2277,38 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </select>
                             </div>
 
-                            <div className="pt-4 flex justify-end gap-3 border-t border-white/10">
-                                <button
-                                    type="button"
-                                    onClick={() => setSelectedMatchForScore(null)}
-                                    className="px-4 py-2 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={savingScore}
-                                    className="px-6 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-primary/20 disabled:opacity-50"
-                                >
-                                    {savingScore ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} Guardar Marcador
-                                </button>
+                            <div className="pt-4 flex items-center justify-between gap-2 border-t border-white/10">
+                                {isClubAdmin && selectedMatchForScore.is_played ? (
+                                    <button
+                                        type="button"
+                                        disabled={savingScore}
+                                        onClick={handleResetScore}
+                                        className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                                        title="Anular el resultado cargado y volver el partido al estado 'Por Jugar'"
+                                    >
+                                        <RotateCcw size={13} /> Volver a Por Jugar
+                                    </button>
+                                ) : (
+                                    <div />
+                                )}
+
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedMatchForScore(null)}
+                                        className="px-4 py-2 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={savingScore}
+                                        className="px-5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-primary/20 disabled:opacity-50"
+                                    >
+                                        {savingScore ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
+                                        {selectedMatchForScore.is_played ? 'Actualizar Marcador' : 'Guardar Marcador'}
+                                    </button>
+                                </div>
                             </div>
                         </form>
                     </div>

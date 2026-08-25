@@ -271,6 +271,7 @@ export interface Match {
   // Score Verification & 24h Auto-confirmation
   score_status?: 'pending_confirmation' | 'confirmed' | 'disputed';
   score_submitted_by?: string;
+  score_submitted_by_name?: string;
   score_submitted_at?: string;
   score_dispute_reason?: string;
   score_confirmed_at?: string;
