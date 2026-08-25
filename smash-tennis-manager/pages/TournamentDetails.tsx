@@ -62,6 +62,19 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [manualPaymentStatus, setManualPaymentStatus] = useState<'pending' | 'paid'>('paid');
     const [submittingEnroll, setSubmittingEnroll] = useState(false);
     const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
+    const [filterByGender, setFilterByGender] = useState(true);
+
+    const matchTournamentGender = (userGender?: string, targetGender?: string) => {
+        if (!filterByGender) return true;
+        if (!targetGender) return true;
+        const tg = targetGender.toLowerCase();
+        if (tg === 'mixto' || tg === 'x' || tg === 'open') return true;
+        const ug = (userGender || 'masculino').toLowerCase();
+        const isFemale = ug === 'femenino' || ug === 'f' || ug === 'damas';
+        if (tg === 'damas' || tg === 'f' || tg === 'femenino') return isFemale;
+        if (tg === 'caballeros' || tg === 'm' || tg === 'masculino') return !isFemale;
+        return true;
+    };
 
     // Replace / Substitute Player State (Singles & Doubles)
     const [playerToReplace, setPlayerToReplace] = useState<TournamentPlayer | null>(null);
@@ -127,6 +140,23 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const handleEnrollClick = async () => {
         if (!tournament) return;
+
+        // Check Gender Eligibility
+        const tGender = (tournament.gender || 'Caballeros').toLowerCase();
+        const uGender = (user.gender || 'masculino').toLowerCase();
+        const isUserFemale = uGender === 'femenino' || uGender === 'f' || uGender === 'damas';
+        const isTourneyFemale = tGender === 'damas' || tGender === 'f' || tGender === 'femenino';
+        const isTourneyMale = tGender === 'caballeros' || tGender === 'm' || tGender === 'masculino';
+
+        if (isTourneyFemale && !isUserFemale) {
+            alert('🚫 Este torneo es exclusivo para la categoría Damas (Femenino).');
+            return;
+        }
+
+        if (isTourneyMale && isUserFemale) {
+            alert('🚫 Este torneo es exclusivo para la categoría Caballeros (Masculino).');
+            return;
+        }
 
         // Check Category Eligibility
         const allowedCats = tournament.competitions && tournament.competitions.length > 0
@@ -1842,6 +1872,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         />
                                     </div>
 
+                                    {/* Gender filter toggle indicator */}
+                                    <div className="flex items-center justify-between text-[11px] px-1">
+                                        <span className="text-muted flex items-center gap-1">
+                                            Rama torneo: <strong className="text-primary font-bold">{tournament?.gender || 'Caballeros'}</strong>
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFilterByGender(!filterByGender)}
+                                            className="text-primary hover:underline font-semibold"
+                                        >
+                                            {filterByGender ? 'Ver todos los socios' : 'Filtrar por rama'}
+                                        </button>
+                                    </div>
+
                                     {/* User Search Results */}
                                     <div className="max-h-48 overflow-y-auto space-y-1.5 border border-white/5 rounded-2xl p-2 bg-slate-900/60 custom-scrollbar">
                                         {loadingProfiles ? (
@@ -1851,6 +1895,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         ) : (
                                             allProfiles
                                                 .filter(p => {
+                                                    if (!matchTournamentGender(p.gender, tournament?.gender)) return false;
                                                     const query = searchUserQuery.toLowerCase().trim();
                                                     if (!query) return true;
                                                     const fullName = `${p.name} ${p.lastname || ''}`.toLowerCase();
@@ -1864,6 +1909,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                 .map(p => {
                                                     const isSelected = selectedUserForEnroll?.id === p.id;
                                                     const isAlreadyIn = players.some(pl => pl.player_id === p.id);
+                                                    const isFemale = (p.gender || 'masculino').toLowerCase().includes('fem') || p.gender === 'F';
 
                                                     return (
                                                         <button
@@ -1880,7 +1926,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             }`}
                                                         >
                                                             <div className="min-w-0 flex-1">
-                                                                <div className="font-bold truncate">{formatPlayerName(p.name, p.lastname)}</div>
+                                                                <div className="font-bold truncate flex items-center gap-1.5">
+                                                                    {formatPlayerName(p.name, p.lastname)}
+                                                                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${isFemale ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}`}>
+                                                                        {isFemale ? 'Damas' : 'Caballeros'}
+                                                                    </span>
+                                                                </div>
                                                                 <div className="text-[10px] text-muted truncate">
                                                                     {p.category ? `${p.category} Cat.` : 'Sin Cat.'} {p.institution ? `• ${p.institution}` : ''}
                                                                 </div>
@@ -2492,27 +2543,36 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                 <div className="max-h-32 overflow-y-auto space-y-1 border border-white/5 rounded-xl p-1.5 bg-black/20 custom-scrollbar">
                                                     {allProfiles
                                                         .filter(p => {
+                                                            if (!matchTournamentGender(p.gender, tournament?.gender)) return false;
                                                             const query = searchUserReplaceQuery.toLowerCase().trim();
                                                             if (!query) return true;
                                                             return `${p.name} ${p.lastname || ''}`.toLowerCase().includes(query) || (p.dni && p.dni.includes(query));
                                                         })
                                                         .slice(0, 15)
-                                                        .map(p => (
-                                                            <button
-                                                                key={p.id}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setSelectedUserForReplace(p);
-                                                                    setReplaceGuestName(formatPlayerName(p.name, p.lastname));
-                                                                }}
-                                                                className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between ${
-                                                                    selectedUserForReplace?.id === p.id ? 'bg-primary/20 text-primary font-bold' : 'hover:bg-white/5 text-white'
-                                                                }`}
-                                                            >
-                                                                <span className="truncate">{formatPlayerName(p.name, p.lastname)}</span>
-                                                                {selectedUserForReplace?.id === p.id && <CheckCircle2 size={14} className="text-primary shrink-0" />}
-                                                            </button>
-                                                        ))}
+                                                        .map(p => {
+                                                            const isFemale = (p.gender || 'masculino').toLowerCase().includes('fem') || p.gender === 'F';
+                                                            return (
+                                                                <button
+                                                                    key={p.id}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setSelectedUserForReplace(p);
+                                                                        setReplaceGuestName(formatPlayerName(p.name, p.lastname));
+                                                                    }}
+                                                                    className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between ${
+                                                                        selectedUserForReplace?.id === p.id ? 'bg-primary/20 text-primary font-bold' : 'hover:bg-white/5 text-white'
+                                                                    }`}
+                                                                >
+                                                                    <div className="truncate flex items-center gap-1.5">
+                                                                        <span>{formatPlayerName(p.name, p.lastname)}</span>
+                                                                        <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isFemale ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                                                            {isFemale ? 'Damas' : 'Caballeros'}
+                                                                        </span>
+                                                                    </div>
+                                                                    {selectedUserForReplace?.id === p.id && <CheckCircle2 size={14} className="text-primary shrink-0" />}
+                                                                </button>
+                                                            );
+                                                        })}
                                                 </div>
                                             </div>
                                         ) : (
@@ -2563,27 +2623,36 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                 <div className="max-h-32 overflow-y-auto space-y-1 border border-white/5 rounded-xl p-1.5 bg-black/20 custom-scrollbar">
                                                     {allProfiles
                                                         .filter(p => {
+                                                            if (!matchTournamentGender(p.gender, tournament?.gender)) return false;
                                                             const query = searchPartnerReplaceQuery.toLowerCase().trim();
                                                             if (!query) return true;
                                                             return `${p.name} ${p.lastname || ''}`.toLowerCase().includes(query) || (p.dni && p.dni.includes(query));
                                                         })
                                                         .slice(0, 15)
-                                                        .map(p => (
-                                                            <button
-                                                                key={p.id}
-                                                                type="button"
-                                                                onClick={() => {
-                                                                    setSelectedPartnerForReplace(p);
-                                                                    setReplaceGuestPartnerName(formatPlayerName(p.name, p.lastname));
-                                                                }}
-                                                                className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between ${
-                                                                    selectedPartnerForReplace?.id === p.id ? 'bg-primary/20 text-primary font-bold' : 'hover:bg-white/5 text-white'
-                                                                }`}
-                                                            >
-                                                                <span className="truncate">{formatPlayerName(p.name, p.lastname)}</span>
-                                                                {selectedPartnerForReplace?.id === p.id && <CheckCircle2 size={14} className="text-primary shrink-0" />}
-                                                            </button>
-                                                        ))}
+                                                        .map(p => {
+                                                            const isFemale = (p.gender || 'masculino').toLowerCase().includes('fem') || p.gender === 'F';
+                                                            return (
+                                                                <button
+                                                                    key={p.id}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        setSelectedPartnerForReplace(p);
+                                                                        setReplaceGuestPartnerName(formatPlayerName(p.name, p.lastname));
+                                                                    }}
+                                                                    className={`w-full text-left p-2 rounded-lg text-xs flex items-center justify-between ${
+                                                                        selectedPartnerForReplace?.id === p.id ? 'bg-primary/20 text-primary font-bold' : 'hover:bg-white/5 text-white'
+                                                                    }`}
+                                                                >
+                                                                    <div className="truncate flex items-center gap-1.5">
+                                                                        <span>{formatPlayerName(p.name, p.lastname)}</span>
+                                                                        <span className={`text-[9px] px-1 py-0.2 rounded font-bold ${isFemale ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                                                                            {isFemale ? 'Damas' : 'Caballeros'}
+                                                                        </span>
+                                                                    </div>
+                                                                    {selectedPartnerForReplace?.id === p.id && <CheckCircle2 size={14} className="text-primary shrink-0" />}
+                                                                </button>
+                                                            );
+                                                        })}
                                                 </div>
                                             </div>
                                         ) : (
@@ -2600,7 +2669,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </div>
                             ) : replaceMode === 'member' ? (
                                 <div className="space-y-3">
-                                    <label className="text-xs text-muted font-bold uppercase block">Buscar Nuevo Jugador (Socio)</label>
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs text-muted font-bold uppercase block">Buscar Nuevo Jugador (Socio)</label>
+                                        <button
+                                            type="button"
+                                            onClick={() => setFilterByGender(!filterByGender)}
+                                            className="text-[11px] text-primary hover:underline font-semibold"
+                                        >
+                                            {filterByGender ? 'Ver todos' : `Filtrar (${tournament?.gender || 'Rama'})`}
+                                        </button>
+                                    </div>
                                     <div className="relative">
                                         <Search size={16} className="absolute left-3 top-3 text-muted" />
                                         <input
@@ -2621,6 +2699,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         ) : (
                                             allProfiles
                                                 .filter(p => {
+                                                    if (!matchTournamentGender(p.gender, tournament?.gender)) return false;
                                                     const query = searchUserReplaceQuery.toLowerCase().trim();
                                                     if (!query) return true;
                                                     const fullName = `${p.name} ${p.lastname || ''}`.toLowerCase();
@@ -2634,6 +2713,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                 .map(p => {
                                                     const isSelected = selectedUserForReplace?.id === p.id;
                                                     const isAlreadyIn = players.some(pl => pl.player_id === p.id && pl.id !== playerToReplace.id);
+                                                    const isFemale = (p.gender || 'masculino').toLowerCase().includes('fem') || p.gender === 'F';
 
                                                     return (
                                                         <button
@@ -2653,7 +2733,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             }`}
                                                         >
                                                             <div className="min-w-0 flex-1">
-                                                                <div className="font-bold truncate">{formatPlayerName(p.name, p.lastname)}</div>
+                                                                <div className="font-bold truncate flex items-center gap-1.5">
+                                                                    {formatPlayerName(p.name, p.lastname)}
+                                                                    <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${isFemale ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}`}>
+                                                                        {isFemale ? 'Damas' : 'Caballeros'}
+                                                                    </span>
+                                                                </div>
                                                                 <div className="text-[10px] text-muted truncate">
                                                                     {p.category ? `${p.category} Cat.` : 'Sin Cat.'} {p.institution ? `• ${p.institution}` : ''}
                                                                 </div>

@@ -273,15 +273,33 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
 
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!newUser.name?.trim() || !newUser.lastname?.trim()) {
+            alert('Por favor ingresa Nombre y Apellido.');
+            return;
+        }
+        if (!newUser.dni?.trim()) {
+            alert('El DNI / Documento es obligatorio.');
+            return;
+        }
+        if (!newUser.gender) {
+            alert('La Rama / Género es obligatoria.');
+            return;
+        }
+        if (!newUser.category) {
+            alert('La Categoría es obligatoria.');
+            return;
+        }
+
         setCreating(true);
 
         try {
             const userPayload: any = {
-                name: newUser.name,
-                lastname: newUser.lastname,
+                name: newUser.name.trim(),
+                lastname: newUser.lastname.trim(),
                 role: newUser.role,
-                phone: newUser.phone,
-                dni: newUser.dni,
+                phone: newUser.phone?.trim() || '',
+                dni: newUser.dni.trim(),
                 gender: newUser.gender || 'masculino',
                 birth_date: newUser.birth_date || null,
                 category: newUser.category,
@@ -295,7 +313,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 userPayload.institution_id = user.institution_id;
             }
 
-            await api.auth.adminCreateUser(newUser.email, newUser.password, userPayload);
+            await api.auth.adminCreateUser(newUser.email.trim(), newUser.password, userPayload);
 
             alert('Usuario creado exitosamente.');
             setShowCreateModal(false);
@@ -1238,11 +1256,13 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">DNI / Documento</label>
+                                    <label className="text-xs text-muted uppercase font-bold">DNI / Documento *</label>
                                     <input
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
                                         value={newUser.dni}
                                         onChange={e => setNewUser({ ...newUser, dni: e.target.value })}
+                                        required
+                                        placeholder="Ej: 38450123"
                                     />
                                 </div>
                                 <div className="space-y-1">
@@ -1251,22 +1271,42 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
                                         value={newUser.phone}
                                         onChange={e => setNewUser({ ...newUser, phone: e.target.value })}
+                                        placeholder="Ej: 3434123456"
                                     />
                                 </div>
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Rama / Género</label>
+                                    <label className="text-xs text-muted uppercase font-bold">Rama / Género *</label>
                                     <select
                                         className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm cursor-pointer"
                                         value={newUser.gender}
                                         onChange={e => setNewUser({ ...newUser, gender: e.target.value })}
+                                        required
                                     >
                                         <option value="masculino">Masculino (Caballeros)</option>
                                         <option value="femenino">Femenino (Damas)</option>
                                     </select>
                                 </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Categoría *</label>
+                                    <select
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm cursor-pointer"
+                                        value={newUser.category}
+                                        onChange={e => setNewUser({ ...newUser, category: e.target.value })}
+                                        required
+                                    >
+                                        {NUMERIC_CATEGORIES.map(cat => (
+                                            <option key={cat} value={cat}>
+                                                {cat === 'Open' ? 'Categoría Open' : `${cat} Categoría`}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
                                         <span>F. Nacimiento</span>
@@ -1283,9 +1323,6 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         onChange={e => setNewUser({ ...newUser, birth_date: e.target.value })}
                                     />
                                 </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1">
                                     <label className="text-xs text-muted uppercase font-bold">Rol de Usuario</label>
                                     <select
@@ -1299,17 +1336,17 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         {isSuperAdmin && <option value="superadmin">Super Admin</option>}
                                     </select>
                                 </div>
+                            </div>
 
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">N° de Carnet (Opcional)</label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: 00482"
-                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
-                                        value={newUser.member_number}
-                                        onChange={e => setNewUser({ ...newUser, member_number: e.target.value })}
-                                    />
-                                </div>
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted uppercase font-bold">N° de Carnet (Opcional)</label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: 00482"
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                    value={newUser.member_number}
+                                    onChange={e => setNewUser({ ...newUser, member_number: e.target.value })}
+                                />
                             </div>
 
                             <div className="pt-4 flex justify-end gap-3">
