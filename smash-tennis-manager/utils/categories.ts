@@ -32,6 +32,12 @@ export const SIMPLE_LETTER_CATEGORIES = [
     'Open'
 ] as const;
 
+export const ALL_CATEGORIES = Array.from(new Set([
+    ...NUMERIC_CATEGORIES,
+    ...LETTER_CATEGORIES,
+    ...SIMPLE_LETTER_CATEGORIES
+]));
+
 export interface CategoryEquivalence {
     rank: number;
     numeric: string;

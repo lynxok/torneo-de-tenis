@@ -72,7 +72,7 @@ const ParticipantSelector: React.FC<{
             name: formatted,
             lastname: p.lastname,
             is_registered: true,
-            avatar_url: p.profile_picture_url || p.avatar_url
+            avatar_url: p.profile_picture_url || (p as any).avatar_url
         };
         onChange([...participants, newPart]);
         setSearchTerm('');

@@ -7,7 +7,7 @@ import { useToast } from '../components/ui/Toast';
 import { 
     Search, MapPin, Award, UserPlus, X, Activity, Trophy, Calendar, MessageCircle, Send, 
     Clock, CheckCircle2, LayoutList, LayoutGrid, ChevronRight, MoreHorizontal, Building, 
-    Sparkles, Zap, Smartphone, Loader2, Lock, AlertTriangle, Swords, Users 
+    Sparkles, Zap, Smartphone, Loader2, Lock, AlertTriangle, Swords, Users, HelpCircle, Info 
 } from 'lucide-react';
 import { getCategoryRank, NUMERIC_CATEGORIES, getEquivalentCategory } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
@@ -44,6 +44,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   const [showContactModal, setShowContactModal] = useState(false);
   const [showMustActivateModal, setShowMustActivateModal] = useState(false);
   const [showTargetDisabledModal, setShowTargetDisabledModal] = useState<{ show: boolean; playerName: string }>({ show: false, playerName: '' });
+  const [showMatchmakingInfoModal, setShowMatchmakingInfoModal] = useState(false);
 
   const isCurrentUserChallengesActive = Boolean(user.phone && user.show_whatsapp !== false);
 
@@ -245,14 +246,24 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
       
       {!loading && suggestions.length > 0 && !filter && !categoryFilter && !institutionFilter && !genderFilter && !ageFilter && (
           <div className="space-y-4">
-              <div className="flex items-center gap-2">
-                  <div className="p-1.5 bg-yellow-500/10 rounded-lg text-yellow-400 border border-yellow-500/20">
-                      <Sparkles size={18} />
+              <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-yellow-500/10 rounded-lg text-yellow-400 border border-yellow-500/20">
+                          <Sparkles size={18} />
+                      </div>
+                      <div>
+                          <h3 className="text-lg font-bold text-white leading-none">Rivales Recomendados</h3>
+                          <p className="text-xs text-muted">Jugadores con perfil similar al tuyo.</p>
+                      </div>
                   </div>
-                  <div>
-                      <h3 className="text-lg font-bold text-white leading-none">Rivales Recomendados</h3>
-                      <p className="text-xs text-muted">Jugadores con perfil similar al tuyo.</p>
-                  </div>
+                  <button
+                      onClick={() => setShowMatchmakingInfoModal(true)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl border border-white/10 text-xs font-semibold transition-all group"
+                      title="Ver cómo se calcula la afinidad y los porcentajes"
+                  >
+                      <HelpCircle size={14} className="text-yellow-400 group-hover:scale-110 transition-transform" />
+                      <span>¿Cómo funciona?</span>
+                  </button>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -262,9 +273,17 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                         onClick={() => handleOpenProfile(player)}
                         className="bg-gradient-to-br from-card to-slate-800 border border-yellow-500/20 rounded-2xl p-4 cursor-pointer hover:border-yellow-500/50 transition-all group relative overflow-hidden"
                       >
-                          <div className={`absolute top-0 right-0 text-[10px] font-bold px-2 py-1 rounded-bl-xl shadow-lg flex items-center gap-1 text-black ${player.matchScore >= 70 ? 'bg-green-500' : 'bg-yellow-500'}`}>
+                          <button
+                              onClick={(e) => {
+                                  e.stopPropagation();
+                                  setShowMatchmakingInfoModal(true);
+                              }}
+                              className={`absolute top-0 right-0 text-[10px] font-bold px-2.5 py-1 rounded-bl-xl shadow-lg flex items-center gap-1 text-black cursor-pointer hover:brightness-110 transition-all ${player.matchScore >= 70 ? 'bg-green-500' : 'bg-yellow-500'}`}
+                              title="Click para ver cómo se calcula el % Match"
+                          >
                               <Zap size={10} fill="black" /> {Math.min(player.matchScore, 99)}% Match
-                          </div>
+                              <Info size={11} className="opacity-80" />
+                          </button>
 
                           <div className="flex items-center gap-4 mb-3">
                               <div className="w-14 h-14 rounded-full bg-slate-700 flex items-center justify-center text-xl font-bold text-white shadow-inner relative shrink-0">
@@ -710,6 +729,10 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
             onClose={() => setShowContactModal(false)} 
           />
       )}
+
+      {showMatchmakingInfoModal && (
+          <MatchmakingInfoModal onClose={() => setShowMatchmakingInfoModal(false)} />
+      )}
     </div>
   );
 };
@@ -948,3 +971,125 @@ const ContactModal = ({ toPlayer, currentUser, onClose }: { toPlayer: UserProfil
         </div>
     );
 };
+
+const MatchmakingInfoModal = ({ onClose }: { onClose: () => void }) => {
+    return (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
+            <div 
+                className="bg-card border border-white/10 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]" 
+                onClick={e => e.stopPropagation()}
+            >
+                {/* Modal Header */}
+                <div className="p-5 sm:p-6 border-b border-white/10 flex justify-between items-center bg-gradient-to-r from-yellow-500/10 via-white/5 to-transparent">
+                    <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-yellow-500/20 border border-yellow-500/30 flex items-center justify-center text-yellow-400 font-bold shadow-lg shadow-yellow-500/10">
+                            <Sparkles size={20} />
+                        </div>
+                        <div>
+                            <h3 className="text-base sm:text-lg font-bold text-white leading-tight">¿Cómo se calcula el Match?</h3>
+                            <p className="text-xs text-muted">Sistema inteligente de recomendación y afinidad de rivales</p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="text-muted hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Modal Content */}
+                <div className="p-5 sm:p-6 space-y-5 overflow-y-auto custom-scrollbar text-xs">
+                    <p className="text-slate-300 leading-relaxed">
+                        El algoritmo evalúa la compatibilidad entre jugadores analizando cercanía de sede, categoría de juego y nivel de victorias para sugerir partidos equilibrados y fáciles de coordinar:
+                    </p>
+
+                    {/* Criteria Cards */}
+                    <div className="space-y-3">
+                        {/* 1. Club */}
+                        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-start gap-3.5 hover:border-yellow-500/30 transition-all">
+                            <div className="p-2 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 shrink-0 mt-0.5">
+                                <Building size={18} />
+                            </div>
+                            <div className="space-y-1 flex-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-white text-sm">Mismo Club / Sede</span>
+                                    <span className="text-xs font-black text-green-400 bg-green-500/10 px-2 py-0.5 rounded-full border border-green-500/20">+50% Match</span>
+                                </div>
+                                <p className="text-muted text-[11px] leading-relaxed">
+                                    Pertenecen a la misma institución deportiva para facilitar la reserva de canchas y la cercanía.
+                                </p>
+                                <span className="inline-block text-[10px] bg-white/5 text-slate-300 px-1.5 py-0.5 rounded border border-white/10 font-mono">
+                                    Insignia: Mismo Club
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* 2. Categoría */}
+                        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-start gap-3.5 hover:border-yellow-500/30 transition-all">
+                            <div className="p-2 rounded-xl bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 shrink-0 mt-0.5">
+                                <Trophy size={18} />
+                            </div>
+                            <div className="space-y-1 flex-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-white text-sm">Categoría & Nivel de Juego</span>
+                                    <div className="flex gap-1.5">
+                                        <span className="text-[11px] font-bold text-yellow-400 bg-yellow-500/10 px-2 py-0.5 rounded-full border border-yellow-500/20">+30% Misma</span>
+                                        <span className="text-[11px] font-semibold text-slate-300 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">+10% Contigua</span>
+                                    </div>
+                                </div>
+                                <p className="text-muted text-[11px] leading-relaxed">
+                                    <strong className="text-slate-200">+30%</strong> si comparten la misma división exacta (ej. 4ta vs 4ta). <strong className="text-slate-200">+10%</strong> si tienen 1 nivel de diferencia (ej. 4ta vs 5ta).
+                                </p>
+                                <span className="inline-block text-[10px] bg-white/5 text-slate-300 px-1.5 py-0.5 rounded border border-white/10 font-mono">
+                                    Insignia: Misma Categoría
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* 3. Rendimiento / Victorias */}
+                        <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 flex items-start gap-3.5 hover:border-yellow-500/30 transition-all">
+                            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 shrink-0 mt-0.5">
+                                <Activity size={18} />
+                            </div>
+                            <div className="space-y-1 flex-1">
+                                <div className="flex items-center justify-between">
+                                    <span className="font-bold text-white text-sm">Historial & Victorias</span>
+                                    <div className="flex gap-1.5">
+                                        <span className="text-[11px] font-bold text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded-full border border-purple-500/20">+20% Parejo</span>
+                                        <span className="text-[11px] font-semibold text-slate-300 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">+10% Cercano</span>
+                                    </div>
+                                </div>
+                                <p className="text-muted text-[11px] leading-relaxed">
+                                    <strong className="text-slate-200">+20%</strong> si la diferencia de victorias es de ≤ 3 partidos. <strong className="text-slate-200">+10%</strong> si es de 4 a 6 partidos de diferencia.
+                                </p>
+                                <span className="inline-block text-[10px] bg-white/5 text-slate-300 px-1.5 py-0.5 rounded border border-white/10 font-mono">
+                                    Insignia: Nivel Similar
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Summary Info */}
+                    <div className="p-3.5 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl space-y-1.5">
+                        <div className="flex items-center gap-2 text-yellow-400 font-bold text-xs">
+                            <Zap size={14} /> Reglas de Privacidad y Selección
+                        </div>
+                        <ul className="text-[11px] text-slate-300 space-y-1 list-disc list-inside">
+                            <li>Solo aparecen jugadores disponibles para recibir desafíos por WhatsApp.</li>
+                            <li>Se sugieren los <strong>3 jugadores con mayor compatibilidad</strong> (mínimo 10% de afinidad).</li>
+                        </ul>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 border-t border-white/10 bg-white/5 flex justify-end">
+                    <button 
+                        onClick={onClose}
+                        className="px-6 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-primary/20"
+                    >
+                        Entendido
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+

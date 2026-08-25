@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, StoryLayer } from '../types';
+import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, StoryLayer, MatchmakingPost } from '../types';
 import { formatPlayerName } from '../utils/formatters';
 
 export const api = {
@@ -552,7 +552,7 @@ export const api = {
             // 24H AUTO-CONFIRMATION CHECK: Check if any match is pending confirmation for > 24 hours
             const now = Date.now();
             const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-            const autoConfirmUpdates: Promise<any>[] = [];
+            const autoConfirmUpdates: PromiseLike<any>[] = [];
 
             const formattedMatches = (matches || []).map(m => {
                 let updatedScoreStatus = m.score_status;
