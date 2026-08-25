@@ -38,7 +38,8 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
         if (user.role === 'superadmin') {
             // Load list of institutions for the selector
             api.institutions.getAll().then(data => {
-                setInstitutions(data);
+                const active = (data || []).filter(i => i.is_active !== false);
+                setInstitutions(active);
                 setSelectedInstId('all'); // Default to global view
             });
         } else {

@@ -1171,6 +1171,8 @@ const PlayerNewBookingModal = ({
 
 const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     const [institution, setInstitution] = useState<Institution | null>(null);
+    const [allInstitutions, setAllInstitutions] = useState<Institution[]>([]);
+    const [selectedInstId, setSelectedInstId] = useState<string>(user.institution_id || '');
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [bookings, setBookings] = useState<Booking[]>([]);
@@ -1247,11 +1249,16 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
         const loadInst = async () => {
             try {
                 const all = await api.institutions.getAll();
-                let myInst = user.institution_id ? all.find(i => i.id === user.institution_id) : null;
-                if (!myInst && all.length > 0) {
-                    myInst = all[0];
+                const active = (all || []).filter(i => i.is_active !== false);
+                setAllInstitutions(active);
+
+                let targetId = selectedInstId || user.institution_id;
+                let current = targetId ? active.find(i => i.id === targetId) : null;
+                if (!current && active.length > 0) {
+                    current = active[0];
+                    setSelectedInstId(current.id);
                 }
-                setInstitution(myInst || null);
+                setInstitution(current || null);
             } catch (e) {
                 console.error(e);
             } finally {
@@ -1259,7 +1266,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
             }
         };
         loadInst();
-    }, [user.institution_id]);
+    }, [selectedInstId, user.institution_id]);
 
     useEffect(() => {
         if (!institution) return;
@@ -1480,17 +1487,39 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
 
     return (
         <div className="space-y-8 animate-fade-up">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
                     <h2 className="text-2xl font-black text-white">Gestión de Canchas</h2>
                     <p className="text-muted text-sm">Administra la disponibilidad, asigna jugadores y bloquea horarios.</p>
                 </div>
-                {institution && (
+
+                {/* SUPER ADMIN: Institution Selector */}
+                {user.role === 'superadmin' && allInstitutions.length > 0 ? (
+                    <div className="flex items-center gap-2 bg-card border border-primary/30 p-1.5 rounded-2xl shadow-lg">
+                        <div className="p-2 bg-primary/10 rounded-xl text-primary">
+                            <BuildingIcon size={18} />
+                        </div>
+                        <div className="pr-2">
+                            <div className="text-[10px] uppercase font-bold text-muted">Sede Activa</div>
+                            <select
+                                className="bg-transparent text-white font-bold text-sm focus:outline-none cursor-pointer pr-4"
+                                value={selectedInstId}
+                                onChange={e => setSelectedInstId(e.target.value)}
+                            >
+                                {allInstitutions.map(inst => (
+                                    <option key={inst.id} value={inst.id} className="bg-slate-900 text-white">
+                                        {inst.name} ({inst.city || 'Sede'})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                ) : institution ? (
                     <div className="text-right">
                         <div className="text-sm font-bold text-white">{institution.name}</div>
                         <div className="text-xs text-muted">{institution.city}</div>
                     </div>
-                )}
+                ) : null}
             </div>
 
             <div id="grid-container">
