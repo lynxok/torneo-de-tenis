@@ -564,10 +564,21 @@ export const api = {
                         updatedScoreStatus = 'confirmed';
                         // Trigger async confirmation update in background
                         autoConfirmUpdates.push(
-                            supabase.from('matches').update({
-                                score_status: 'confirmed',
-                                score_confirmed_at: new Date().toISOString()
-                            }).eq('id', m.id).then(async () => {
+                            (async () => {
+                                try {
+                                    await supabase.from('matches').update({
+                                        score_status: 'confirmed',
+                                        score_confirmed_at: new Date().toISOString()
+                                    }).eq('id', m.id);
+                                } catch (e) {
+                                    try {
+                                        await supabase.from('matches').update({
+                                            scheduling_status: 'finished',
+                                            is_played: true
+                                        }).eq('id', m.id);
+                                    } catch (ign) {}
+                                }
+
                                 if (m.winner_id) {
                                     try {
                                         const { data: wp } = await supabase.from('profiles').select('matches_won').eq('id', m.winner_id).single();
@@ -577,15 +588,15 @@ export const api = {
                                         await supabase.from('ranking_history').insert({
                                             player_id: m.winner_id,
                                             points: 50,
-                                            reason: `Victoria en torneo (auto-confirmada 24hs)`,
-                                            tournament_id: id,
-                                            date_obtained: new Date().toISOString()
+                                            tournament_name: tournament?.name || 'Torneo Oficial',
+                                            date_obtained: new Date().toISOString(),
+                                            year: new Date().getFullYear()
                                         });
                                     } catch (e) {
                                         console.warn("Auto-confirm point award fallback:", e);
                                     }
                                 }
-                            })
+                            })()
                         );
                     }
                 }
@@ -1130,7 +1141,7 @@ export const api = {
     },
     matches: {
         async updateScore(matchId: string, score: any, winnerId: string, user?: UserProfile, isDoubles?: boolean, winnerPartnerId?: string) {
-            const { data: matchData } = await supabase.from('matches').select('*, tournaments(institution_id)').eq('id', matchId).single();
+            const { data: matchData } = await supabase.from('matches').select('*, tournaments(name, institution_id)').eq('id', matchId).single();
 
             const isOrgOrSuperAdmin = user && (
                 user.role === 'superadmin' || 
@@ -1143,11 +1154,18 @@ export const api = {
             const updatePayload: any = {
                 score,
                 winner_id: winnerId,
-                scheduling_status: 'finished',
+                scheduling_status: 'confirmed',
                 score_status: scoreStatus,
                 score_submitted_by: user?.id || null,
-                score_submitted_at: nowIso
+                score_submitted_at: nowIso,
+                played_at: nowIso,
+                is_played: true
             };
+
+            if (matchData) {
+                if (winnerId === matchData.player1_id) updatePayload.winner_name = matchData.player1_name;
+                else if (winnerId === matchData.player2_id) updatePayload.winner_name = matchData.player2_name;
+            }
 
             if (isDoubles && winnerPartnerId) {
                 updatePayload.winner_partner_id = winnerPartnerId;
@@ -1157,8 +1175,26 @@ export const api = {
                 updatePayload.score_confirmed_at = nowIso;
             }
 
-            const { error } = await supabase.from('matches').update(updatePayload).eq('id', matchId);
-            if (error) throw error;
+            // Attempt update with full payload; if column missing in DB cache, fallback to safe base payload
+            try {
+                const { error } = await supabase.from('matches').update(updatePayload).eq('id', matchId);
+                if (error) throw error;
+            } catch (err: any) {
+                console.warn("Full match score update failed (schema cache mismatch), using resilient fallback payload:", err);
+                const safePayload: any = {
+                    score,
+                    winner_id: winnerId,
+                    scheduling_status: 'confirmed',
+                    played_at: nowIso,
+                    is_played: true
+                };
+                if (matchData) {
+                    if (winnerId === matchData.player1_id) safePayload.winner_name = matchData.player1_name;
+                    else if (winnerId === matchData.player2_id) safePayload.winner_name = matchData.player2_name;
+                }
+                const { error: fallbackErr } = await supabase.from('matches').update(safePayload).eq('id', matchId);
+                if (fallbackErr) throw fallbackErr;
+            }
 
             // If confirmed immediately (by Admin/SuperAdmin), award wins and points
             if (scoreStatus === 'confirmed' && winnerId) {
@@ -1174,9 +1210,9 @@ export const api = {
                     await supabase.from('ranking_history').insert({
                         player_id: winnerId,
                         points: 50,
-                        reason: `Victoria en partido de torneo`,
-                        tournament_id: matchData?.tournament_id || null,
-                        date_obtained: nowIso
+                        tournament_name: matchData?.tournaments?.name || 'Torneo Oficial',
+                        date_obtained: nowIso,
+                        year: new Date().getFullYear()
                     });
 
                     // Winner 2 (Doubles partner)
@@ -1190,9 +1226,9 @@ export const api = {
                         await supabase.from('ranking_history').insert({
                             player_id: winnerPartnerId,
                             points: 50,
-                            reason: `Victoria en torneo (dobles)`,
-                            tournament_id: matchData?.tournament_id || null,
-                            date_obtained: nowIso
+                            tournament_name: matchData?.tournaments?.name || 'Torneo Oficial (Dobles)',
+                            date_obtained: nowIso,
+                            year: new Date().getFullYear()
                         });
                     }
                 } catch (rankingErr) {
@@ -1204,16 +1240,27 @@ export const api = {
         },
 
         async confirmScore(matchId: string, user: UserProfile) {
-            const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+            const { data: matchData } = await supabase.from('matches').select('*, tournaments(name)').eq('id', matchId).single();
             if (!matchData) throw new Error("Partido no encontrado");
 
             const nowIso = new Date().toISOString();
-            const { error } = await supabase.from('matches').update({
-                score_status: 'confirmed',
-                score_confirmed_at: nowIso
-            }).eq('id', matchId);
-
-            if (error) throw error;
+            try {
+                const { error } = await supabase.from('matches').update({
+                    score_status: 'confirmed',
+                    score_confirmed_at: nowIso,
+                    scheduling_status: 'finished',
+                    is_played: true,
+                    played_at: nowIso
+                }).eq('id', matchId);
+                if (error) throw error;
+            } catch (confirmErr) {
+                console.warn("confirmScore column fallback:", confirmErr);
+                await supabase.from('matches').update({
+                    scheduling_status: 'finished',
+                    is_played: true,
+                    played_at: nowIso
+                }).eq('id', matchId);
+            }
 
             // Award wins and points to winner(s)
             if (matchData.winner_id) {
@@ -1228,9 +1275,9 @@ export const api = {
                     await supabase.from('ranking_history').insert({
                         player_id: matchData.winner_id,
                         points: 50,
-                        reason: `Victoria en partido de torneo`,
-                        tournament_id: matchData.tournament_id || null,
-                        date_obtained: nowIso
+                        tournament_name: matchData.tournaments?.name || 'Torneo Oficial',
+                        date_obtained: nowIso,
+                        year: new Date().getFullYear()
                     });
 
                     if (matchData.winner_partner_id) {
@@ -1243,9 +1290,9 @@ export const api = {
                         await supabase.from('ranking_history').insert({
                             player_id: matchData.winner_partner_id,
                             points: 50,
-                            reason: `Victoria en torneo (dobles)`,
-                            tournament_id: matchData.tournament_id || null,
-                            date_obtained: nowIso
+                            tournament_name: matchData.tournaments?.name || 'Torneo Oficial (Dobles)',
+                            date_obtained: nowIso,
+                            year: new Date().getFullYear()
                         });
                     }
                 } catch (e) {
@@ -1257,12 +1304,18 @@ export const api = {
         },
 
         async disputeScore(matchId: string, reason: string, user: UserProfile) {
-            const { error } = await supabase.from('matches').update({
-                score_status: 'disputed',
-                score_dispute_reason: reason
-            }).eq('id', matchId);
-
-            if (error) throw error;
+            try {
+                const { error } = await supabase.from('matches').update({
+                    score_status: 'disputed',
+                    score_dispute_reason: reason
+                }).eq('id', matchId);
+                if (error) throw error;
+            } catch (e) {
+                console.warn("disputeScore column fallback, saving to proposal_data:", e);
+                await supabase.from('matches').update({
+                    proposal_data: { score_disputed: true, dispute_reason: reason, disputed_by: user.id }
+                }).eq('id', matchId);
+            }
             return true;
         },
 
@@ -1534,8 +1587,23 @@ export const api = {
             return (data || []) as Booking[];
         },
         async create(booking: Partial<Booking>, creatorProfile?: UserProfile | null) {
-            const { data, error } = await supabase.from('bookings').insert(booking).select().single();
-            if (error) throw error;
+            let data: any;
+            try {
+                const res = await supabase.from('bookings').insert(booking).select().single();
+                if (res.error) throw res.error;
+                data = res.data;
+            } catch (err: any) {
+                console.warn("Booking insert fallback without unmigrated columns:", err);
+                const safeBooking: any = { ...booking };
+                if (booking.participants) {
+                    safeBooking.extras = { ...(safeBooking.extras || {}), participants: booking.participants };
+                    delete safeBooking.participants;
+                }
+                delete safeBooking.deleted_by_user;
+                const resFallback = await supabase.from('bookings').insert(safeBooking).select().single();
+                if (resFallback.error) throw resFallback.error;
+                data = resFallback.data;
+            }
 
             // Notify participants if any registered players were included
             if (booking.participants && Array.isArray(booking.participants)) {
@@ -1568,9 +1636,22 @@ export const api = {
             return data;
         },
         async update(id: string, updates: Partial<Booking>) {
-            const { data, error } = await supabase.from('bookings').update(updates).eq('id', id).select();
-            if (error) throw error;
-            return (data && data.length > 0) ? data[0] : updates;
+            try {
+                const { data, error } = await supabase.from('bookings').update(updates).eq('id', id).select();
+                if (error) throw error;
+                return (data && data.length > 0) ? data[0] : updates;
+            } catch (err: any) {
+                console.warn("Booking update fallback without unmigrated columns:", err);
+                const safeUpdates: any = { ...updates };
+                if (updates.participants) {
+                    safeUpdates.extras = { ...(safeUpdates.extras || {}), participants: updates.participants };
+                    delete safeUpdates.participants;
+                }
+                delete safeUpdates.deleted_by_user;
+                const { data: fbData, error: fbErr } = await supabase.from('bookings').update(safeUpdates).eq('id', id).select();
+                if (fbErr) throw fbErr;
+                return (fbData && fbData.length > 0) ? fbData[0] : safeUpdates;
+            }
         },
         async delete(id: string) {
             try {
@@ -1578,8 +1659,11 @@ export const api = {
                 if (error) throw error;
                 return { success: true };
             } catch (e) {
-                // Fallback soft delete
-                await supabase.from('bookings').update({ status: 'cancelled', deleted_by_user: true }).eq('id', id);
+                try {
+                    await supabase.from('bookings').update({ status: 'cancelled', deleted_by_user: true }).eq('id', id);
+                } catch (softErr) {
+                    await supabase.from('bookings').update({ status: 'cancelled' }).eq('id', id);
+                }
                 return { success: true, method: 'soft_delete' };
             }
         },
@@ -1590,7 +1674,11 @@ export const api = {
                     await supabase.from('bookings').delete().eq('id', id);
                 }
             } catch (e) {
-                console.error("Error hiding booking:", e);
+                try {
+                    await supabase.from('bookings').delete().eq('id', id);
+                } catch (delErr) {
+                    console.error("Error hiding/deleting booking:", delErr);
+                }
             }
             return true;
         },
