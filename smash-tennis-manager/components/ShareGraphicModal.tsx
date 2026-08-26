@@ -1,4 +1,4 @@
-﻿import React, { useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Tournament, Match, TournamentPlayer } from '../types';
 import { soundEffects } from '../services/soundEffects';
 import { X, Download, Share2, Sparkles, Trophy, Grid, Calendar, Image as ImageIcon, Check } from 'lucide-react';
@@ -142,12 +142,12 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
     if (graphicType === 'champion' && championName) {
       text += `👑 *¡CAMPEÓN CONSAGRADO!* 👑\n🥇 *${championName}*\n\n`;
-    } else if (graphicType === 'playoffs' && playoffRounds.length > 0) {
+    } else if (graphicType === 'playoffs' && playoffRounds && playoffRounds.length > 0) {
       text += `🔥 *Cuadro de Playoffs en Juego:*\n`;
       playoffRounds.forEach(r => {
-        text += `• *${r.name}:* ${r.matches.length} partido(s)\n`;
+        text += `• *${r.name}:* ${(r.matches || []).length} partido(s)\n`;
       });
-    } else if (graphicType === 'standings' && zones.length > 0) {
+    } else if (graphicType === 'standings' && zones && zones.length > 0) {
       text += `📊 *Fase de Zonas:* ${zones.length} grupos definidos.\n`;
     }
 
@@ -372,14 +372,14 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                     <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
                       <Trophy size={12} /> Cuadro de Eliminación
                     </div>
-                    {playoffRounds.length === 0 ? (
+                    {(!playoffRounds || playoffRounds.length === 0) ? (
                       <div className="text-center py-6 text-muted text-xs italic">Fase final en preparación</div>
                     ) : (
                       <div className="space-y-1.5 max-h-[190px] overflow-hidden">
                         {playoffRounds.slice(0, 3).map((r, i) => (
                           <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2 flex justify-between items-center">
                             <span className="font-bold text-white text-[11px]">{r.name}</span>
-                            <span className="text-[10px] text-primary font-bold">{r.matches.length} Partido(s)</span>
+                            <span className="text-[10px] text-primary font-bold">{(r.matches || []).length} Partido(s)</span>
                           </div>
                         ))}
                       </div>
@@ -392,21 +392,30 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                     <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
                       <Grid size={12} /> Tabla de Posiciones
                     </div>
-                    {zones.length === 0 ? (
+                    {(!zones || zones.length === 0) ? (
                       <div className="text-center py-6 text-muted text-xs italic">Zonas aún no generadas</div>
                     ) : (
-                      <div className="space-y-2 max-h-[190px] overflow-hidden">
-                        {zones.slice(0, 2).map((z, i) => (
-                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
-                            <div className="font-black text-[10px] text-orange-300 uppercase mb-1">{z.name}</div>
-                            {z.standings.slice(0, 2).map((st, idx) => (
-                              <div key={idx} className="flex justify-between text-[10px] py-0.5 border-b border-white/5 last:border-0">
-                                <span className="font-bold text-white truncate max-w-[150px]">{idx + 1}. {st.name}</span>
-                                <span className="text-muted font-bold">{st.won}G - {st.lost}P</span>
-                              </div>
-                            ))}
-                          </div>
-                        ))}
+                      <div className="space-y-2 max-h-[220px] overflow-hidden">
+                        {zones.slice(0, 3).map((z, i) => {
+                          const zoneTitle = z.groupName || (z as any).name || `Zona ${z.groupNumber || (i + 1)}`;
+                          const zonePlayers = z.players || (z as any).standings || [];
+                          return (
+                            <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
+                              <div className="font-black text-[10px] text-orange-300 uppercase mb-1">{zoneTitle}</div>
+                              {zonePlayers.slice(0, 3).map((st: any, idx: number) => {
+                                const playerName = st.playerName || st.name || 'Jugador';
+                                const won = st.matchesWon ?? st.won ?? 0;
+                                const lost = st.matchesLost ?? st.lost ?? 0;
+                                return (
+                                  <div key={idx} className="flex justify-between items-center text-[10px] py-0.5 border-b border-white/5 last:border-0">
+                                    <span className="font-bold text-white truncate max-w-[150px]">{idx + 1}. {playerName}</span>
+                                    <span className="text-muted font-bold text-[9px]">{won}G - {lost}P ({st.points ?? 0} pts)</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -417,7 +426,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                     <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
                       <Calendar size={12} /> Orden de Juego Oficial
                     </div>
-                    {matches.length === 0 ? (
+                    {(!matches || matches.length === 0) ? (
                       <div className="text-center py-6 text-muted text-xs italic">Sin partidos programados hoy</div>
                     ) : (
                       <div className="space-y-1.5 max-h-[190px] overflow-hidden">
