@@ -1,39 +1,41 @@
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
-const DIST_DIR = path.join(__dirname, 'dist');
-const FILES_TO_COPY = [
-    'index.html',
-    'style.css',
-    'app.js',
-    'auth.js',
-    'supabase.js',
-    'tournament.js',
-    'pelota sin fondo.png',
-    'Smash.png',
-    'Principal_blanco_fondotransparente.png'
-];
+console.log('🎾 [Smash Deploy] Compilando React 19 en smash-tennis-manager...');
+const appDir = path.join(__dirname, 'smash-tennis-manager');
+const distDir = path.join(appDir, 'dist');
+const rootDir = __dirname;
 
-console.log('🚧 Starting build process...');
+// 1. Build smash-tennis-manager
+execSync('npm run build', { cwd: appDir, stdio: 'inherit' });
 
-// 1. Clean/Create dist folder
-if (fs.existsSync(DIST_DIR)) {
-    fs.rmSync(DIST_DIR, { recursive: true, force: true });
+console.log('\n📂 [Smash Deploy] Sincronizando bundles de producción a la raíz del repositorio...');
+
+// 2. Remove old root assets folder
+const rootAssets = path.join(rootDir, 'assets');
+if (fs.existsSync(rootAssets)) {
+    fs.rmSync(rootAssets, { recursive: true, force: true });
 }
-fs.mkdirSync(DIST_DIR);
-console.log('✅ Created dist/ folder');
 
-// 2. Copy files
-FILES_TO_COPY.forEach(file => {
-    const src = path.join(__dirname, file);
-    const dest = path.join(DIST_DIR, file);
-
-    if (fs.existsSync(src)) {
-        fs.copyFileSync(src, dest);
-        console.log(`__ Copied: ${file}`);
-    } else {
-        console.error(`__ ⚠️ Missing file: ${file}`);
+// 3. Copy dist contents to root
+function copyDirRecursive(src, dest) {
+    if (!fs.existsSync(dest)) {
+        fs.mkdirSync(dest, { recursive: true });
     }
-});
+    const entries = fs.readdirSync(src, { withFileTypes: true });
+    for (const entry of entries) {
+        const srcPath = path.join(src, entry.name);
+        const destPath = path.join(dest, entry.name);
+        if (entry.isDirectory()) {
+            copyDirRecursive(srcPath, destPath);
+        } else {
+            fs.copyFileSync(srcPath, destPath);
+            console.log(`  ✓ Copiado: ${entry.name}`);
+        }
+    }
+}
 
-console.log('\n✨ Build complete! Upload the contents of the "dist" folder to Hostinger.');
+copyDirRecursive(distDir, rootDir);
+
+console.log('\n✨ [Smash Deploy] ¡Sincronización completa! La versión moderna de React 19 está lista en la raíz.');

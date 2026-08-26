@@ -28,5 +28,35 @@
       "type": "image/png",
       "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "Reservar Canchas",
+      "short_name": "Reservas",
+      "description": "Consultar disponibilidad y reservar turnos de canchas",
+      "url": "/?view=bookings",
+      "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Torneos & Cuadros",
+      "short_name": "Torneos",
+      "description": "Ver torneos activos, fases de grupos y cuadros de playoffs",
+      "url": "/?view=tournaments",
+      "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Rankings Oficiales",
+      "short_name": "Rankings",
+      "description": "Consultar tabla de posiciones y puntos por categoría",
+      "url": "/?view=rankings",
+      "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Mi Perfil & Stats",
+      "short_name": "Mi Perfil",
+      "description": "Ver mi tarjeta de jugador, estadísticas y membresías",
+      "url": "/?view=profile",
+      "icons": [{ "src": "/favicon.png", "sizes": "192x192" }]
+    }
   ]
 }
