@@ -1552,7 +1552,19 @@ export const api = {
             };
         },
 
-        async updateSchedule(matchId: string, params: { scheduled_at: string | null; court_name: string | null; court_slot_id?: string | null }) {
+        async updateSchedule(matchId: string, params: { 
+            scheduled_at: string | null; 
+            court_name: string | null; 
+            court_slot_id?: string | null;
+            institution_id?: string;
+            tournament_name?: string;
+            player1_name?: string;
+            player2_name?: string;
+            player1_id?: string;
+            player2_id?: string;
+            duration_minutes?: number;
+            override_conflict_booking_id?: string;
+        }) {
             const nowIso = new Date().toISOString();
             const proposalDataPatch = {
                 scheduled_at: params.scheduled_at,
@@ -1567,6 +1579,8 @@ export const api = {
                 scheduling_status: params.scheduled_at ? 'confirmed' : 'proposed'
             };
 
+            let updatedMatch: any = null;
+
             try {
                 // Fetch current proposal_data to merge
                 const { data: currentMatch } = await supabase.from('matches').select('proposal_data').eq('id', matchId).single();
@@ -1577,7 +1591,7 @@ export const api = {
 
                 const { data, error } = await supabase.from('matches').update(fullPayload).eq('id', matchId).select();
                 if (error) throw error;
-                return data && data.length > 0 ? data[0] : null;
+                updatedMatch = data && data.length > 0 ? data[0] : null;
             } catch (err: any) {
                 console.warn("Full match schedule update notice (fallback resilient payload):", err);
                 const safePayload: any = {
@@ -1591,8 +1605,102 @@ export const api = {
                     console.error("Match schedule update error:", fallbackErr);
                     throw fallbackErr;
                 }
-                return data && data.length > 0 ? data[0] : null;
+                updatedMatch = data && data.length > 0 ? data[0] : null;
             }
+
+            // --- SYNC WITH CLUB BOOKINGS TABLE ---
+            try {
+                if (params.scheduled_at && params.institution_id) {
+                    const schedDateObj = new Date(params.scheduled_at);
+                    if (!isNaN(schedDateObj.getTime())) {
+                        const schedDateStr = schedDateObj.toISOString().split('T')[0];
+                        const startH = String(schedDateObj.getHours()).padStart(2, '0');
+                        const startM = String(schedDateObj.getMinutes()).padStart(2, '0');
+                        const startTimeStr = `${startH}:${startM}`;
+
+                        const durationMin = params.duration_minutes || 90;
+                        const endMinutesTotal = schedDateObj.getHours() * 60 + schedDateObj.getMinutes() + durationMin;
+                        const endH = String(Math.floor(endMinutesTotal / 60) % 24).padStart(2, '0');
+                        const endM = String(endMinutesTotal % 60).padStart(2, '0');
+                        const endTimeStr = `${endH}:${endM}`;
+
+                        const courtFinal = params.court_name || 'Cancha 1';
+                        const p1Display = params.player1_name || 'Jugador 1';
+                        const p2Display = params.player2_name || 'Jugador 2';
+                        const tournamentTitle = params.tournament_name 
+                            ? `🏆 Torneo (${params.tournament_name}): ${p1Display} vs ${p2Display}`
+                            : `🏆 Torneo: ${p1Display} vs ${p2Display}`;
+
+                        // If organizer requested overriding an existing conflicting booking
+                        if (params.override_conflict_booking_id) {
+                            try {
+                                await supabase
+                                    .from('bookings')
+                                    .update({ 
+                                        status: 'cancelled', 
+                                        title: `[Reubicado por Torneo]`,
+                                        cancellation_reason: 'admin'
+                                    })
+                                    .eq('id', params.override_conflict_booking_id);
+                            } catch (ovErr) {
+                                console.warn("Could not cancel conflicting booking:", ovErr);
+                            }
+                        }
+
+                        // Check if a tournament booking already exists for this match
+                        const { data: existingBookings } = await supabase
+                            .from('bookings')
+                            .select('id')
+                            .eq('match_id', matchId);
+
+                        const participants = [
+                            { name: p1Display, user_id: params.player1_id, is_registered: !!params.player1_id },
+                            { name: p2Display, user_id: params.player2_id, is_registered: !!params.player2_id }
+                        ];
+
+                        if (existingBookings && existingBookings.length > 0) {
+                            // Update existing booking
+                            await api.bookings.update(existingBookings[0].id, {
+                                date: schedDateStr,
+                                start_time: startTimeStr,
+                                end_time: endTimeStr,
+                                court_name: courtFinal,
+                                title: tournamentTitle,
+                                status: 'confirmed',
+                                participants
+                            });
+                        } else {
+                            // Create new tournament booking
+                            const newBookingPayload: Partial<Booking> = {
+                                institution_id: params.institution_id,
+                                date: schedDateStr,
+                                start_time: startTimeStr,
+                                end_time: endTimeStr,
+                                court_name: courtFinal,
+                                status: 'confirmed',
+                                booking_type: 'tournament',
+                                match_id: matchId,
+                                title: tournamentTitle,
+                                total_price: 0,
+                                user_id: params.player1_id || params.player2_id || undefined,
+                                participants
+                            };
+                            await api.bookings.create(newBookingPayload);
+                        }
+                    }
+                } else if (!params.scheduled_at) {
+                    // Match was unscheduled: delete/cancel any linked tournament booking
+                    try {
+                        await supabase.from('bookings').delete().eq('match_id', matchId);
+                    } catch (delErr) {
+                        console.warn("Could not delete unlinked tournament booking:", delErr);
+                    }
+                }
+            } catch (bookingSyncErr) {
+                console.warn("Notice during match-booking calendar sync:", bookingSyncErr);
+            }
+
+            return updatedMatch;
         },
 
         async getByUser(userId: string) {

@@ -19,5 +19,16 @@ CREATE INDEX IF NOT EXISTS idx_matches_tournament_scheduled
 CREATE INDEX IF NOT EXISTS idx_matches_player_scheduled
   ON public.matches (player1_id, player2_id, scheduled_at);
 
--- 3. Recargar caché de PostgREST
+-- 3. Asegurar columnas de vinculación de torneos en public.bookings
+ALTER TABLE public.bookings
+  ADD COLUMN IF NOT EXISTS match_id UUID,
+  ADD COLUMN IF NOT EXISTS booking_type TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_bookings_match_id 
+  ON public.bookings (match_id);
+
+CREATE INDEX IF NOT EXISTS idx_bookings_institution_date_court 
+  ON public.bookings (institution_id, date, court_name);
+
+-- 4. Recargar caché de PostgREST
 NOTIFY pgrst, 'reload config';

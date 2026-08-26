@@ -122,6 +122,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [savingSchedule, setSavingSchedule] = useState(false);
     const [showCalendarModal, setShowCalendarModal] = useState(false);
     const [calendarViewMonth, setCalendarViewMonth] = useState<Date>(new Date());
+    const [dayBookingsForSchedule, setDayBookingsForSchedule] = useState<Booking[]>([]);
+    const [loadingDayBookings, setLoadingDayBookings] = useState(false);
+    const [overrideConflict, setOverrideConflict] = useState(false);
 
     // Derived state
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
@@ -130,6 +133,34 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     useEffect(() => {
         loadTournament();
     }, [tournamentId]);
+
+    // Check club court bookings in real-time when schedule date changes
+    useEffect(() => {
+        if (!selectedMatchForSchedule || !scheduleDate || !tournament?.institution_id) {
+            setDayBookingsForSchedule([]);
+            return;
+        }
+
+        let isMounted = true;
+        setLoadingDayBookings(true);
+        api.bookings.getByInstitutionAndDate(tournament.institution_id, scheduleDate)
+            .then(res => {
+                if (isMounted) {
+                    setDayBookingsForSchedule(res || []);
+                    setOverrideConflict(false);
+                }
+            })
+            .catch(err => {
+                console.warn("Could not load day bookings for schedule check:", err);
+            })
+            .finally(() => {
+                if (isMounted) setLoadingDayBookings(false);
+            });
+
+        return () => {
+            isMounted = false;
+        };
+    }, [selectedMatchForSchedule, scheduleDate, tournament?.institution_id]);
 
     const loadTournament = async () => {
         setLoading(true);
@@ -536,6 +567,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const openScheduleModal = (m: Match) => {
         setSelectedMatchForSchedule(m);
+        setOverrideConflict(false);
 
         let initialDate = '';
         let initialTime = '';
@@ -565,6 +597,42 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         setCustomCourtName('');
     };
 
+    // Calculate current target court and real-time conflicts
+    const currentTargetCourt = (isCustomCourt ? customCourtName.trim() : scheduleCourt.trim()) || 'Cancha 1';
+    const [targetH, targetM] = (scheduleTime || '16:00').split(':').map(Number);
+    const targetStartMin = (targetH || 0) * 60 + (targetM || 0);
+    const targetEndMin = targetStartMin + 90; // 90 min match slot
+
+    const conflictBooking = dayBookingsForSchedule.find(b => {
+        if (b.status === 'cancelled') return false;
+        if (selectedMatchForSchedule && b.match_id === selectedMatchForSchedule.id) return false;
+        if (b.court_name.trim().toLowerCase() !== currentTargetCourt.toLowerCase()) return false;
+
+        const [bsh, bsm] = (b.start_time || '00:00').split(':').map(Number);
+        const [beh, bem] = (b.end_time || '00:00').split(':').map(Number);
+        const bStartMin = (bsh || 0) * 60 + (bsm || 0);
+        const bEndMin = (beh || 0) * 60 + (bem || 0);
+
+        return (targetStartMin < bEndMin && bStartMin < targetEndMin);
+    });
+
+    const availableCourtsAtThisTime = courtOptions.filter(court => {
+        if (court.toLowerCase() === currentTargetCourt.toLowerCase()) return false;
+        const hasConflict = dayBookingsForSchedule.some(b => {
+            if (b.status === 'cancelled') return false;
+            if (selectedMatchForSchedule && b.match_id === selectedMatchForSchedule.id) return false;
+            if (b.court_name.trim().toLowerCase() !== court.toLowerCase()) return false;
+
+            const [bsh, bsm] = (b.start_time || '00:00').split(':').map(Number);
+            const [beh, bem] = (b.end_time || '00:00').split(':').map(Number);
+            const bStartMin = (bsh || 0) * 60 + (bsm || 0);
+            const bEndMin = (beh || 0) * 60 + (bem || 0);
+
+            return (targetStartMin < bEndMin && bStartMin < targetEndMin);
+        });
+        return !hasConflict;
+    });
+
     const handleSaveSchedule = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedMatchForSchedule) return;
@@ -578,6 +646,13 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             return;
         }
 
+        const courtFinal = currentTargetCourt;
+
+        if (conflictBooking && !overrideConflict) {
+            addToast(`⚠️ La ${courtFinal} ya tiene una reserva en ese horario (${conflictBooking.start_time} - ${conflictBooking.end_time} hs). Elige otra cancha o tilda "Priorizar torneo".`, 'error');
+            return;
+        }
+
         setSavingSchedule(true);
         try {
             const [year, month, day] = scheduleDate.split('-').map(Number);
@@ -585,16 +660,24 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             const scheduledDateObj = new Date(year, month - 1, day, hours, minutes);
             const scheduledIso = scheduledDateObj.toISOString();
 
-            const courtFinal = (isCustomCourt ? customCourtName.trim() : scheduleCourt.trim()) || 'Cancha 1';
+            const p1Display = selectedMatchForSchedule.team1_name || formatPlayerName(selectedMatchForSchedule.player1_name) || 'Jugador 1';
+            const p2Display = selectedMatchForSchedule.team2_name || formatPlayerName(selectedMatchForSchedule.player2_name) || 'Jugador 2';
 
             await api.matches.updateSchedule(selectedMatchForSchedule.id, {
                 scheduled_at: scheduledIso,
                 court_name: courtFinal,
-                court_slot_id: courtFinal
+                court_slot_id: courtFinal,
+                institution_id: tournament?.institution_id,
+                tournament_name: tournament?.name,
+                player1_name: p1Display,
+                player2_name: p2Display,
+                player1_id: selectedMatchForSchedule.player1_id,
+                player2_id: selectedMatchForSchedule.player2_id,
+                override_conflict_booking_id: (overrideConflict && conflictBooking) ? conflictBooking.id : undefined
             });
 
             soundEffects.playScoreBeep();
-            addToast(`¡Partido programado para el ${scheduledDateObj.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} a las ${scheduleTime} hs en ${courtFinal}!`, 'success');
+            addToast(`¡Partido programado y bloqueado en el calendario de reservas para el ${scheduledDateObj.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} a las ${scheduleTime} hs en ${courtFinal}!`, 'success');
             setSelectedMatchForSchedule(null);
             loadTournament();
         } catch (err: any) {
@@ -607,16 +690,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const handleClearSchedule = async () => {
         if (!selectedMatchForSchedule) return;
-        if (!confirm("¿Estás seguro de desprogramar este partido? Volverá al estado sin fecha ni horario asignado.")) return;
+        if (!confirm("¿Estás seguro de desprogramar este partido? Volverá al estado sin fecha ni horario asignado y se liberará la cancha en el club.")) return;
 
         setSavingSchedule(true);
         try {
             await api.matches.updateSchedule(selectedMatchForSchedule.id, {
                 scheduled_at: null,
                 court_name: null,
-                court_slot_id: null
+                court_slot_id: null,
+                institution_id: tournament?.institution_id
             });
-            addToast("Programación del partido eliminada.", 'info');
+            addToast("Programación del partido eliminada y cancha liberada.", 'info');
             setSelectedMatchForSchedule(null);
             loadTournament();
         } catch (err: any) {
@@ -3647,6 +3731,83 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     </div>
                                 )}
                             </div>
+
+                            {/* Real-time Conflict Alert & Available Court Suggestions */}
+                            {conflictBooking && (
+                                <div className="p-3.5 bg-amber-500/15 border border-amber-500/40 rounded-2xl space-y-2.5 text-amber-200 animate-in fade-in">
+                                    <div className="flex items-start gap-2.5">
+                                        <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg shrink-0 mt-0.5">
+                                            <AlertTriangle size={16} />
+                                        </div>
+                                        <div className="text-xs space-y-0.5 flex-1 min-w-0">
+                                            <div className="font-bold text-amber-300 flex items-center justify-between gap-1">
+                                                <span>¡Cancha Ocupada en ese horario!</span>
+                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 font-mono font-bold">
+                                                    {conflictBooking.start_time} - {conflictBooking.end_time} hs
+                                                </span>
+                                            </div>
+                                            <p className="text-[11px] text-amber-200/90 leading-tight">
+                                                {conflictBooking.booking_type === 'tournament' ? (
+                                                    <>Ya hay otro partido de torneo: <strong>{conflictBooking.title}</strong></>
+                                                ) : conflictBooking.booking_type === 'class' ? (
+                                                    <>Hay una clase programada: <strong>{conflictBooking.title || 'Clase / Escuela'}</strong></>
+                                                ) : (
+                                                    <>Reserva previa de socio: <strong>{conflictBooking.title || conflictBooking.user_name || 'Reserva de Cancha'}</strong></>
+                                                )}
+                                            </p>
+                                        </div>
+                                    </div>
+
+                                    {/* Free court suggestions at the same hour */}
+                                    {availableCourtsAtThisTime.length > 0 && (
+                                        <div className="pt-1.5 border-t border-amber-500/20 flex flex-wrap items-center gap-1.5 text-[11px]">
+                                            <span className="text-amber-300 font-bold text-[10px] uppercase">Canchas libres:</span>
+                                            {availableCourtsAtThisTime.map(court => (
+                                                <button
+                                                    key={court}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        setScheduleCourt(court);
+                                                        setIsCustomCourt(false);
+                                                    }}
+                                                    className="px-2 py-0.5 bg-green-500/20 hover:bg-green-500/30 text-green-300 border border-green-500/40 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1"
+                                                    title={`Mover partido a ${court} que está libre`}
+                                                >
+                                                    <Check size={11} /> Elegir {court}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Override option */}
+                                    <div className="pt-1 flex items-center justify-between gap-2 text-[11px]">
+                                        <label className="flex items-center gap-2 cursor-pointer text-amber-200 hover:text-white transition-colors select-none">
+                                            <input
+                                                type="checkbox"
+                                                checked={overrideConflict}
+                                                onChange={e => setOverrideConflict(e.target.checked)}
+                                                className="w-4 h-4 rounded bg-slate-900 border-amber-500/40 text-primary focus:ring-primary"
+                                            />
+                                            <span className="font-semibold text-xs">Priorizar torneo (reemplazar turno en el club)</span>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Court is free confirmation */}
+                            {!conflictBooking && !loadingDayBookings && scheduleTime && scheduleDate && (
+                                <div className="px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-between text-xs text-green-300 font-semibold">
+                                    <span className="flex items-center gap-1.5">
+                                        <CheckCircle2 size={13} className="text-green-400" />
+                                        <span>{currentTargetCourt} disponible ({scheduleTime} a {(() => {
+                                            const [h, m] = scheduleTime.split(':').map(Number);
+                                            const endTot = (h || 0) * 60 + (m || 0) + 90;
+                                            return `${String(Math.floor(endTot / 60) % 24).padStart(2, '0')}:${String(endTot % 60).padStart(2, '0')}`;
+                                        })()} hs)</span>
+                                    </span>
+                                    <span className="text-[10px] text-green-400/80 font-bold uppercase tracking-wider">Se bloqueará en reservas</span>
+                                </div>
+                            )}
 
                             {/* Live Summary Banner */}
                             {scheduleDate && scheduleTime && (
