@@ -22,11 +22,38 @@ interface WeatherData {
     }>;
 }
 
+const WEATHER_CACHE_KEY = 'smash_weather_cache_v1';
+const WEATHER_CACHE_TTL = 30 * 60 * 1000; // 30 minutos
+
 export const WeatherWidget: React.FC = () => {
-    const [loading, setLoading] = useState(true);
-    const [weather, setWeather] = useState<WeatherData | null>(null);
+    const [weather, setWeather] = useState<WeatherData | null>(() => {
+        try {
+            const cached = sessionStorage.getItem(WEATHER_CACHE_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Date.now() - parsed.timestamp < WEATHER_CACHE_TTL && parsed.data) {
+                    return parsed.data;
+                }
+            }
+        } catch (e) {}
+        return null;
+    });
+    const [loading, setLoading] = useState(!weather);
 
     useEffect(() => {
+        // If we already have fresh cached weather, don't block
+        try {
+            const cached = sessionStorage.getItem(WEATHER_CACHE_KEY);
+            if (cached) {
+                const parsed = JSON.parse(cached);
+                if (Date.now() - parsed.timestamp < WEATHER_CACHE_TTL && parsed.data) {
+                    setWeather(parsed.data);
+                    setLoading(false);
+                    return;
+                }
+            }
+        } catch (e) {}
+
         // Fetch real weather data from Open-Meteo for Diamante, Entre Ríos (-32.0664, -60.6384)
         const fetchWeather = async () => {
             try {
@@ -58,7 +85,7 @@ export const WeatherWidget: React.FC = () => {
                     };
                 });
 
-                setWeather({
+                const weatherResult: WeatherData = {
                     temp: Math.round(current.temperature_2m),
                     condition: current.weather_code <= 2 ? 'Soleado' : current.weather_code <= 50 ? 'Parcialmente Nublado' : 'Lluvias',
                     sensation: Math.round(current.apparent_temperature),
@@ -70,7 +97,15 @@ export const WeatherWidget: React.FC = () => {
                     clouds: current.cloud_cover,
                     visibility: 10,
                     forecast: mappedForecast
-                });
+                };
+
+                setWeather(weatherResult);
+                try {
+                    sessionStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({
+                        timestamp: Date.now(),
+                        data: weatherResult
+                    }));
+                } catch (e) {}
             } catch (err) {
                 console.error("Error cargando clima real:", err);
                 setWeather({

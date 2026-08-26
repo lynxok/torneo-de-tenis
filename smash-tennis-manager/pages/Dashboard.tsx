@@ -81,31 +81,29 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
     const loadAdminData = async () => {
         try {
-            // Parallel fetching for Admin Data
             const today = new Date().toISOString().split('T')[0];
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const yesterdayStr = yesterday.toISOString().split('T')[0];
 
-            // Base queries that always run
-            const baseQueries = [
+            // Ultra-fast parallelized queries
+            const targetInstitutionId = isSuperAdmin ? undefined : user.institution_id;
+
+            const [
+                tournaments,
+                pendingProfiles,
+                transactionsData,
+                bookingsData,
+                playerMatches,
+                playerRanking
+            ] = await Promise.all([
                 api.tournaments.getActive(),
-                api.auth.getAllProfiles(),
-                api.reports.getTransactions(user.institution_id || 'all', 1, 100)
-            ];
-
-            // Bookings query only if institution_id exists
-            const bookingsPromise = user.institution_id
-                ? api.bookings.getByInstitutionAndDate(user.institution_id, today)
-                : Promise.resolve([]);
-
-            const [tournaments, allProfiles, transactionsData, bookingsData] = await Promise.all([
-                ...baseQueries,
-                bookingsPromise
+                api.auth.getPendingProfiles(targetInstitutionId),
+                api.reports.getTransactions(user.institution_id || 'all', 1, 50),
+                user.institution_id ? api.bookings.getByInstitutionAndDate(user.institution_id, today) : Promise.resolve([]),
+                showPlayerSection ? api.matches.getByUser(user.id) : Promise.resolve([]),
+                showPlayerSection ? api.rankings.getHistory(user.id) : Promise.resolve([])
             ]);
-
-            // Filter Admin Data
-            let pending = allProfiles.filter(p => !p.is_approved && p.role !== 'superadmin');
-            if (!isSuperAdmin && user.institution_id) {
-                pending = pending.filter(p => p.institution_id === user.institution_id);
-            }
 
             // Calculate real revenue from today's and yesterday's transactions
             const todayTransactions = transactionsData.filter(t => t.date?.startsWith(today));
@@ -113,10 +111,6 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 .filter(t => t.type === 'income')
                 .reduce((sum, t) => sum + Number(t.amount), 0);
 
-            // Calculate yesterday for trend
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const yesterdayStr = yesterday.toISOString().split('T')[0];
             const yesterdayTransactions = transactionsData.filter(t => t.date?.startsWith(yesterdayStr));
             const yesterdayRevenue = yesterdayTransactions
                 .filter(t => t.type === 'income')
@@ -134,25 +128,19 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             setStats({
                 activeTournaments: tournaments.length,
                 todayBookings: bookingsData.length,
-                pendingUsers: pending.length,
+                pendingUsers: pendingProfiles.length,
                 revenueToday: todayRevenue,
                 revenueTrend
             });
-            setPendingUsersList(pending);
+            setPendingUsersList(pendingProfiles);
             setTodayBookings(bookingsData);
 
-            // NEW: Load player data if applicable
             if (showPlayerSection) {
-                const [matches, ranking] = await Promise.all([
-                    api.matches.getByUser(user.id),
-                    api.rankings.getHistory(user.id)
-                ]);
-                setMyMatches(matches);
-                setMyRankingHistory(ranking);
+                setMyMatches(playerMatches);
+                setMyRankingHistory(playerRanking);
             }
-
         } catch (e) {
-            console.error(e);
+            console.error("Error loading admin dashboard data:", e);
         } finally {
             setLoading(false);
         }

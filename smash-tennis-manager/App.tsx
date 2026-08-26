@@ -1,5 +1,5 @@
 
-import React, { useEffect, useState, Suspense, lazy } from 'react';
+import React, { useEffect, useState, useRef, Suspense, lazy } from 'react';
 import { supabase } from './services/supabaseClient';
 import { api } from './services/api';
 import { UserProfile, UserRole } from './types';
@@ -90,6 +90,9 @@ const AppContent = () => {
     role: simulatedRole || userProfile.role
   } : null;
 
+  const fetchingProfileUserIdRef = useRef<string | null>(null);
+  const fetchingMessagesRef = useRef<boolean>(false);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -112,6 +115,7 @@ const AppContent = () => {
         setSimulatedRole(null);
         setHasSelectedRole(false);
         setUnreadCount(0);
+        fetchingProfileUserIdRef.current = null;
       }
     });
 
@@ -142,27 +146,34 @@ const AppContent = () => {
     if (effectiveUser) {
       fetchUnreadMessages(effectiveUser);
     }
-  }, [userProfile, simulatedRole]);
+  }, [userProfile?.id, userProfile?.role, simulatedRole]);
 
   const fetchProfile = async (userId: string) => {
+    if (fetchingProfileUserIdRef.current === userId) return;
+    fetchingProfileUserIdRef.current = userId;
+
     try {
       const profile = await api.auth.getUserProfile(userId);
       setUserProfile(profile);
-      // fetchUnreadMessages called by useEffect above
     } catch (e) {
       console.error(e);
     } finally {
+      fetchingProfileUserIdRef.current = null;
       setLoading(false);
     }
   };
 
   const fetchUnreadMessages = async (profile: UserProfile) => {
+    if (fetchingMessagesRef.current) return;
+    fetchingMessagesRef.current = true;
     try {
       const msgs = await api.messages.getInbox(profile);
       const unread = msgs.filter(m => !m.is_read).length;
       setUnreadCount(unread);
     } catch (e) {
       console.error("Error fetching unread count", e);
+    } finally {
+      fetchingMessagesRef.current = false;
     }
   };
 

@@ -135,77 +135,83 @@ export const api = {
                 .single();
             if (error) throw error;
 
-            // Auto-heal missing profile fields from auth user_metadata if available
-            try {
-                const { data: authData } = await supabase.auth.getUser();
-                if (authData?.user && authData.user.id === userId && authData.user.user_metadata) {
-                    const meta = authData.user.user_metadata;
-                    const updates: any = {};
-                    if (!data.lastname && meta.lastname) updates.lastname = meta.lastname.trim();
-                    if (!data.phone && meta.phone) updates.phone = meta.phone.trim();
-                    if (!data.dni && meta.dni) updates.dni = meta.dni.trim();
-                    if (!data.gender && meta.gender) updates.gender = meta.gender.trim();
-                    if ((!data.category || data.category === 'C') && meta.category && meta.category !== 'C') updates.category = meta.category.trim();
-                    if (!data.institution_id && meta.institution_id && meta.institution_id !== 'none') updates.institution_id = meta.institution_id;
-                    if ((!data.name || data.name === 'Usuario') && meta.name) updates.name = meta.name.trim();
+            // Auto-heal missing profile fields only if critical fields are genuinely missing
+            if (!data.name || !data.lastname || !data.phone || !data.dni) {
+                try {
+                    const { data: authData } = await supabase.auth.getUser();
+                    if (authData?.user && authData.user.id === userId && authData.user.user_metadata) {
+                        const meta = authData.user.user_metadata;
+                        const updates: any = {};
+                        if (!data.lastname && meta.lastname) updates.lastname = meta.lastname.trim();
+                        if (!data.phone && meta.phone) updates.phone = meta.phone.trim();
+                        if (!data.dni && meta.dni) updates.dni = meta.dni.trim();
+                        if (!data.gender && meta.gender) updates.gender = meta.gender.trim();
+                        if ((!data.category || data.category === 'C') && meta.category && meta.category !== 'C') updates.category = meta.category.trim();
+                        if (!data.institution_id && meta.institution_id && meta.institution_id !== 'none') updates.institution_id = meta.institution_id;
+                        if ((!data.name || data.name === 'Usuario') && meta.name) updates.name = meta.name.trim();
 
-                    if (meta.birth_date) {
-                        data.birth_date = meta.birth_date;
-                    }
+                        if (meta.birth_date) {
+                            data.birth_date = meta.birth_date;
+                        }
 
-                    if (Object.keys(updates).length > 0) {
-                        await supabase.from('profiles').update(updates).eq('id', userId);
-                        Object.assign(data, updates);
-                        if (updates.institution_id && !data.institutions?.name) {
-                            const { data: inst } = await supabase.from('institutions').select('name').eq('id', updates.institution_id).single();
-                            if (inst) {
-                                data.institutions = inst;
+                        if (Object.keys(updates).length > 0) {
+                            await supabase.from('profiles').update(updates).eq('id', userId);
+                            Object.assign(data, updates);
+                            if (updates.institution_id && !data.institutions?.name) {
+                                const { data: inst } = await supabase.from('institutions').select('name').eq('id', updates.institution_id).single();
+                                if (inst) {
+                                    data.institutions = inst;
+                                }
                             }
                         }
                     }
+                } catch (healErr) {
+                    console.warn("Auto-heal profile fallback:", healErr);
                 }
-            } catch (healErr) {
-                console.warn("Auto-heal profile fallback:", healErr);
             }
 
             if (!data.gender) data.gender = 'masculino';
 
-            // Calculate real wins from matches table
-            try {
-                const { count: realWins } = await supabase
-                    .from('matches')
-                    .select('id', { count: 'exact', head: true })
-                    .eq('is_played', true)
-                    .eq('winner_id', userId);
-                if (realWins !== null && realWins !== undefined) {
-                    data.matches_won = realWins;
-                }
-            } catch (wErr) {
-                // Keep default
-            }
-
             return { ...data, institution: data.institutions?.name } as UserProfile;
         },
-        async getAllProfiles(page = 1, pageSize = 50) {
-            let wonMatchesData: any[] = [];
+        async getPendingProfiles(institutionId?: string) {
             try {
-                const { data: wm } = await supabase
+                let query = supabase
+                    .from('profiles')
+                    .select('id, name, lastname, role, institution_id, created_at, avatar_url, profile_picture_url, is_approved')
+                    .eq('is_approved', false)
+                    .neq('role', 'superadmin')
+                    .order('created_at', { ascending: false });
+
+                if (institutionId && institutionId !== 'all') {
+                    query = query.eq('institution_id', institutionId);
+                }
+
+                const { data, error } = await query;
+                if (error) throw error;
+                return (data || []) as UserProfile[];
+            } catch (err) {
+                console.error("Error fetching pending profiles:", err);
+                return [] as UserProfile[];
+            }
+        },
+        async getAllProfiles(page = 1, pageSize = 50) {
+            const [matchesRes, profilesRes] = await Promise.all([
+                supabase
                     .from('matches')
                     .select('winner_id')
                     .eq('is_played', true)
-                    .not('winner_id', 'is', null);
-                if (wm) wonMatchesData = wm;
-            } catch (e) {
-                console.warn("Could not query won matches directly:", e);
-            }
+                    .not('winner_id', 'is', null),
+                supabase
+                    .from('profiles')
+                    .select('id, email, name, lastname, role, category, gender, birth_date, institution_id, is_approved, member_status, avatar_url, profile_picture_url, phone, dni, created_at, institutions:institutions(id, name)', { count: 'exact' })
+                    .order('created_at', { ascending: false })
+                    .range((page - 1) * pageSize, page * pageSize - 1)
+            ]);
 
-            const { data, error } = await supabase
-                .from('profiles')
-                .select('*, institutions:institutions(id, name)', { count: 'exact' })
-                .order('created_at', { ascending: false })
-                .range((page - 1) * pageSize, page * pageSize - 1);
-
-            if (error) throw error;
+            if (profilesRes.error) throw profilesRes.error;
+            const data = profilesRes.data || [];
+            const wonMatchesData = matchesRes.data || [];
 
             // Map real won match counts per player
             const winCountMap: Record<string, number> = {};
@@ -213,22 +219,7 @@ export const api = {
                 if (m.winner_id) winCountMap[m.winner_id] = (winCountMap[m.winner_id] || 0) + 1;
             });
 
-            // Enrich with current user metadata if available
-            try {
-                const { data: authData } = await supabase.auth.getUser();
-                if (authData?.user?.user_metadata) {
-                    const currentMeta = authData.user.user_metadata;
-                    const match = (data || []).find((p: any) => p.id === authData.user.id);
-                    if (match) {
-                        if (currentMeta.birth_date) match.birth_date = currentMeta.birth_date;
-                        if (currentMeta.gender) match.gender = currentMeta.gender;
-                    }
-                }
-            } catch (e) {
-                // Ignore
-            }
-
-            return (data || [])
+            return data
                 .filter((p: any) => p.role !== 'inactive' && p.member_status !== 'deleted' && !p.name?.includes('[Usuario Eliminado]') && !p.name?.includes('[Eliminado]'))
                 .map((p: any) => ({
                     ...p,
@@ -510,7 +501,7 @@ export const api = {
         async getActive() {
             const { data, error } = await supabase
                 .from('tournaments')
-                .select('*, institutions(name, city)')
+                .select('id, name, type, gender, category, competitions, start_date, duration, status, institution_id, registration_price, image_url, registration_closed, registration_deadline, institutions(name, city)')
                 .eq('status', 'active')
                 .order('start_date');
 
