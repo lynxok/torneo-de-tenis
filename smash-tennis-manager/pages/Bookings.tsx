@@ -9,7 +9,8 @@ import {
     Calendar, Clock, MapPin, X, Loader2, CheckCircle2, DollarSign, Lock, ChevronLeft, ChevronRight, 
     Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
     ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, 
-    Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning, Users, Check, Flame
+    Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning, Users, Check, Flame,
+    User
 } from 'lucide-react';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
@@ -44,152 +45,410 @@ const formatFriendlyDate = (dateStr: string) => {
     }
 };
 
-const ParticipantSelector: React.FC<{
+interface MatchParticipantSelectorProps {
+    matchType: 'singles' | 'doubles';
+    onMatchTypeChange: (type: 'singles' | 'doubles') => void;
     participants: BookingParticipant[];
     onChange: (participants: BookingParticipant[]) => void;
     currentUser?: UserProfile;
-    maxPlayers?: number;
-}> = ({ participants, onChange, currentUser, maxPlayers = 4 }) => {
+    isAdmin?: boolean;
+}
+
+const MatchParticipantSelector: React.FC<MatchParticipantSelectorProps> = ({
+    matchType,
+    onMatchTypeChange,
+    participants,
+    onChange,
+    currentUser,
+    isAdmin = false
+}) => {
     const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
+    const [activeSearchSlot, setActiveSearchSlot] = useState<number | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [isOpenDropdown, setIsOpenDropdown] = useState(false);
 
     useEffect(() => {
-        api.auth.getAllProfiles(1, 100).then(setAllProfiles).catch(console.error);
+        api.auth.getAllProfiles(1, 200).then(setAllProfiles).catch(console.error);
     }, []);
 
-    const filteredProfiles = allProfiles.filter(p => {
-        const full = `${p.name} ${p.lastname || ''} ${p.category || ''} ${p.institution || ''}`.toLowerCase();
-        const matches = full.includes(searchTerm.toLowerCase());
-        const alreadyAdded = participants.some(item => item.user_id === p.id);
-        return matches && !alreadyAdded;
-    }).slice(0, 6);
+    const targetSlotsCount = matchType === 'singles' ? 2 : 4;
 
-    const handleAddRegistered = (p: UserProfile) => {
-        if (participants.length >= maxPlayers) return;
+    // Slot metadata definitions
+    const getSlotInfo = (index: number) => {
+        if (matchType === 'singles') {
+            if (index === 0) return { label: 'Jugador 1 (Titular / Anfitrión)', teamLabel: 'Jugador 1', color: 'text-primary' };
+            return { label: 'Jugador 2 (Rival / Oponente)', teamLabel: 'Jugador 2', color: 'text-amber-400' };
+        } else {
+            if (index === 0) return { label: 'Pareja 1 - Jugador 1 (Titular)', teamLabel: 'Pareja 1', color: 'text-primary' };
+            if (index === 1) return { label: 'Pareja 1 - Jugador 2 (Compañero)', teamLabel: 'Pareja 1', color: 'text-primary' };
+            if (index === 2) return { label: 'Pareja 2 - Jugador 1 (Rival 1)', teamLabel: 'Pareja 2', color: 'text-blue-400' };
+            return { label: 'Pareja 2 - Jugador 2 (Rival 2)', teamLabel: 'Pareja 2', color: 'text-blue-400' };
+        }
+    };
+
+    const handleSelectRegistered = (slotIndex: number, p: UserProfile) => {
         const formatted = formatPlayerName(p.name, p.lastname);
         const newPart: BookingParticipant = {
             user_id: p.id,
             name: formatted,
             lastname: p.lastname,
             is_registered: true,
-            avatar_url: p.profile_picture_url || (p as any).avatar_url
+            avatar_url: p.profile_picture_url || (p as any).avatar_url,
+            dni: p.dni,
+            phone: p.phone
         };
-        onChange([...participants, newPart]);
+        const next = [...participants];
+        next[slotIndex] = newPart;
+        onChange(next.slice(0, targetSlotsCount));
+        setActiveSearchSlot(null);
         setSearchTerm('');
-        setIsOpenDropdown(false);
     };
 
-    const handleAddCustom = () => {
-        if (!searchTerm.trim() || participants.length >= maxPlayers) return;
+    const handleSelectUnregistered = (slotIndex: number) => {
         const newPart: BookingParticipant = {
-            name: formatPlayerName(searchTerm.trim()),
+            name: 'Jugador no registrado en app',
             is_registered: false
         };
-        onChange([...participants, newPart]);
+        const next = [...participants];
+        next[slotIndex] = newPart;
+        onChange(next.slice(0, targetSlotsCount));
+        setActiveSearchSlot(null);
         setSearchTerm('');
-        setIsOpenDropdown(false);
     };
 
-    const handleRemove = (index: number) => {
-        onChange(participants.filter((_, i) => i !== index));
+    const handleRemoveSlot = (slotIndex: number) => {
+        const next = [...participants];
+        const sanitized: BookingParticipant[] = [];
+        for (let i = 0; i < targetSlotsCount; i++) {
+            if (i !== slotIndex && next[i]) {
+                sanitized[i] = next[i];
+            }
+        }
+        onChange(sanitized);
+        if (activeSearchSlot === slotIndex) {
+            setActiveSearchSlot(null);
+            setSearchTerm('');
+        }
     };
+
+    const handleToggleType = (type: 'singles' | 'doubles') => {
+        if (type === matchType) return;
+        onMatchTypeChange(type);
+        if (type === 'singles') {
+            onChange(participants.slice(0, 2));
+        } else {
+            const next = [...participants];
+            onChange(next);
+        }
+    };
+
+    // Filter profiles matching search term (Name, Lastname, DNI, Phone, Institution)
+    const cleanSearch = searchTerm.trim().toLowerCase();
+    const cleanDigits = cleanSearch.replace(/[^0-9]/g, '');
+    const filteredProfiles = allProfiles.filter(p => {
+        // Exclude if already selected in another slot
+        const isAlreadySelected = participants.some((item, idx) => idx !== activeSearchSlot && item && item.user_id === p.id);
+        if (isAlreadySelected) return false;
+        if (!cleanSearch) return true;
+
+        const fullName = `${p.name} ${p.lastname || ''}`.toLowerCase();
+        const dni = (p.dni || '').toLowerCase();
+        const phone = (p.phone || '').replace(/[^0-9]/g, '');
+        const inst = (p.institution || '').toLowerCase();
+
+        const matchName = fullName.includes(cleanSearch);
+        const matchDni = dni.includes(cleanSearch);
+        const matchPhone = Boolean(cleanDigits && phone && phone.includes(cleanDigits));
+        const matchInst = inst.includes(cleanSearch);
+
+        return matchName || matchDni || matchPhone || matchInst;
+    }).slice(0, 6);
+
+    const filledCount = participants.slice(0, targetSlotsCount).filter(p => p && p.name).length;
+    const isAllFilled = filledCount === targetSlotsCount;
+    const isAllRegistered = isAllFilled && participants.slice(0, targetSlotsCount).every(p => p && p.is_registered === true);
 
     return (
-        <div className="space-y-3 bg-white/5 p-3.5 rounded-xl border border-white/10">
-            <div className="flex justify-between items-center">
-                <label className="text-xs text-muted uppercase font-bold flex items-center gap-1.5">
-                    <Users size={14} className="text-primary" /> Jugadores Participantes ({participants.length}/{maxPlayers})
-                </label>
-                <span className="text-[10px] text-muted">
-                    {participants.length === 0 ? 'Sin jugadores asignados' : `${participants.length} jugador(es)`}
-                </span>
+        <div className="space-y-3.5 bg-white/5 p-4 rounded-2xl border border-white/10">
+            {/* Header: Modality Selector (Singles vs Dobles) */}
+            <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                    <label className="text-xs text-muted uppercase font-black tracking-wider flex items-center gap-1.5">
+                        <Users size={14} className="text-primary" /> Modalidad de Juego (Obligatorio)
+                    </label>
+                    <span className="text-[11px] font-bold text-primary">
+                        {matchType === 'singles' ? '1 vs 1 (2 Jugadores)' : '2 vs 2 (4 Jugadores)'}
+                    </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 p-1 bg-black/40 rounded-xl border border-white/10">
+                    <button
+                        type="button"
+                        onClick={() => handleToggleType('singles')}
+                        className={`py-2 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${
+                            matchType === 'singles'
+                                ? 'bg-primary text-white shadow-md shadow-primary/20 scale-[1.01]'
+                                : 'text-muted hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                        🎾 Singles (2 Jugadores)
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => handleToggleType('doubles')}
+                        className={`py-2 px-3 rounded-lg text-xs font-black transition-all flex items-center justify-center gap-2 ${
+                            matchType === 'doubles'
+                                ? 'bg-primary text-white shadow-md shadow-primary/20 scale-[1.01]'
+                                : 'text-muted hover:text-white hover:bg-white/5'
+                        }`}
+                    >
+                        👥 Dobles (4 Jugadores)
+                    </button>
+                </div>
             </div>
 
-            {/* List of current participants */}
-            <div className="flex flex-wrap gap-2 min-h-[32px]">
-                {participants.length === 0 ? (
-                    <span className="text-xs text-muted italic">Ningún jugador seleccionado</span>
-                ) : (
-                    participants.map((p, idx) => {
-                        const isSelf = currentUser && p.user_id === currentUser.id;
+            {/* Slots List */}
+            <div className="space-y-2 pt-1">
+                <div className="flex justify-between items-center text-[10.5px] text-muted font-bold uppercase">
+                    <span>Jugadores Asignados ({filledCount}/{targetSlotsCount})</span>
+                    <span>Búsqueda por Nombre, DNI o Celular</span>
+                </div>
+
+                <div className="space-y-2">
+                    {Array.from({ length: targetSlotsCount }).map((_, slotIdx) => {
+                        const participant = participants[slotIdx];
+                        const slotInfo = getSlotInfo(slotIdx);
+                        const isSelf = currentUser && participant?.user_id === currentUser.id;
+                        const isSearchingThisSlot = activeSearchSlot === slotIdx;
+
                         return (
                             <div 
-                                key={idx} 
-                                className="bg-primary/15 border border-primary/30 text-white pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-bold flex items-center gap-2 shadow-sm"
+                                key={slotIdx} 
+                                className={`rounded-xl border transition-all ${
+                                    participant 
+                                        ? (participant.is_registered 
+                                            ? 'bg-slate-900/90 border-primary/30 p-2.5 shadow-sm' 
+                                            : 'bg-amber-950/20 border-amber-500/30 p-2.5')
+                                        : (isSearchingThisSlot 
+                                            ? 'bg-slate-900 border-primary p-2.5 shadow-lg ring-1 ring-primary/30' 
+                                            : 'bg-black/30 border-white/10 p-2 hover:border-white/20')
+                                }`}
                             >
-                                <span className="truncate max-w-[150px]">{p.name}</span>
-                                {isSelf ? (
-                                    <span className="text-[9px] bg-primary text-dark font-black px-1.5 py-0.2 rounded uppercase">Tú</span>
+                                {participant ? (
+                                    /* FILLED SLOT */
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2.5 min-w-0">
+                                            {/* Avatar or Icon */}
+                                            {participant.avatar_url ? (
+                                                <img 
+                                                    src={participant.avatar_url} 
+                                                    alt={participant.name} 
+                                                    className="w-7 h-7 rounded-full object-cover border border-white/20 shrink-0" 
+                                                />
+                                            ) : (
+                                                <div className={`w-7 h-7 rounded-full flex items-center justify-center font-black text-xs shrink-0 ${
+                                                    participant.is_registered ? 'bg-primary/20 text-primary border border-primary/30' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                                }`}>
+                                                    {participant.name.charAt(0).toUpperCase()}
+                                                </div>
+                                            )}
+
+                                            <div className="min-w-0">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    <span className="text-[10px] text-muted font-bold uppercase">{slotInfo.label}:</span>
+                                                    <span className="text-xs font-bold text-white truncate max-w-[180px]">
+                                                        {participant.name}
+                                                    </span>
+                                                    {isSelf && (
+                                                        <span className="text-[9px] bg-primary text-dark font-black px-1.5 py-0.2 rounded uppercase">Tú</span>
+                                                    )}
+                                                </div>
+
+                                                <div className="flex items-center gap-2 mt-0.5">
+                                                    {participant.is_registered ? (
+                                                        <span className="text-[9.5px] bg-green-500/15 text-green-300 border border-green-500/20 px-1.5 py-0.2 rounded font-bold flex items-center gap-1">
+                                                            <CheckCircle2 size={10} /> Socio Registrado
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[9.5px] bg-amber-500/15 text-amber-300 border border-amber-500/20 px-1.5 py-0.2 rounded font-bold flex items-center gap-1">
+                                                            <AlertCircle size={10} /> No Registrado en App
+                                                        </span>
+                                                    )}
+                                                    {participant.dni && (
+                                                        <span className="text-[9.5px] text-muted">DNI: {participant.dni}</span>
+                                                    )}
+                                                    {participant.phone && !participant.dni && (
+                                                        <span className="text-[9.5px] text-muted">Tel: {participant.phone}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Remove / Change Action */}
+                                        {(!isSelf || isAdmin) && (
+                                            <button
+                                                type="button"
+                                                onClick={() => handleRemoveSlot(slotIdx)}
+                                                className="p-1 text-muted hover:text-red-400 hover:bg-white/5 rounded-lg transition-colors shrink-0"
+                                                title="Quitar / Cambiar jugador"
+                                            >
+                                                <X size={15} />
+                                            </button>
+                                        )}
+                                    </div>
                                 ) : (
-                                    <button
-                                        type="button"
-                                        onClick={() => handleRemove(idx)}
-                                        className="p-0.5 text-muted hover:text-red-400 rounded transition-colors"
-                                        title="Quitar jugador"
-                                    >
-                                        <X size={13} />
-                                    </button>
+                                    /* EMPTY SLOT WITH ACTIVE SEARCH */
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5">
+                                                <span className={`w-2 h-2 rounded-full ${slotIdx < 2 ? 'bg-primary' : 'bg-blue-400'}`}></span>
+                                                {slotInfo.label}
+                                            </span>
+                                            {isSearchingThisSlot && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => { setActiveSearchSlot(null); setSearchTerm(''); }}
+                                                    className="text-[10px] text-muted hover:text-white"
+                                                >
+                                                    Cerrar
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="relative">
+                                            <Search className="absolute left-2.5 top-2.5 text-muted" size={14} />
+                                            <input
+                                                type="text"
+                                                placeholder="Buscar socio por Nombre, DNI o Celular..."
+                                                className="w-full bg-sidebar border border-white/15 rounded-xl pl-8 pr-3 py-2 text-xs text-white placeholder:text-muted/60 focus:outline-none focus:border-primary transition-colors"
+                                                value={isSearchingThisSlot ? searchTerm : ''}
+                                                onFocus={() => {
+                                                    setActiveSearchSlot(slotIdx);
+                                                    setSearchTerm('');
+                                                }}
+                                                onChange={e => {
+                                                    setActiveSearchSlot(slotIdx);
+                                                    setSearchTerm(e.target.value);
+                                                }}
+                                            />
+                                        </div>
+
+                                        {/* Dropdown with results and standardized Non-Registered Button */}
+                                        {isSearchingThisSlot && (
+                                            <div className="mt-1.5 bg-slate-900 border border-white/20 rounded-xl shadow-2xl overflow-hidden z-20 space-y-1 p-1">
+                                                <div className="text-[10px] text-muted uppercase font-black px-2 py-1 flex justify-between items-center border-b border-white/5">
+                                                    <span>Socios Registrados</span>
+                                                    <span>{filteredProfiles.length} coincidencia(s)</span>
+                                                </div>
+
+                                                <div className="max-h-44 overflow-y-auto space-y-0.5 custom-scrollbar">
+                                                    {filteredProfiles.length > 0 ? (
+                                                        filteredProfiles.map(p => (
+                                                            <button
+                                                                key={p.id}
+                                                                type="button"
+                                                                onClick={() => handleSelectRegistered(slotIdx, p)}
+                                                                className="w-full text-left p-2 hover:bg-primary/20 rounded-lg flex items-center justify-between text-xs transition-colors group"
+                                                            >
+                                                                <div className="flex items-center gap-2 min-w-0">
+                                                                    {p.profile_picture_url || (p as any).avatar_url ? (
+                                                                        <img 
+                                                                            src={p.profile_picture_url || (p as any).avatar_url} 
+                                                                            alt={p.name} 
+                                                                            className="w-6 h-6 rounded-full object-cover border border-white/20 shrink-0" 
+                                                                        />
+                                                                    ) : (
+                                                                        <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-[10px] shrink-0">
+                                                                            {p.name.charAt(0)}
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="min-w-0">
+                                                                        <div className="font-bold text-white truncate flex items-center gap-1.5">
+                                                                            <span>{formatPlayerName(p.name, p.lastname)}</span>
+                                                                            {p.category && (
+                                                                                <span className="text-[9px] bg-white/10 px-1.5 py-0.2 rounded text-muted">
+                                                                                    {p.category}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-muted flex items-center gap-2 truncate">
+                                                                            {p.dni && <span>DNI: {p.dni}</span>}
+                                                                            {p.phone && <span>Tel: {p.phone}</span>}
+                                                                            {p.institution && <span className="truncate max-w-[90px]">({p.institution})</span>}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                                <Plus size={14} className="text-primary opacity-70 group-hover:opacity-100 shrink-0" />
+                                                            </button>
+                                                        ))
+                                                    ) : (
+                                                        <div className="p-2 text-center text-xs text-muted italic">
+                                                            No se encontraron socios registrados para "{searchTerm}"
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* STANDARDIZED OPTION: Jugador no registrado */}
+                                                <div className="pt-1 border-t border-white/10">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleSelectUnregistered(slotIdx)}
+                                                        className="w-full text-left p-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 rounded-lg text-xs font-bold flex items-center justify-between border border-amber-500/20 transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <AlertCircle size={14} className="text-amber-400 shrink-0" />
+                                                            <div>
+                                                                <div>👤 Jugador no registrado en la app</div>
+                                                                <div className="text-[9.5px] text-amber-400/80 font-normal">
+                                                                    Se reserva el turno sin computar para el historial
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <Plus size={14} />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 )}
                             </div>
                         );
-                    })
-                )}
+                    })}
+                </div>
             </div>
 
-            {/* Add player controls */}
-            {participants.length < maxPlayers && (
-                <div className="space-y-2 relative">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-2.5 text-muted" size={14} />
-                        <input
-                            type="text"
-                            placeholder="Buscar socio por nombre / apellido o escribir invitado..."
-                            className="w-full bg-sidebar border border-white/10 rounded-xl pl-8 pr-3 py-2 text-xs text-white focus:outline-none focus:border-primary"
-                            value={searchTerm}
-                            onChange={e => {
-                                setSearchTerm(e.target.value);
-                                setIsOpenDropdown(true);
-                            }}
-                            onFocus={() => setIsOpenDropdown(true)}
-                        />
-                    </div>
-
-                    {/* Suggestions dropdown */}
-                    {isOpenDropdown && (searchTerm.trim().length > 0 || filteredProfiles.length > 0) && (
-                        <div className="absolute left-0 right-0 top-full mt-1 bg-slate-900 border border-white/20 rounded-xl shadow-2xl z-30 max-h-48 overflow-y-auto p-1 space-y-1">
-                            {filteredProfiles.map(p => (
-                                <button
-                                    key={p.id}
-                                    type="button"
-                                    onClick={() => handleAddRegistered(p)}
-                                    className="w-full text-left p-2 hover:bg-white/10 rounded-lg flex items-center justify-between text-xs transition-colors"
-                                >
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-6 h-6 rounded-full bg-primary/20 text-primary flex items-center justify-center font-bold text-[10px]">
-                                            {p.name.charAt(0)}
-                                        </div>
-                                        <span className="font-bold text-white">{formatPlayerName(p.name, p.lastname)}</span>
-                                        {p.category && <span className="text-[10px] bg-white/10 px-1.5 py-0.5 rounded text-muted">{p.category}</span>}
-                                        {p.institution && <span className="text-[10px] text-muted truncate max-w-[100px]">({p.institution})</span>}
-                                    </div>
-                                    <Plus size={14} className="text-primary" />
-                                </button>
-                            ))}
-
-                            {/* Option to add custom guest name */}
-                            {searchTerm.trim().length > 1 && (
-                                <button
-                                    type="button"
-                                    onClick={handleAddCustom}
-                                    className="w-full text-left p-2 bg-primary/10 hover:bg-primary/20 rounded-lg text-primary text-xs font-bold flex items-center justify-between border-t border-white/5"
-                                >
-                                    <span>+ Agregar Invitado: "{formatPlayerName(searchTerm.trim())}"</span>
-                                    <Plus size={14} />
-                                </button>
-                            )}
+            {/* Live Warning / Status Banner */}
+            {!isAllRegistered ? (
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-3.5 flex items-start gap-3 animate-in fade-in">
+                    <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
+                    <div className="text-xs space-y-1">
+                        <div className="font-bold text-amber-200 uppercase tracking-wider text-[10.5px]">
+                            Aviso de Historial y Resultados
                         </div>
-                    )}
+                        <p className="text-amber-300 font-bold text-xs leading-snug">
+                            Se reserva el turno pero el partido no contará para el historial de resultados.
+                        </p>
+                        <p className="text-[10.5px] text-amber-300/80 leading-normal">
+                            {!isAllFilled
+                                ? `Faltan asignar ${targetSlotsCount - filledCount} de los ${targetSlotsCount} jugadores requeridos para ${matchType === 'singles' ? 'Singles' : 'Dobles'}.`
+                                : `Uno o más participantes fueron seleccionados como "No registrado en app". Para que el partido sume estadísticas y cuente para el historial oficial (H2H), todos los ${targetSlotsCount} jugadores deben ser socios registrados.`
+                            }
+                        </p>
+                    </div>
+                </div>
+            ) : (
+                <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3.5 flex items-start gap-3 animate-in fade-in">
+                    <ShieldCheck size={18} className="text-green-400 shrink-0 mt-0.5" />
+                    <div className="text-xs space-y-1">
+                        <div className="font-bold text-green-200 uppercase tracking-wider text-[10.5px]">
+                            ✓ Partido Oficial Habilitado ({matchType === 'singles' ? 'Singles 1 vs 1' : 'Dobles 2 vs 2'})
+                        </div>
+                        <p className="text-green-300 font-bold text-xs leading-snug">
+                            Todos los {targetSlotsCount} jugadores son socios registrados en la app.
+                        </p>
+                        <p className="text-[10.5px] text-green-300/80 leading-normal">
+                            El partido computará para el historial de resultados, estadísticas personales y registro Head to Head (H2H).
+                        </p>
+                    </div>
                 </div>
             )}
         </div>
@@ -410,13 +669,26 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
 
                                     {/* Participating Players Tags */}
                                     {booking.participants && booking.participants.length > 0 && (
-                                        <div className="mt-2.5 bg-white/5 p-2 rounded-lg border border-white/5 space-y-1">
-                                            <div className="text-[10px] text-muted font-bold uppercase flex items-center gap-1">
-                                                <Users size={11} className="text-primary" /> Jugadores ({booking.participants.length}):
+                                        <div className="mt-2.5 bg-white/5 p-2 rounded-lg border border-white/5 space-y-1.5">
+                                            <div className="flex justify-between items-center text-[10px] text-muted font-bold uppercase">
+                                                <span className="flex items-center gap-1">
+                                                    <Users size={11} className="text-primary" /> {booking.match_type === 'doubles' || booking.participants.length > 2 ? 'Dobles' : 'Singles'} ({booking.participants.length}):
+                                                </span>
+                                                {booking.counts_for_stats || (booking.extras as any)?.counts_for_stats ? (
+                                                    <span className="text-[9px] text-green-300 font-black flex items-center gap-0.5">
+                                                        <ShieldCheck size={10} /> Oficial
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-[9px] text-amber-400 font-medium flex items-center gap-0.5" title="No computa para historial">
+                                                        <AlertTriangle size={10} /> Sin Historial
+                                                    </span>
+                                                )}
                                             </div>
                                             <div className="flex flex-wrap gap-1">
                                                 {booking.participants.map((p, idx) => (
-                                                    <span key={idx} className="bg-primary/20 border border-primary/30 text-white text-[10.5px] px-2 py-0.5 rounded-md font-bold truncate max-w-full">
+                                                    <span key={idx} className={`text-[10.5px] px-2 py-0.5 rounded-md font-bold truncate max-w-full border ${
+                                                        p.is_registered ? 'bg-primary/20 border-primary/30 text-white' : 'bg-amber-500/20 border-amber-500/30 text-amber-200'
+                                                    }`}>
                                                         {p.name} {p.user_id === user.id ? '(Tú)' : ''}
                                                     </span>
                                                 ))}
@@ -696,6 +968,7 @@ const PlayerNewBookingModal = ({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [extras, setExtras] = useState({ rackets: 0, balls: false });
     const [durationMultiplier, setDurationMultiplier] = useState(1);
+    const [matchType, setMatchType] = useState<'singles' | 'doubles'>('singles');
     const [participants, setParticipants] = useState<BookingParticipant[]>([]);
     const { addToast } = useToast();
 
@@ -707,16 +980,22 @@ const PlayerNewBookingModal = ({
 
     useEffect(() => {
         const selfName = formatPlayerName(user.name, user.lastname);
+        const userPart: BookingParticipant = {
+            user_id: user.id,
+            name: selfName,
+            lastname: user.lastname,
+            is_registered: true,
+            avatar_url: user.profile_picture_url || (user as any).avatar_url,
+            dni: user.dni,
+            phone: user.phone
+        };
+
         if (existingBooking?.participants && existingBooking.participants.length > 0) {
             setParticipants(existingBooking.participants);
+            setMatchType(existingBooking.match_type || (existingBooking.participants.length > 2 ? 'doubles' : 'singles'));
         } else {
-            setParticipants([{
-                user_id: user.id,
-                name: selfName,
-                lastname: user.lastname,
-                is_registered: true,
-                avatar_url: user.profile_picture_url || (user as any).avatar_url
-            }]);
+            setParticipants([userPart]);
+            setMatchType('singles');
         }
     }, [user, existingBooking]);
 
@@ -856,17 +1135,29 @@ const PlayerNewBookingModal = ({
                 const paymentStatus = paymentMethod === 'mp' ? 'completed' : 'pending';
                 const bookingStatus = paymentMethod === 'mp' ? 'confirmed' : 'pending';
 
+                const requiredCount = matchType === 'singles' ? 2 : 4;
+                const activeParticipants = participants.slice(0, requiredCount).filter(Boolean);
+                const isOfficial = activeParticipants.length === requiredCount && activeParticipants.every(p => p.is_registered);
+
                 const creatorFormattedName = formatPlayerName(user.name, user.lastname);
-                const finalParticipants = participants.length > 0 ? participants : [{
-                    user_id: user.id,
-                    name: creatorFormattedName,
-                    lastname: user.lastname,
-                    is_registered: true,
-                    avatar_url: user.profile_picture_url || (user as any).avatar_url
-                }];
-                const resolvedTitle = finalParticipants.length > 1 
-                    ? finalParticipants.map(p => p.name).join(' vs ') 
-                    : finalParticipants[0]?.name || creatorFormattedName;
+                let resolvedTitle = '';
+                if (matchType === 'singles') {
+                    if (activeParticipants.length === 2) {
+                        resolvedTitle = `${activeParticipants[0].name} vs ${activeParticipants[1].name}`;
+                    } else if (activeParticipants.length === 1) {
+                        resolvedTitle = activeParticipants[0].name;
+                    } else {
+                        resolvedTitle = `${creatorFormattedName} (Singles)`;
+                    }
+                } else {
+                    if (activeParticipants.length === 4) {
+                        resolvedTitle = `${activeParticipants[0].name} / ${activeParticipants[1].name} vs ${activeParticipants[2].name} / ${activeParticipants[3].name}`;
+                    } else if (activeParticipants.length > 1) {
+                        resolvedTitle = activeParticipants.map(p => p.name).join(' vs ');
+                    } else {
+                        resolvedTitle = `${creatorFormattedName} (Dobles)`;
+                    }
+                }
 
                 const bookingData = {
                     user_id: user.id,
@@ -877,11 +1168,18 @@ const PlayerNewBookingModal = ({
                     court_name: selectedSlot.court_name,
                     status: bookingStatus as any, 
                     booking_type: 'guest' as const,
+                    match_type: matchType,
+                    counts_for_stats: isOfficial,
                     title: resolvedTitle,
                     total_price: totalPrice,
-                    extras: { ...(extras || {}), participants: finalParticipants },
+                    extras: { 
+                        ...(extras || {}), 
+                        match_type: matchType,
+                        counts_for_stats: isOfficial,
+                        participants: activeParticipants 
+                    },
                     payment_status: paymentStatus,
-                    participants: finalParticipants
+                    participants: activeParticipants
                 };
 
                 if (isReschedule && existingBooking) {
@@ -917,7 +1215,7 @@ const PlayerNewBookingModal = ({
                             {isReschedule ? 'Reprogramar Reserva' : 'Nueva Reserva de Cancha'}
                         </h3>
                         <p className="text-xs text-muted">
-                            {isReschedule ? 'Selecciona la nueva fecha, jugadores y horario' : 'Selecciona club, fecha, compañeros y horario'}
+                            {isReschedule ? 'Selecciona la nueva fecha, modalidad y horario' : 'Selecciona club, modalidad, jugadores y horario'}
                         </p>
                     </div>
                     {!isSubmitting && <button onClick={onClose} className="text-muted hover:text-white"><X size={20}/></button>}
@@ -931,7 +1229,7 @@ const PlayerNewBookingModal = ({
                             <Loader2 className="animate-spin text-primary" size={48} />
                             <div className="text-center">
                                 <h3 className="font-bold text-white text-lg">Procesando Reserva...</h3>
-                                <p className="text-muted text-sm">Guardando turno y enviando notificaciones</p>
+                                <p className="text-muted text-sm">Guardando turno y notificando jugadores</p>
                             </div>
                         </div>
                     )}
@@ -1022,12 +1320,14 @@ const PlayerNewBookingModal = ({
                                 </div>
                             </div>
 
-                            {/* Participant Selector */}
-                            <ParticipantSelector
+                            {/* Match & Participant Selector */}
+                            <MatchParticipantSelector
+                                matchType={matchType}
+                                onMatchTypeChange={setMatchType}
                                 participants={participants}
                                 onChange={setParticipants}
                                 currentUser={user}
-                                maxPlayers={4}
+                                isAdmin={false}
                             />
 
                             {selectedInst && (
@@ -1271,6 +1571,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     const [dayScheduleInfo, setDayScheduleInfo] = useState<{open: string, close: string} | null>(null);
     const [selectedSlot, setSelectedSlot] = useState<{time: string, court: string} | null>(null);
     const [actionType, setActionType] = useState<'guest' | 'tournament' | 'maintenance' | 'class' | null>(null);
+    const [adminMatchType, setAdminMatchType] = useState<'singles' | 'doubles'>('singles');
     const [bookingTitle, setBookingTitle] = useState('');
     const [participants, setParticipants] = useState<BookingParticipant[]>([]);
     const [matchResult, setMatchResult] = useState(''); 
@@ -1310,6 +1611,12 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
 
     const handleToday = () => {
         setSelectedDate(new Date().toISOString().split('T')[0]);
+    };
+
+    const isNightSlot = (timeStr?: string) => {
+        if (!timeStr || !institution) return false;
+        const nightStart = institution.schedule_night_start || '18:00';
+        return timeStr >= nightStart;
     };
 
     const handleBulkCancelWeather = async () => {
@@ -1445,6 +1752,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
         } else {
             setSelectedSlot({ time, court });
             setActionType(null);
+            setAdminMatchType('singles');
             setBookingTitle('');
             setParticipants([]);
             setExtras({ rackets: 0, balls: false });
@@ -1493,23 +1801,33 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
         }
         const status: Booking['status'] = (type === 'maintenance' || type === 'class') ? 'blocked' : 'confirmed';
         
-        let baseTitle = bookingTitle.trim();
-        const finalParticipants = [...participants];
-        if (!baseTitle) {
-            if (finalParticipants.length > 0) {
-                baseTitle = finalParticipants.map(p => p.name).join(' vs ');
-            } else {
-                baseTitle = type === 'maintenance' ? 'Mantenimiento' : type === 'tournament' ? 'Partido Torneo' : type === 'class' ? 'Clase / Escuela' : (formatPlayerName(user.name, user.lastname) || 'Alquiler');
-            }
-        }
+        const requiredCount = adminMatchType === 'singles' ? 2 : 4;
+        const activeParticipants = participants.slice(0, requiredCount).filter(Boolean);
+        const isOfficial = type === 'guest' && activeParticipants.length === requiredCount && activeParticipants.every(p => p.is_registered);
 
-        if (finalParticipants.length === 0 && type === 'guest') {
-            finalParticipants.push({
-                user_id: user.id,
-                name: formatPlayerName(user.name, user.lastname),
-                lastname: user.lastname,
-                is_registered: true
-            });
+        let baseTitle = bookingTitle.trim();
+        if (!baseTitle) {
+            if (type === 'guest') {
+                if (adminMatchType === 'singles') {
+                    if (activeParticipants.length === 2) {
+                        baseTitle = `${activeParticipants[0].name} vs ${activeParticipants[1].name}`;
+                    } else if (activeParticipants.length === 1) {
+                        baseTitle = activeParticipants[0].name;
+                    } else {
+                        baseTitle = 'Turno Singles';
+                    }
+                } else {
+                    if (activeParticipants.length === 4) {
+                        baseTitle = `${activeParticipants[0].name} / ${activeParticipants[1].name} vs ${activeParticipants[2].name} / ${activeParticipants[3].name}`;
+                    } else if (activeParticipants.length > 1) {
+                        baseTitle = activeParticipants.map(p => p.name).join(' vs ');
+                    } else {
+                        baseTitle = 'Turno Dobles';
+                    }
+                }
+            } else {
+                baseTitle = type === 'maintenance' ? 'Mantenimiento' : type === 'tournament' ? 'Partido Torneo' : 'Clase / Escuela';
+            }
         }
 
         let duration = 90; 
@@ -1527,11 +1845,18 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
             court_name: selectedSlot.court,
             status: status,
             booking_type: type,
+            match_type: type === 'guest' ? adminMatchType : undefined,
+            counts_for_stats: type === 'guest' ? isOfficial : false,
             title: baseTitle,
             total_price: price,
             payment_status: type === 'guest' ? 'pending' : 'n/a',
-            extras: type === 'guest' ? { ...(extras || {}), participants: finalParticipants } : undefined,
-            participants: finalParticipants
+            extras: type === 'guest' ? { 
+                ...(extras || {}), 
+                match_type: adminMatchType,
+                counts_for_stats: isOfficial,
+                participants: activeParticipants 
+            } : undefined,
+            participants: activeParticipants
         };
 
         try {
@@ -1784,11 +2109,31 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                         <button onClick={() => setViewingBooking(null)} className="absolute top-4 right-4 text-muted hover:text-white"><X size={20}/></button>
                         
                         <div>
-                            <div className="text-xs font-bold text-primary uppercase tracking-wide">
-                                {viewingBooking.court_name} • {viewingBooking.start_time} - {viewingBooking.end_time} hs
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-primary uppercase tracking-wide">
+                                    {viewingBooking.court_name} • {viewingBooking.start_time} - {viewingBooking.end_time} hs
+                                </span>
+                                <span className="text-[10px] bg-white/10 text-white font-bold px-2 py-0.5 rounded border border-white/10">
+                                    {viewingBooking.match_type === 'doubles' || (viewingBooking.participants && viewingBooking.participants.length > 2) ? '👥 Dobles' : '🎾 Singles'}
+                                </span>
                             </div>
                             <h3 className="text-xl font-black text-white mt-1">{viewingBooking.title}</h3>
                             <div className="text-xs text-muted mt-0.5">{formatFriendlyDate(viewingBooking.date)}</div>
+
+                            {/* Official match status badge */}
+                            <div className="mt-2">
+                                {viewingBooking.counts_for_stats || (viewingBooking.extras as any)?.counts_for_stats ? (
+                                    <div className="bg-green-500/15 border border-green-500/30 text-green-300 text-xs font-bold p-2 rounded-lg flex items-center gap-1.5">
+                                        <ShieldCheck size={14} className="text-green-400 shrink-0" />
+                                        <span>✓ Partido Oficial (Computa para el historial de resultados y H2H)</span>
+                                    </div>
+                                ) : (
+                                    <div className="bg-amber-500/15 border border-amber-500/30 text-amber-300 text-xs font-bold p-2 rounded-lg flex items-center gap-1.5">
+                                        <AlertTriangle size={14} className="text-amber-400 shrink-0" />
+                                        <span>⚠️ Turno sin cómputo para el historial de resultados</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Display Participants */}
@@ -1882,11 +2227,13 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
 
                             {/* Participating Players Selection */}
                             {actionType !== 'maintenance' && (
-                                <ParticipantSelector
+                                <MatchParticipantSelector
+                                    matchType={adminMatchType}
+                                    onMatchTypeChange={setAdminMatchType}
                                     participants={participants}
                                     onChange={setParticipants}
                                     currentUser={user}
-                                    maxPlayers={4}
+                                    isAdmin={true}
                                 />
                             )}
 

@@ -112,6 +112,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [disputeReason, setDisputeReason] = useState('');
     const [submittingDispute, setSubmittingDispute] = useState(false);
 
+    // Schedule Match Modal State (Organizador)
+    const [selectedMatchForSchedule, setSelectedMatchForSchedule] = useState<Match | null>(null);
+    const [scheduleDate, setScheduleDate] = useState<string>('');
+    const [scheduleTime, setScheduleTime] = useState<string>('');
+    const [scheduleCourt, setScheduleCourt] = useState<string>('Cancha 1');
+    const [isCustomCourt, setIsCustomCourt] = useState(false);
+    const [customCourtName, setCustomCourtName] = useState('');
+    const [savingSchedule, setSavingSchedule] = useState(false);
+
     // Derived state
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
     const [matches, setMatches] = useState<Match[]>([]);
@@ -345,6 +354,150 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             addToast("Error al reportar discrepancia: " + e.message, "error");
         } finally {
             setSubmittingDispute(false);
+        }
+    };
+
+    const formatScheduledInfo = (scheduledAt?: string, courtName?: string) => {
+        if (!scheduledAt) return null;
+        try {
+            const d = new Date(scheduledAt);
+            if (isNaN(d.getTime())) return null;
+            const dateStr = d.toLocaleDateString('es-AR', { weekday: 'short', day: 'numeric', month: 'short' });
+            const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' hs';
+            const courtStr = courtName || 'Cancha Asignada';
+            return {
+                dateStr: dateStr.charAt(0).toUpperCase() + dateStr.slice(1),
+                timeStr,
+                courtStr,
+                fullLabel: `${dateStr.charAt(0).toUpperCase() + dateStr.slice(1)} • ${timeStr} • ${courtStr}`,
+                iso: scheduledAt
+            };
+        } catch (e) {
+            return null;
+        }
+    };
+
+    const getQuickDatePresets = () => {
+        const presets: { label: string; dateStr: string }[] = [];
+        const today = new Date();
+        const tomorrow = new Date(today);
+        tomorrow.setDate(today.getDate() + 1);
+
+        presets.push({ label: 'Hoy', dateStr: today.toISOString().split('T')[0] });
+        presets.push({ label: 'Mañana', dateStr: tomorrow.toISOString().split('T')[0] });
+
+        // Next Saturday and Sunday
+        const dayOfWeek = today.getDay(); // 0 is Sun, 6 is Sat
+        const daysUntilSat = (6 - dayOfWeek + 7) % 7 || 7;
+        const nextSat = new Date(today);
+        nextSat.setDate(today.getDate() + daysUntilSat);
+        presets.push({ label: 'Sábado', dateStr: nextSat.toISOString().split('T')[0] });
+
+        const daysUntilSun = (0 - dayOfWeek + 7) % 7 || 7;
+        const nextSun = new Date(today);
+        nextSun.setDate(today.getDate() + daysUntilSun);
+        presets.push({ label: 'Domingo', dateStr: nextSun.toISOString().split('T')[0] });
+
+        return presets;
+    };
+
+    const courtOptions = React.useMemo(() => {
+        const total = Math.max(2, (tournament?.institutions as any)?.courts_total || 4);
+        const list = Array.from({ length: total }, (_, i) => `Cancha ${i + 1}`);
+        if (!list.includes('Cancha Central')) list.push('Cancha Central');
+        return list;
+    }, [tournament]);
+
+    const openScheduleModal = (m: Match) => {
+        setSelectedMatchForSchedule(m);
+
+        let initialDate = '';
+        let initialTime = '';
+        const scheduledAt = m.scheduled_at || m.proposal_data?.scheduled_at;
+        if (scheduledAt) {
+            try {
+                const d = new Date(scheduledAt);
+                if (!isNaN(d.getTime())) {
+                    initialDate = d.toISOString().split('T')[0];
+                    const hours = String(d.getHours()).padStart(2, '0');
+                    const mins = String(d.getMinutes()).padStart(2, '0');
+                    initialTime = `${hours}:${mins}`;
+                }
+            } catch (e) {}
+        }
+
+        if (!initialDate && tournament?.start_date) {
+            initialDate = tournament.start_date;
+        }
+
+        setScheduleDate(initialDate || new Date().toISOString().split('T')[0]);
+        setScheduleTime(initialTime || '16:00');
+
+        const currentCourt = m.court_name || m.proposal_data?.court_name || m.court_slot_id || 'Cancha 1';
+        setScheduleCourt(currentCourt);
+        setIsCustomCourt(false);
+        setCustomCourtName('');
+    };
+
+    const handleSaveSchedule = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedMatchForSchedule) return;
+
+        if (!scheduleDate) {
+            addToast("Por favor selecciona una fecha para el partido.", 'error');
+            return;
+        }
+        if (!scheduleTime) {
+            addToast("Por favor selecciona un horario para el partido.", 'error');
+            return;
+        }
+
+        setSavingSchedule(true);
+        try {
+            const [year, month, day] = scheduleDate.split('-').map(Number);
+            const [hours, minutes] = scheduleTime.split(':').map(Number);
+            const scheduledDateObj = new Date(year, month - 1, day, hours, minutes);
+            const scheduledIso = scheduledDateObj.toISOString();
+
+            const courtFinal = (isCustomCourt ? customCourtName.trim() : scheduleCourt.trim()) || 'Cancha 1';
+
+            await api.matches.updateSchedule(selectedMatchForSchedule.id, {
+                scheduled_at: scheduledIso,
+                court_name: courtFinal,
+                court_slot_id: courtFinal
+            });
+
+            soundEffects.playScoreBeep();
+            addToast(`¡Partido programado para el ${scheduledDateObj.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' })} a las ${scheduleTime} hs en ${courtFinal}!`, 'success');
+            setSelectedMatchForSchedule(null);
+            loadTournament();
+        } catch (err: any) {
+            console.error("Error al agendar partido:", err);
+            addToast("Error al guardar programación: " + (err.message || 'Error del servidor'), 'error');
+        } finally {
+            setSavingSchedule(false);
+        }
+    };
+
+    const handleClearSchedule = async () => {
+        if (!selectedMatchForSchedule) return;
+        if (!confirm("¿Estás seguro de desprogramar este partido? Volverá al estado sin fecha ni horario asignado.")) return;
+
+        setSavingSchedule(true);
+        try {
+            await api.matches.updateSchedule(selectedMatchForSchedule.id, {
+                scheduled_at: null,
+                court_name: null,
+                court_slot_id: null
+            });
+            addToast("Programación del partido eliminada.", 'info');
+            setSelectedMatchForSchedule(null);
+            loadTournament();
+        } catch (err: any) {
+            console.error("Error al desprogramar:", err);
+            addToast("Error al desprogramar: " + (err.message || 'Error del servidor'), 'error');
+        } finally {
+            setSavingSchedule(false);
         }
     };
 
@@ -1376,9 +1529,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
                                                             const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
                                                             const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
+                                                            const scheduledInfo = formatScheduledInfo(m.scheduled_at, m.court_name);
 
                                                             return (
-                                                                <div key={m.id} className="bg-slate-950/60 p-3 rounded-xl border border-white/5 flex flex-col gap-2 text-xs">
+                                                                <div 
+                                                                    key={m.id} 
+                                                                    className={`bg-slate-950/60 p-3 rounded-xl border transition-all flex flex-col gap-2 text-xs ${
+                                                                        isUserInMatch && scheduledInfo && !m.is_played
+                                                                            ? 'border-blue-500/40 bg-blue-950/20 shadow-md shadow-blue-950/40'
+                                                                            : 'border-white/5'
+                                                                    }`}
+                                                                >
                                                                     <div className="flex items-center justify-between gap-3">
                                                                         <div className="flex-1 min-w-0 space-y-1">
                                                                             <div className={`flex justify-between items-center ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
@@ -1390,7 +1551,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                 {m.winner_id === m.player2_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
                                                                             </div>
                                                                         </div>
-                                                                        <div className="flex items-center gap-2 shrink-0">
+                                                                        <div className="flex items-center gap-1.5 shrink-0">
                                                                             {/* H2H Button */}
                                                                             {m.player1_id && m.player2_id && (
                                                                                 <button
@@ -1428,6 +1589,23 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     Por Jugar
                                                                                 </span>
                                                                             )}
+
+                                                                            {/* Schedule Button for Admin */}
+                                                                            {isClubAdmin && (
+                                                                                <button
+                                                                                    onClick={() => openScheduleModal(m)}
+                                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                        scheduledInfo
+                                                                                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
+                                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                    }`}
+                                                                                    title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
+                                                                                >
+                                                                                    <Calendar size={12} className={scheduledInfo ? "text-blue-400" : ""} />
+                                                                                    <span className="hidden sm:inline">{scheduledInfo ? "Horario" : "Programar"}</span>
+                                                                                </button>
+                                                                            )}
+
                                                                             {canEditScore && (
                                                                                 <button
                                                                                     onClick={() => openScoreModal(m)}
@@ -1439,6 +1617,45 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             )}
                                                                         </div>
                                                                     </div>
+
+                                                                    {/* Scheduled Info Badge */}
+                                                                    {scheduledInfo && (
+                                                                        <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-lg">
+                                                                            <span className="flex items-center gap-1">
+                                                                                <Calendar size={11} className="text-blue-400" /> {scheduledInfo.dateStr}
+                                                                            </span>
+                                                                            <span className="text-blue-400/60">•</span>
+                                                                            <span className="flex items-center gap-1 font-mono">
+                                                                                <Clock size={11} className="text-blue-400" /> {scheduledInfo.timeStr}
+                                                                            </span>
+                                                                            <span className="text-blue-400/60">•</span>
+                                                                            <span className="flex items-center gap-1 font-bold text-blue-200">
+                                                                                <MapPin size={11} className="text-green-400" /> {scheduledInfo.courtStr}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Player Highlight & WhatsApp Coordination Banner */}
+                                                                    {isUserInMatch && scheduledInfo && !m.is_played && (
+                                                                        <div className="p-2 bg-gradient-to-r from-blue-500/20 via-primary/10 to-transparent border border-blue-500/30 rounded-xl flex items-center justify-between gap-2">
+                                                                            <div className="flex items-center gap-1.5 text-[11px] text-blue-200 truncate">
+                                                                                <Clock size={12} className="text-blue-400 shrink-0" />
+                                                                                <span className="truncate"><strong>Tu partido:</strong> {scheduledInfo.fullLabel}</span>
+                                                                            </div>
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    soundEffects.playScoreBeep();
+                                                                                    const opponentName = m.player1_id === user.id ? p2DisplayName : p1DisplayName;
+                                                                                    const msg = encodeURIComponent(`🎾 ¡Hola ${opponentName}! Nuestro partido de "${tournament.name}" está programado para el ${scheduledInfo.dateStr} a las ${scheduledInfo.timeStr} en ${scheduledInfo.courtStr} (${tournament.institutions?.name || 'el club'}). ¿Confirmás disponibilidad?`);
+                                                                                    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+                                                                                }}
+                                                                                className="px-2 py-1 bg-green-600/30 hover:bg-green-600/50 text-green-300 border border-green-500/30 rounded-lg text-[10px] font-bold flex items-center gap-1 shrink-0 transition-all shadow-sm"
+                                                                                title="Coordinar por WhatsApp con rival"
+                                                                            >
+                                                                                <MessageCircle size={11} /> Coordinar
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
 
                                                                     {/* Submitter info for played matches */}
                                                                     {m.is_played && (m.score_submitted_by_name || m.score?.submitted_by_name || m.played_at) && (
@@ -1627,12 +1844,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
                                                             const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
                                                             const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
+                                                            const scheduledInfo = formatScheduledInfo(m.scheduled_at, m.court_name);
 
                                                             return (
                                                                 <div 
                                                                     key={m.id} 
                                                                     className={`relative bg-slate-900/90 border rounded-2xl p-3.5 shadow-lg transition-all space-y-2.5 ${
-                                                                        isFinished ? 'border-primary/40' : 'border-white/10 hover:border-white/20'
+                                                                        isFinished 
+                                                                            ? 'border-primary/40' 
+                                                                            : isUserInMatch && scheduledInfo 
+                                                                            ? 'border-blue-500/40 bg-blue-950/20' 
+                                                                            : 'border-white/10 hover:border-white/20'
                                                                     }`}
                                                                 >
                                                                     <div className="space-y-2">
@@ -1652,6 +1874,42 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             {m.winner_id === m.player2_id && <Check size={14} className="text-green-400 shrink-0" />}
                                                                         </div>
                                                                     </div>
+
+                                                                    {/* Scheduled Info Badge */}
+                                                                    {scheduledInfo && (
+                                                                        <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg">
+                                                                            <span className="flex items-center gap-1">
+                                                                                <Calendar size={10} className="text-blue-400" /> {scheduledInfo.dateStr}
+                                                                            </span>
+                                                                            <span className="text-blue-400/60">•</span>
+                                                                            <span className="flex items-center gap-1 font-mono">
+                                                                                <Clock size={10} className="text-blue-400" /> {scheduledInfo.timeStr}
+                                                                            </span>
+                                                                            <span className="text-blue-400/60">•</span>
+                                                                            <span className="flex items-center gap-1 font-bold text-blue-200">
+                                                                                <MapPin size={10} className="text-green-400" /> {scheduledInfo.courtStr}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Player Highlight & WhatsApp Coordination Banner */}
+                                                                    {isUserInMatch && scheduledInfo && !m.is_played && (
+                                                                        <div className="p-1.5 bg-blue-500/15 border border-blue-500/30 rounded-xl flex items-center justify-between gap-1.5 text-[10px]">
+                                                                            <span className="text-blue-200 truncate"><strong>Tu partido:</strong> {scheduledInfo.timeStr} ({scheduledInfo.courtStr})</span>
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    soundEffects.playScoreBeep();
+                                                                                    const opponentName = m.player1_id === user.id ? p2DisplayName : p1DisplayName;
+                                                                                    const msg = encodeURIComponent(`🎾 ¡Hola ${opponentName}! Nuestro partido de "${tournament.name}" (${m.round || 'Playoffs'}) está programado para el ${scheduledInfo.dateStr} a las ${scheduledInfo.timeStr} en ${scheduledInfo.courtStr}. ¿Confirmás?`);
+                                                                                    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+                                                                                }}
+                                                                                className="px-1.5 py-0.5 bg-green-600/30 hover:bg-green-600/50 text-green-300 border border-green-500/30 rounded text-[9px] font-bold shrink-0 flex items-center gap-0.5"
+                                                                                title="Coordinar por WhatsApp"
+                                                                            >
+                                                                                <MessageCircle size={10} /> Avisar
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
 
                                                                     {/* Score & Edit Bar */}
                                                                     <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between">
@@ -1676,15 +1934,33 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             )}
                                                                         </div>
 
-                                                                        {canEditScore && (
-                                                                            <button
-                                                                                onClick={() => openScoreModal(m)}
-                                                                                className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[11px] font-bold flex items-center gap-1"
-                                                                                title="Cargar marcador"
-                                                                            >
-                                                                                <Edit3 size={12} /> Cargar
-                                                                            </button>
-                                                                        )}
+                                                                        <div className="flex items-center gap-1">
+                                                                            {/* Schedule Button for Admin */}
+                                                                            {isClubAdmin && (
+                                                                                <button
+                                                                                    onClick={() => openScheduleModal(m)}
+                                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                        scheduledInfo
+                                                                                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
+                                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                    }`}
+                                                                                    title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
+                                                                                >
+                                                                                    <Calendar size={11} className={scheduledInfo ? "text-blue-400" : ""} />
+                                                                                    <span className="hidden sm:inline">{scheduledInfo ? "Horario" : "Programar"}</span>
+                                                                                </button>
+                                                                            )}
+
+                                                                            {canEditScore && (
+                                                                                <button
+                                                                                    onClick={() => openScoreModal(m)}
+                                                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[11px] font-bold flex items-center gap-1"
+                                                                                    title="Cargar marcador"
+                                                                                >
+                                                                                    <Edit3 size={12} /> Cargar
+                                                                                </button>
+                                                                            )}
+                                                                        </div>
                                                                     </div>
 
                                                                     {/* Submitter info */}
@@ -1743,17 +2019,37 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
                                             const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
                                             const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
+                                            const scheduledInfo = formatScheduledInfo(m.scheduled_at, m.court_name);
 
                                             return (
-                                                <div key={m.id} className="bg-slate-900/60 hover:bg-slate-900 p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all">
-                                                    <div className="space-y-1.5 flex-1 min-w-0 w-full sm:w-auto">
-                                                        <div className="flex items-center gap-2">
+                                                <div 
+                                                    key={m.id} 
+                                                    className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all ${
+                                                        isUserInMatch && scheduledInfo && !m.is_played
+                                                            ? 'bg-slate-900/90 border-blue-500/40 shadow-lg shadow-blue-950/30'
+                                                            : 'bg-slate-900/60 hover:bg-slate-900 border-white/10'
+                                                    }`}
+                                                >
+                                                    <div className="space-y-2 flex-1 min-w-0 w-full sm:w-auto">
+                                                        <div className="flex flex-wrap items-center gap-2">
                                                             <span className="text-[10px] font-bold uppercase tracking-wider text-muted bg-white/5 px-2 py-0.5 rounded">
                                                                 {m.round} {m.group_number ? `(Grupo ${m.group_number})` : ''}
                                                             </span>
                                                             {isUserInMatch && (
                                                                 <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">
                                                                     Tu Partido
+                                                                </span>
+                                                            )}
+                                                            {scheduledInfo && (
+                                                                <span className="text-[10px] font-semibold text-blue-300 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-md flex items-center gap-1.5">
+                                                                    <Calendar size={11} className="text-blue-400" />
+                                                                    <span>{scheduledInfo.dateStr}</span>
+                                                                    <span className="text-blue-400/60">•</span>
+                                                                    <Clock size={11} className="text-blue-400" />
+                                                                    <span>{scheduledInfo.timeStr}</span>
+                                                                    <span className="text-blue-400/60">•</span>
+                                                                    <MapPin size={11} className="text-green-400" />
+                                                                    <span className="text-white font-bold">{scheduledInfo.courtStr}</span>
                                                                 </span>
                                                             )}
                                                             {m.score_status === 'pending_confirmation' && (
@@ -1784,6 +2080,28 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             </div>
                                                         </div>
 
+                                                        {/* Player Highlight & WhatsApp Coordination Banner */}
+                                                        {isUserInMatch && scheduledInfo && !m.is_played && (
+                                                            <div className="p-2 bg-gradient-to-r from-blue-500/20 via-primary/10 to-transparent border border-blue-500/30 rounded-xl flex items-center justify-between gap-2 mt-1">
+                                                                <div className="flex items-center gap-1.5 text-xs text-blue-200 truncate">
+                                                                    <Clock size={12} className="text-blue-400 shrink-0" />
+                                                                    <span className="truncate"><strong>Tu partido:</strong> {scheduledInfo.fullLabel}</span>
+                                                                </div>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        soundEffects.playScoreBeep();
+                                                                        const opponentName = m.player1_id === user.id ? p2DisplayName : p1DisplayName;
+                                                                        const msg = encodeURIComponent(`🎾 ¡Hola ${opponentName}! Nuestro partido de "${tournament.name}" está programado para el ${scheduledInfo.dateStr} a las ${scheduledInfo.timeStr} en ${scheduledInfo.courtStr} (${tournament.institutions?.name || 'el club'}). ¿Confirmás?`);
+                                                                        window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+                                                                    }}
+                                                                    className="px-2 py-1 bg-green-600/30 hover:bg-green-600/50 text-green-300 border border-green-500/30 rounded-lg text-[10px] font-bold flex items-center gap-1 shrink-0 transition-all shadow-sm"
+                                                                    title="Coordinar por WhatsApp"
+                                                                >
+                                                                    <MessageCircle size={11} /> Coordinar
+                                                                </button>
+                                                            </div>
+                                                        )}
+
                                                         {m.is_played && (m.score_submitted_by_name || m.score?.submitted_by_name || m.played_at) && (
                                                             <div className="text-[10px] text-slate-400 pt-1 flex items-center gap-1">
                                                                 <span>Cargado por: <strong className="text-slate-300">{m.score_submitted_by_name || m.score?.submitted_by_name || 'Participante'}</strong></span>
@@ -1796,7 +2114,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                         )}
                                                     </div>
 
-                                                    <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5">
+                                                    <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5 shrink-0">
                                                         {m.player1_id && m.player2_id && (
                                                             <button
                                                                 onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
@@ -1804,6 +2122,22 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                 title="Ver Historial Cara a Cara"
                                                             >
                                                                 <Swords size={14} /> H2H
+                                                            </button>
+                                                        )}
+
+                                                        {/* Schedule Button for Admin */}
+                                                        {isClubAdmin && (
+                                                            <button
+                                                                onClick={() => openScheduleModal(m)}
+                                                                className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 ${
+                                                                    scheduledInfo
+                                                                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
+                                                                        : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                }`}
+                                                                title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
+                                                            >
+                                                                <Calendar size={14} className={scheduledInfo ? "text-blue-400" : ""} />
+                                                                <span>{scheduledInfo ? "Horario" : "Programar"}</span>
                                                             </button>
                                                         )}
 
@@ -3013,6 +3347,205 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 </div>
             )}
 
+            {/* SCHEDULE MATCH MODAL (Organizador) */}
+            {selectedMatchForSchedule && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-3xl w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh]">
+                        {/* Modal Header */}
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400">
+                                    <Calendar size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Programar Partido</h3>
+                                    <p className="text-xs text-muted">Asignar fecha, horario y cancha oficial</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setSelectedMatchForSchedule(null)} 
+                                className="text-muted hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleSaveSchedule} className="p-5 space-y-4 overflow-y-auto custom-scrollbar">
+                            {/* Match Summary Card */}
+                            <div className="p-3.5 bg-slate-900/90 border border-white/10 rounded-2xl space-y-2">
+                                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase">
+                                    <span>{selectedMatchForSchedule.round} {selectedMatchForSchedule.group_number ? `• Grupo ${selectedMatchForSchedule.group_number}` : ''}</span>
+                                    <span className="text-primary font-bold">{tournament.category} • {tournament.gender || 'Caballeros'}</span>
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="text-xs font-bold text-white flex items-center justify-between">
+                                        <span className="truncate">{selectedMatchForSchedule.team1_name || formatPlayerName(selectedMatchForSchedule.player1_name) || 'Jugador 1'}</span>
+                                        <span className="text-[10px] text-muted">vs</span>
+                                    </div>
+                                    <div className="text-xs font-bold text-white flex items-center justify-between">
+                                        <span className="truncate">{selectedMatchForSchedule.team2_name || formatPlayerName(selectedMatchForSchedule.player2_name) || 'Jugador 2'}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Date Field & Quick Buttons */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                    <Calendar size={13} className="text-primary" /> Fecha del Partido *
+                                </label>
+                                <input
+                                    type="date"
+                                    value={scheduleDate}
+                                    onChange={e => setScheduleDate(e.target.value)}
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:border-primary outline-none"
+                                    required
+                                />
+                                {/* Quick Date Presets */}
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {getQuickDatePresets().map((preset, idx) => (
+                                        <button
+                                            key={idx}
+                                            type="button"
+                                            onClick={() => setScheduleDate(preset.dateStr)}
+                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+                                                scheduleDate === preset.dateStr
+                                                    ? 'bg-primary/20 border-primary text-white'
+                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                            }`}
+                                        >
+                                            {preset.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Time Field & Quick Slots */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                    <Clock size={13} className="text-blue-400" /> Horario de Inicio *
+                                </label>
+                                <input
+                                    type="time"
+                                    value={scheduleTime}
+                                    onChange={e => setScheduleTime(e.target.value)}
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:border-primary outline-none"
+                                    required
+                                />
+                                {/* Quick Time Chips */}
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {['09:00', '10:30', '12:00', '14:00', '15:30', '17:00', '18:30', '20:00', '21:30'].map(t => (
+                                        <button
+                                            key={t}
+                                            type="button"
+                                            onClick={() => setScheduleTime(t)}
+                                            className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono border transition-all ${
+                                                scheduleTime === t
+                                                    ? 'bg-blue-500/20 border-blue-400 text-blue-300'
+                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                            }`}
+                                        >
+                                            {t} hs
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Court Selection */}
+                            <div className="space-y-1.5">
+                                <div className="flex justify-between items-center">
+                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                        <MapPin size={13} className="text-green-400" /> Cancha Asignada *
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setIsCustomCourt(!isCustomCourt)}
+                                        className="text-[10px] text-primary hover:underline font-semibold"
+                                    >
+                                        {isCustomCourt ? 'Elegir de lista' : 'Ingresar otra'}
+                                    </button>
+                                </div>
+
+                                {isCustomCourt ? (
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: Cancha Central, Cancha 1 (Ladrillo)..."
+                                        value={customCourtName}
+                                        onChange={e => setCustomCourtName(e.target.value)}
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white focus:border-primary outline-none"
+                                        required
+                                    />
+                                ) : (
+                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        {courtOptions.map(court => (
+                                            <button
+                                                key={court}
+                                                type="button"
+                                                onClick={() => setScheduleCourt(court)}
+                                                className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
+                                                    scheduleCourt === court
+                                                        ? 'bg-green-500/20 border-green-400 text-green-300 shadow-sm'
+                                                        : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                                }`}
+                                            >
+                                                {court}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Live Summary Banner */}
+                            {scheduleDate && scheduleTime && (
+                                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl text-xs text-blue-200 flex items-center gap-2">
+                                    <CheckCircle2 size={16} className="text-blue-400 shrink-0" />
+                                    <span>
+                                        Programado para el <strong>{new Date(scheduleDate + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</strong> a las <strong>{scheduleTime} hs</strong> en <strong>{isCustomCourt ? (customCourtName || 'Cancha') : scheduleCourt}</strong>.
+                                    </span>
+                                </div>
+                            )}
+
+                            {/* Modal Actions */}
+                            <div className="flex items-center justify-between gap-2 pt-3 border-t border-white/10">
+                                {(selectedMatchForSchedule.scheduled_at || selectedMatchForSchedule.court_name) ? (
+                                    <button
+                                        type="button"
+                                        onClick={handleClearSchedule}
+                                        disabled={savingSchedule}
+                                        className="px-3 py-2 rounded-xl text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-all flex items-center gap-1.5"
+                                        title="Quitar fecha y horario asignado"
+                                    >
+                                        <Trash2 size={13} /> Desprogramar
+                                    </button>
+                                ) : (
+                                    <div></div>
+                                )}
+
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedMatchForSchedule(null)}
+                                        className="px-4 py-2 rounded-xl text-xs text-white hover:bg-white/10 transition-colors font-medium"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={savingSchedule}
+                                        className="px-5 py-2 bg-gradient-to-r from-blue-600 to-primary hover:brightness-110 text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                    >
+                                        {savingSchedule ? (
+                                            <><Loader2 size={14} className="animate-spin" /> Guardando...</>
+                                        ) : (
+                                            <><Save size={14} /> Guardar Horario</>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
             {/* SOCIAL MEDIA GRAPHIC GENERATOR MODAL */}
             {showGraphicModal && tournament && (
                 <ShareGraphicModal
@@ -3102,8 +3635,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         <tr key={idx} className="text-center h-8">
                                             <td className="border border-black p-1 font-bold">{idx + 1}</td>
                                             <td className="border border-black p-1 font-semibold truncate">{m.round || (m.group_number ? `Zona ${m.group_number}` : 'Fase Previa')}</td>
-                                            <td className="border border-black p-1">{m.scheduled_at ? m.scheduled_at.slice(11, 16) + ' hs' : '___:___'}</td>
-                                            <td className="border border-black p-1">Cancha ___</td>
+                                            <td className="border border-black p-1">{m.scheduled_at ? (new Date(m.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' hs') : '___:___'}</td>
+                                            <td className="border border-black p-1 font-semibold truncate">{m.court_name || 'Cancha ___'}</td>
                                             <td className="border border-black p-1 text-left pl-2 font-bold truncate">{p1Name}</td>
                                             <td className="border border-black p-1 text-left pl-2 font-bold truncate">{p2Name}</td>
                                             <td className="border border-black p-1 font-mono font-bold">{m.is_played ? s1 : ''}</td>

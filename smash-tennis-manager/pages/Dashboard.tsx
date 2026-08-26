@@ -271,14 +271,18 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                                         </div>
                                                         <div className="text-sm text-slate-400 mt-1">{myNextMatch.round}</div>
                                                     </div>
-                                                    <div className="flex items-center gap-3 pt-2">
+                                                    <div className="flex flex-wrap items-center gap-2 pt-2">
                                                         <div className="flex items-center gap-2 text-xs text-white font-medium bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
                                                             <Calendar size={12} className="text-muted" />
                                                             {new Date(myNextMatch.scheduled_at!).toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' })}
                                                         </div>
                                                         <div className="flex items-center gap-2 text-xs text-white font-medium bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
                                                             <Clock size={12} className="text-muted" />
-                                                            {myNextMatch.scheduled_at!.slice(11, 16)} hs
+                                                            {new Date(myNextMatch.scheduled_at!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs
+                                                        </div>
+                                                        <div className="flex items-center gap-2 text-xs text-green-300 font-medium bg-black/30 px-3 py-1.5 rounded-lg border border-white/5">
+                                                            <MapPin size={12} className="text-green-400" />
+                                                            {myNextMatch.court_name || myNextMatch.court_slot_id || 'Cancha Asignada'}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -595,7 +599,7 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                                 <span className="text-[10px] text-muted uppercase block mb-1">Cancha</span>
                                                 <div className="text-sm font-bold text-white flex items-center gap-1.5">
                                                     <Activity size={14} className="text-green-400" />
-                                                    {nextMatch.court_slot_id || 'Cancha 1'}
+                                                    {nextMatch.court_name || nextMatch.court_slot_id || 'Cancha Asignada'}
                                                 </div>
                                             </div>
                                         </div>
@@ -604,7 +608,9 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                     {/* Date & Time Big */}
                                     <div className="flex items-center justify-center sm:justify-end">
                                         <div className="bg-white/5 backdrop-blur-sm border border-white/10 p-4 rounded-2xl text-center min-w-[140px]">
-                                            <div className="text-4xl font-bold text-white mb-1">{nextMatch.scheduled_at!.slice(11, 16)}</div>
+                                            <div className="text-4xl font-bold text-white mb-1">
+                                                {new Date(nextMatch.scheduled_at!).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
                                             <div className="text-sm text-primary font-bold uppercase tracking-widest mb-2">Horas</div>
                                             <div className="h-px w-full bg-white/10 my-2"></div>
                                             <div className="text-lg text-slate-300 font-medium">

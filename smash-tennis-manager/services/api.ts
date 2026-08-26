@@ -632,8 +632,13 @@ export const api = {
                     }
                 }
 
+                const scheduledAt = m.scheduled_at || m.proposal_data?.scheduled_at || null;
+                const courtName = m.court_name || m.proposal_data?.court_name || m.court_slot_id || null;
+
                 return {
                     ...m,
+                    scheduled_at: scheduledAt,
+                    court_name: courtName,
                     score_status: updatedScoreStatus,
                     player1_name: formatPlayerName(m.player1_name),
                     player2_name: formatPlayerName(m.player2_name),
@@ -1547,6 +1552,49 @@ export const api = {
             };
         },
 
+        async updateSchedule(matchId: string, params: { scheduled_at: string | null; court_name: string | null; court_slot_id?: string | null }) {
+            const nowIso = new Date().toISOString();
+            const proposalDataPatch = {
+                scheduled_at: params.scheduled_at,
+                court_name: params.court_name,
+                updated_at: nowIso
+            };
+
+            const fullPayload: any = {
+                scheduled_at: params.scheduled_at,
+                court_name: params.court_name,
+                court_slot_id: params.court_slot_id || params.court_name || null,
+                scheduling_status: params.scheduled_at ? 'confirmed' : 'proposed'
+            };
+
+            try {
+                // Fetch current proposal_data to merge
+                const { data: currentMatch } = await supabase.from('matches').select('proposal_data').eq('id', matchId).single();
+                fullPayload.proposal_data = {
+                    ...(currentMatch?.proposal_data || {}),
+                    ...proposalDataPatch
+                };
+
+                const { data, error } = await supabase.from('matches').update(fullPayload).eq('id', matchId).select();
+                if (error) throw error;
+                return data && data.length > 0 ? data[0] : null;
+            } catch (err: any) {
+                console.warn("Full match schedule update notice (fallback resilient payload):", err);
+                const safePayload: any = {
+                    scheduled_at: params.scheduled_at,
+                    court_slot_id: params.court_slot_id || params.court_name || null,
+                    scheduling_status: params.scheduled_at ? 'confirmed' : 'proposed',
+                    proposal_data: proposalDataPatch
+                };
+                const { data, error: fallbackErr } = await supabase.from('matches').update(safePayload).eq('id', matchId).select();
+                if (fallbackErr) {
+                    console.error("Match schedule update error:", fallbackErr);
+                    throw fallbackErr;
+                }
+                return data && data.length > 0 ? data[0] : null;
+            }
+        },
+
         async getByUser(userId: string) {
             const { data, error } = await supabase
                 .from('matches')
@@ -1555,7 +1603,15 @@ export const api = {
                 .order('created_at', { ascending: false });
 
             if (error) return [];
-            return data as Match[];
+            return (data || []).map((m: any) => ({
+                ...m,
+                scheduled_at: m.scheduled_at || m.proposal_data?.scheduled_at || null,
+                court_name: m.court_name || m.proposal_data?.court_name || m.court_slot_id || null,
+                player1_name: formatPlayerName(m.player1_name),
+                player2_name: formatPlayerName(m.player2_name),
+                player1_partner_name: m.player1_partner_name ? formatPlayerName(m.player1_partner_name) : undefined,
+                player2_partner_name: m.player2_partner_name ? formatPlayerName(m.player2_partner_name) : undefined
+            })) as Match[];
         }
     },
     matchmaking: {

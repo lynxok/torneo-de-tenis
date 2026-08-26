@@ -264,6 +264,7 @@ export interface Match {
   group_number?: number;
   scheduling_status?: 'proposed' | 'confirmed' | 'finished' | null;
   scheduled_at?: string;
+  court_name?: string;
   proposal_data?: any;
   court_slot_id?: string;
   is_played?: boolean;
@@ -343,6 +344,8 @@ export interface BookingParticipant {
   lastname?: string;
   is_registered?: boolean;
   avatar_url?: string;
+  dni?: string;
+  phone?: string;
 }
 
 export interface Booking {
@@ -355,6 +358,8 @@ export interface Booking {
   court_name: string;
   status: 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'blocked';
   booking_type?: 'guest' | 'tournament' | 'maintenance' | 'class' | 'recurring';
+  match_type?: 'singles' | 'doubles';
+  counts_for_stats?: boolean;
   title?: string; // "Clase", "Torneo: Juan vs Pedro", "Turno Fijo"
   description?: string; // Optional details
   total_price: number;
@@ -363,6 +368,9 @@ export interface Booking {
       balls?: boolean;
       night_light?: boolean;
       teacher?: boolean;
+      match_type?: 'singles' | 'doubles';
+      counts_for_stats?: boolean;
+      participants?: BookingParticipant[];
   };
   payment_status?: string;
   institutions?: { name: string };
