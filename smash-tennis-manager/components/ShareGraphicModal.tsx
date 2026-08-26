@@ -28,12 +28,25 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   const [aspectRatio, setAspectRatio] = useState<'square' | 'story'>('story'); // 'square' (1:1) or 'story' (9:16)
   const [themeStyle, setThemeStyle] = useState<'dark' | 'clay' | 'grass'>('dark');
   const [selectedZoneIndex, setSelectedZoneIndex] = useState<number | 'all'>('all');
+  const [selectedRoundIndex, setSelectedRoundIndex] = useState<number | 'all'>('all');
   const [isGenerating, setIsGenerating] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   if (!isOpen) return null;
 
   const tier = getTournamentTier(tournament);
+
+  const formatShortScore = (score: any) => {
+    if (!score) return '';
+    if (typeof score === 'string') return score;
+    if (typeof score === 'object') {
+      const s1 = score.set1 || '';
+      const s2 = score.set2 || '';
+      const s3 = score.set3 ? ` ${score.set3}` : '';
+      return `${s1} ${s2}${s3}`.trim();
+    }
+    return '';
+  };
 
   const getThemeBg = () => {
     switch (themeStyle) {
@@ -161,9 +174,20 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     if (graphicType === 'champion' && championName) {
       text += `👑 *¡CAMPEÓN CONSAGRADO!* 👑\n🥇 *${championName}*\n\n`;
     } else if (graphicType === 'playoffs' && playoffRounds && playoffRounds.length > 0) {
-      text += `🔥 *Cuadro de Playoffs en Juego:*\n`;
-      playoffRounds.forEach(r => {
-        text += `• *${r.name}:* ${(r.matches || []).length} partido(s)\n`;
+      text += `🔥 *Cuadro de Eliminación (Playoffs):*\n`;
+      const roundsToShare = selectedRoundIndex === 'all' ? playoffRounds : [playoffRounds[selectedRoundIndex]].filter(Boolean);
+      roundsToShare.forEach(r => {
+        text += `\n*🏆 ${r.name}:*\n`;
+        (r.matches || []).forEach(m => {
+          const p1 = m.player1_name || 'Por definir';
+          const p2 = m.player2_name || 'Por definir';
+          const sc = formatShortScore(m.score);
+          if (m.is_played && sc) {
+            text += `• ${p1} vs ${p2} ➔ *${sc}* (Ganador: ${m.winner_name || 'Definido'})\n`;
+          } else {
+            text += `• ${p1} vs ${p2}\n`;
+          }
+        });
       });
     } else if (graphicType === 'standings' && zones && zones.length > 0) {
       if (selectedZoneIndex === 'all') {
@@ -192,6 +216,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   };
 
   const displayedZones = selectedZoneIndex === 'all' ? zones : [zones[selectedZoneIndex]].filter(Boolean);
+  const displayedRounds = selectedRoundIndex === 'all' ? playoffRounds : [playoffRounds[selectedRoundIndex]].filter(Boolean);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
@@ -298,6 +323,38 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                       }`}
                     >
                       {z.groupName?.replace('Grupo ', 'Zona ') || `Z${idx + 1}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Playoff Round Sub-Filter (Only when 'playoffs' is active) */}
+            {graphicType === 'playoffs' && playoffRounds.length > 1 && (
+              <div className="animate-in fade-in duration-150">
+                <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-1.5">Rondas de Llaves</label>
+                <div className="flex flex-wrap gap-1.5 p-1.5 bg-black/30 rounded-xl border border-white/5">
+                  <button
+                    onClick={() => { setSelectedRoundIndex('all'); soundEffects.playScoreBeep(); }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      selectedRoundIndex === 'all'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-muted hover:text-white'
+                    }`}
+                  >
+                    Todas ({playoffRounds.length})
+                  </button>
+                  {playoffRounds.map((r, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => { setSelectedRoundIndex(idx); soundEffects.playScoreBeep(); }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                        selectedRoundIndex === idx
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-muted hover:text-white'
+                      }`}
+                    >
+                      {r.name.replace('de Final', '')}
                     </button>
                   ))}
                 </div>
@@ -444,17 +501,69 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
                 {graphicType === 'playoffs' && (
                   <div className="space-y-1.5 text-xs">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1 mb-1">
-                      <Trophy size={12} /> Cuadro de Eliminación
+                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-1"><Trophy size={12} /> Cuadro de Playoffs</span>
+                      <span className="text-[9px] text-muted">
+                        {selectedRoundIndex === 'all' ? `Todas las Rondas (${playoffRounds.length})` : playoffRounds[selectedRoundIndex]?.name}
+                      </span>
                     </div>
-                    {(!playoffRounds || playoffRounds.length === 0) ? (
+                    {(!displayedRounds || displayedRounds.length === 0) ? (
                       <div className="text-center py-6 text-muted text-xs italic">Fase final en preparación</div>
                     ) : (
-                      <div className="space-y-1.5 max-h-[220px] overflow-hidden">
-                        {playoffRounds.map((r, i) => (
-                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2 flex justify-between items-center">
-                            <span className="font-bold text-white text-[11px]">{r.name}</span>
-                            <span className="text-[10px] text-primary font-bold">{(r.matches || []).length} Partido(s)</span>
+                      <div className="space-y-2 max-h-[250px] overflow-hidden">
+                        {displayedRounds.map((r, rIdx) => (
+                          <div key={rIdx} className="space-y-1">
+                            <div className="font-black text-[9px] text-orange-300 uppercase tracking-wider px-1">
+                              🏆 {r.name}
+                            </div>
+                            <div className={`gap-1.5 ${
+                              (r.matches || []).length > 2 ? 'grid grid-cols-2' : 'space-y-1'
+                            }`}>
+                              {(r.matches || []).map((m, mIdx) => {
+                                const isP1Winner = m.winner_id && m.winner_id === m.player1_id;
+                                const isP2Winner = m.winner_id && m.winner_id === m.player2_id;
+                                const scoreText = formatShortScore(m.score);
+
+                                return (
+                                  <div key={mIdx} className="bg-white/5 border border-white/10 rounded-lg p-1.5 text-[9px]">
+                                    {/* Player 1 */}
+                                    <div className={`flex justify-between items-center py-0.5 ${
+                                      isP1Winner ? 'font-bold text-primary' : 'text-white'
+                                    }`}>
+                                      <span className="truncate max-w-[100px] flex items-center gap-1">
+                                        {isP1Winner && <span className="text-primary text-[8px]">▶</span>}
+                                        {m.player1_name || 'Por Definir'}
+                                      </span>
+                                      {scoreText && m.is_played && isP1Winner && (
+                                        <span className="text-[8px] bg-primary/20 text-primary px-1 rounded font-bold">GANADOR</span>
+                                      )}
+                                    </div>
+                                    {/* Player 2 */}
+                                    <div className={`flex justify-between items-center py-0.5 border-t border-white/5 ${
+                                      isP2Winner ? 'font-bold text-primary' : 'text-white'
+                                    }`}>
+                                      <span className="truncate max-w-[100px] flex items-center gap-1">
+                                        {isP2Winner && <span className="text-primary text-[8px]">▶</span>}
+                                        {m.player2_name || 'Por Definir'}
+                                      </span>
+                                      {scoreText && m.is_played && isP2Winner && (
+                                        <span className="text-[8px] bg-primary/20 text-primary px-1 rounded font-bold">GANADOR</span>
+                                      )}
+                                    </div>
+                                    {/* Score / Status Footer */}
+                                    {m.is_played && scoreText ? (
+                                      <div className="text-right text-[8px] font-black text-amber-300/90 pt-0.5">
+                                        Marcador: {scoreText}
+                                      </div>
+                                    ) : m.scheduled_at ? (
+                                      <div className="text-right text-[8px] text-muted pt-0.5">
+                                        📅 {m.scheduled_at.slice(11, 16)} hs
+                                      </div>
+                                    ) : null}
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
                         ))}
                       </div>
