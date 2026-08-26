@@ -328,6 +328,13 @@ export interface MatchmakingPost {
   status: 'open' | 'matched' | 'cancelled';
   matched_with_user_id?: string;
   matched_with_name?: string;
+
+  // Doubles Partner Specific Fields
+  preferred_side?: 'drive' | 'backhand' | 'both';
+  dominant_hand?: 'right' | 'left';
+  play_style?: 'competitive' | 'recreational' | 'active';
+  target_tournament_id?: string;
+  target_tournament_name?: string;
 }
 
 export interface BookingParticipant {
@@ -589,7 +596,28 @@ export interface ReportStats {
     hours_heatmap: HeatmapHourItem[];
     matrix_heatmap: HeatmapMatrixCell[][];
     chart_data: ChartDataPoint[];
-    period_type: 'day' | 'week' | 'month';
     top_player?: { name: string; matches_won: number };
     top_bookers?: any[];
+}
+
+// ACHIEVEMENTS & GAMIFICATION TYPES
+export type AchievementTier = 'bronze' | 'silver' | 'gold' | 'diamond';
+export type AchievementCategory = 'victory' | 'tournament' | 'streak' | 'special' | 'community';
+
+export interface PlayerAchievement {
+    id: string;
+    title: string;
+    description: string;
+    category: AchievementCategory;
+    tier: AchievementTier;
+    icon: string; // Lucide icon name or emoji identifier
+    unlocked: boolean;
+    progress: {
+        current: number;
+        max: number;
+        label: string;
+    };
+    unlockedAt?: string;
+    badgeColor?: string;
+    rewardDescription?: string;
 }

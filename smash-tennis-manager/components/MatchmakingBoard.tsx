@@ -33,6 +33,9 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
     const [hasCourtBooked, setHasCourtBooked] = useState(false);
     const [courtName, setCourtName] = useState('Cancha 1');
     const [postDescription, setPostDescription] = useState('');
+    const [postPreferredSide, setPostPreferredSide] = useState<'drive' | 'backhand' | 'both'>('drive');
+    const [postDominantHand, setPostDominantHand] = useState<'right' | 'left'>('right');
+    const [postPlayStyle, setPostPlayStyle] = useState<'competitive' | 'recreational' | 'active'>('competitive');
 
     const { addToast } = useToast();
 
@@ -76,7 +79,10 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                 time_slot: postTimeSlot,
                 has_court_booked: hasCourtBooked,
                 court_name: hasCourtBooked ? courtName : undefined,
-                description: postDescription
+                description: postDescription,
+                preferred_side: postType === 'doubles' ? postPreferredSide : undefined,
+                dominant_hand: postType === 'doubles' ? postDominantHand : undefined,
+                play_style: postType === 'doubles' ? postPlayStyle : undefined
             });
 
             addToast("¡Aviso publicado con éxito en el tablón!", "success");
@@ -114,7 +120,13 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
         else if (cleanPhone.length === 8) cleanPhone = '549343' + cleanPhone;
 
         const myName = formatPlayerName(user.name, user.lastname);
-        const msg = `¡Hola ${post.user_name}! Vi tu aviso en Smash Tenis para jugar ${post.type === 'singles' ? 'un singles' : 'un dobles'} (${post.category}) el ${post.date || 'próximo día'} a las ${post.time_slot || 'hora acordada'}. Soy ${myName} (${user.category || '4ta'}), ¿sigue disponible para jugar?`;
+        let msg = '';
+        if (post.type === 'doubles') {
+            const sideStr = post.preferred_side === 'backhand' ? 'juego del lado del revés' : post.preferred_side === 'drive' ? 'juego del lado del drive' : 'juego en ambos lados';
+            msg = `¡Hola ${post.user_name}! Vi tu aviso en Smash Tenis buscando pareja para dobles (${post.category}). Soy ${myName} (${user.category || '4ta'}, ${sideStr}), ¿te gustaría que armemos dupla para jugar / competir?`;
+        } else {
+            msg = `¡Hola ${post.user_name}! Vi tu aviso en Smash Tenis para jugar un singles (${post.category}) el ${post.date || 'próximo día'} a las ${post.time_slot || 'hora acordada'}. Soy ${myName} (${user.category || '4ta'}), ¿sigue disponible para jugar?`;
+        }
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
 
         window.open(waUrl, '_blank');
@@ -310,6 +322,27 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                                                 <CheckCircle2 size={12} /> Cancha ya reservada ({post.court_name || 'Cancha 1'})
                                             </div>
                                         )}
+
+                                        {/* Doubles Partner Specific Badges */}
+                                        {isDoubles && (
+                                            <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                                                {post.preferred_side && (
+                                                    <span className="text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded-md font-bold">
+                                                        🎾 {post.preferred_side === 'backhand' ? 'Lado Revés' : post.preferred_side === 'drive' ? 'Lado Drive' : 'Ambos Lados'}
+                                                    </span>
+                                                )}
+                                                {post.dominant_hand && (
+                                                    <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-md font-bold">
+                                                        🖐️ {post.dominant_hand === 'left' ? 'Zurdo' : 'Diestro'}
+                                                    </span>
+                                                )}
+                                                {post.play_style && (
+                                                    <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-md font-bold">
+                                                        🎯 {post.play_style === 'competitive' ? 'Competitivo' : 'Recreativo'}
+                                                    </span>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Description */}
@@ -439,6 +472,66 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                                     required
                                 />
                             </div>
+
+                            {/* Doubles Partner Options (When type is doubles) */}
+                            {postType === 'doubles' && (
+                                <div className="p-3.5 bg-purple-950/30 border border-purple-500/30 rounded-2xl space-y-3">
+                                    <div className="text-xs font-bold text-purple-300 flex items-center gap-1.5">
+                                        🎾 Preferencias para la Dupla de Dobles
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-muted uppercase font-bold">Mi Lado Preferido</label>
+                                            <select
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-purple-400"
+                                                value={postPreferredSide}
+                                                onChange={e => setPostPreferredSide(e.target.value as any)}
+                                            >
+                                                <option value="drive">Lado Drive (Derecha)</option>
+                                                <option value="backhand">Lado Revés (Izquierda)</option>
+                                                <option value="both">Ambos Lados / Indiferente</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] text-muted uppercase font-bold">Mano Hábil</label>
+                                            <select
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2 text-xs text-white focus:outline-none focus:border-purple-400"
+                                                value={postDominantHand}
+                                                onChange={e => setPostDominantHand(e.target.value as any)}
+                                            >
+                                                <option value="right">Diestro</option>
+                                                <option value="left">Zurdo</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-1">
+                                        <label className="text-[10px] text-muted uppercase font-bold">Objetivo de Juego</label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            {[
+                                                { id: 'competitive', label: '🏆 Competitivo' },
+                                                { id: 'recreational', label: '🎾 Recreativo' },
+                                                { id: 'active', label: '⚡ Sumar Ritmo' }
+                                            ].map(s => (
+                                                <button
+                                                    key={s.id}
+                                                    type="button"
+                                                    onClick={() => setPostPlayStyle(s.id as any)}
+                                                    className={`py-1.5 rounded-lg text-[11px] font-bold border transition-all ${
+                                                        postPlayStyle === s.id
+                                                            ? 'bg-purple-500/20 border-purple-400 text-purple-200'
+                                                            : 'bg-sidebar border-white/5 text-muted hover:text-white'
+                                                    }`}
+                                                >
+                                                    {s.label}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Court Booked Toggle */}
                             <div className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-2">

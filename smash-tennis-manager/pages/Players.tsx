@@ -466,6 +466,8 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                                     <div>
                                                         <div className="font-bold text-white group-hover:text-primary transition-colors flex items-center gap-2">
                                                             <span>{formatPlayerName(player.name, player.lastname)}</span>
+                                                            {(player.tournaments_won || 0) > 0 && <span title={`Campeón: ${player.tournaments_won} títulos`} className="text-xs">👑</span>}
+                                                            {(player.matches_won || 0) >= 5 && <span title={`${player.matches_won} partidos ganados`} className="text-xs">🔥</span>}
                                                             {player.id === user.id && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase font-bold">Yo</span>}
                                                         </div>
                                                         <div className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
@@ -561,8 +563,10 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                             <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-4 border-card ${player.is_approved ? 'bg-green-500' : 'bg-gray-500'}`}></div>
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-white text-lg leading-tight group-hover:text-primary transition-colors">
-                                                {formatPlayerName(player.name, player.lastname)}
+                                            <h4 className="font-bold text-white text-lg leading-tight group-hover:text-primary transition-colors flex items-center gap-1.5">
+                                                <span>{formatPlayerName(player.name, player.lastname)}</span>
+                                                {(player.tournaments_won || 0) > 0 && <span title={`Campeón: ${player.tournaments_won} títulos`} className="text-xs">👑</span>}
+                                                {(player.matches_won || 0) >= 5 && <span title={`${player.matches_won} partidos ganados`} className="text-xs">🔥</span>}
                                             </h4>
                                             <div className="flex items-center gap-1.5 mt-1">
                                                 <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(player.gender)}`}>

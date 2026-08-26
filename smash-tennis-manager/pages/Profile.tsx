@@ -1,19 +1,21 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { UserProfile, Institution, UserClubMembership, PlayerStatsSummary } from '../types';
+import { UserProfile, Institution, UserClubMembership, PlayerStatsSummary, PlayerAchievement } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { 
     User, Mail, Award, MapPin, Phone, Edit2, Shield, CreditCard, Calendar, X, Check, Save, 
     AlertTriangle, Camera, UploadCloud, Loader2, Star, Plus, Trash2, Sparkles, Building as BuildingIcon, CheckCircle2, Smartphone, Trophy,
-    Volume2, VolumeX, Flame, Zap, TrendingUp, Activity
+    Volume2, VolumeX, Flame, Zap, TrendingUp, Activity, Crown, Medal, Target, ChevronRight, Lock
 } from 'lucide-react';
 import ImageCropper from '../components/ImageCropper';
 import imageCompression from 'browser-image-compression';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
 import { getUserRankInfo } from '../utils/ranking';
+import { calculatePlayerAchievements, getTierColorClasses } from '../utils/achievements';
 import { PlayerCardModal } from '../components/PlayerCardModal';
+import { RankingEvolutionChart } from '../components/RankingEvolutionChart';
 import { soundEffects } from '../services/soundEffects';
 
 interface ProfileProps {
@@ -94,9 +96,25 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         addToast(next ? "🔊 Sonidos y vibración activados" : "🔇 Sonidos silenciados", "info");
     };
 
+    // Achievements state
+    const [achievementFilter, setAchievementFilter] = useState<'all' | 'unlocked' | 'locked'>('all');
+    const [selectedAchievement, setSelectedAchievement] = useState<PlayerAchievement | null>(null);
+
     const rankInfo = useMemo(() => {
         return getUserRankInfo(user.id, allProfiles.length > 0 ? allProfiles : [user]);
     }, [user, allProfiles]);
+
+    const achievements = useMemo(() => {
+        return calculatePlayerAchievements(user, playerStats, allProfiles);
+    }, [user, playerStats, allProfiles]);
+
+    const filteredAchievements = useMemo(() => {
+        if (achievementFilter === 'unlocked') return achievements.filter(a => a.unlocked);
+        if (achievementFilter === 'locked') return achievements.filter(a => !a.unlocked);
+        return achievements;
+    }, [achievements, achievementFilter]);
+
+    const unlockedCount = useMemo(() => achievements.filter(a => a.unlocked).length, [achievements]);
 
     const userMemberships = api.memberships.getUserMemberships(user);
 
@@ -621,70 +639,13 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                 </div>
                             </div>
 
-                            {/* Ranking & Points Evolution SVG Chart */}
-                            <div className="pt-3 border-t border-white/10 space-y-2">
-                                <div className="text-xs font-bold text-muted uppercase tracking-wider flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5">
-                                        <TrendingUp size={14} className="text-primary" /> Evolución de Puntos
-                                    </span>
-                                    <span className="text-[10px] text-primary font-bold">Oficial Smash</span>
-                                </div>
-
-                                <div className="bg-black/30 border border-white/10 rounded-xl p-3">
-                                    {playerStats && playerStats.rankingHistory.length > 1 ? (
-                                        <div className="space-y-2">
-                                            {/* Mini SVG Line Chart */}
-                                            <div className="h-20 w-full flex items-end">
-                                                <svg className="w-full h-full overflow-visible" viewBox="0 0 100 50" preserveAspectRatio="none">
-                                                    <defs>
-                                                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-                                                            <stop offset="0%" stopColor="#e15b34" stopOpacity="0.5" />
-                                                            <stop offset="100%" stopColor="#e15b34" stopOpacity="0.0" />
-                                                        </linearGradient>
-                                                    </defs>
-                                                    {/* Area */}
-                                                    <polygon
-                                                        fill="url(#chartGrad)"
-                                                        points={
-                                                            `0,50 ` +
-                                                            playerStats.rankingHistory.map((item, idx) => {
-                                                                const x = (idx / (playerStats.rankingHistory.length - 1)) * 100;
-                                                                const maxPts = Math.max(...playerStats.rankingHistory.map(p => p.points), 100);
-                                                                const y = 45 - (item.points / maxPts) * 40;
-                                                                return `${x},${y}`;
-                                                            }).join(' ') +
-                                                            ` 100,50`
-                                                        }
-                                                    />
-                                                    {/* Line */}
-                                                    <polyline
-                                                        fill="none"
-                                                        stroke="#e15b34"
-                                                        strokeWidth="2.5"
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        points={
-                                                            playerStats.rankingHistory.map((item, idx) => {
-                                                                const x = (idx / (playerStats.rankingHistory.length - 1)) * 100;
-                                                                const maxPts = Math.max(...playerStats.rankingHistory.map(p => p.points), 100);
-                                                                const y = 45 - (item.points / maxPts) * 40;
-                                                                return `${x},${y}`;
-                                                            }).join(' ')
-                                                        }
-                                                    />
-                                                </svg>
-                                            </div>
-                                            <div className="flex justify-between text-[9px] text-muted">
-                                                <span>{playerStats.rankingHistory[0].date.slice(5, 10)}</span>
-                                                <span>{playerStats.rankingHistory[playerStats.rankingHistory.length - 1].date.slice(5, 10)}</span>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        <div className="text-center py-4 text-xs text-muted">
-                                            Suma partidos oficiales para ver tu curva de progresión en el tiempo.
-                                        </div>
-                                    )}
-                                </div>
+                            {/* Ranking & Points Evolution Interactive Chart */}
+                            <div className="pt-2">
+                                <RankingEvolutionChart 
+                                    user={user} 
+                                    stats={playerStats} 
+                                    rankInfo={rankInfo} 
+                                />
                             </div>
 
                             {/* Frequent Opponents */}
@@ -708,8 +669,181 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
 
                         </div>
                     </Card>
+
+                    {/* ACHIEVEMENTS & MEDALS SHOWCASE */}
+                    <Card className="bg-gradient-to-br from-card to-slate-900 border-white/10 space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/10 pb-3">
+                            <div>
+                                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                    <Trophy className="text-amber-400" size={20} /> Vitrina de Logros & Medallas
+                                </h3>
+                                <p className="text-xs text-muted">
+                                    {unlockedCount} de {achievements.length} medallas desbloqueadas
+                                </p>
+                            </div>
+
+                            {/* Filter Buttons */}
+                            <div className="flex bg-black/40 p-1 rounded-xl border border-white/10 text-[11px]">
+                                <button
+                                    onClick={() => setAchievementFilter('all')}
+                                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                                        achievementFilter === 'all' ? 'bg-primary text-white' : 'text-muted hover:text-white'
+                                    }`}
+                                >
+                                    Todas
+                                </button>
+                                <button
+                                    onClick={() => setAchievementFilter('unlocked')}
+                                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                                        achievementFilter === 'unlocked' ? 'bg-primary text-white' : 'text-muted hover:text-white'
+                                    }`}
+                                >
+                                    Ganadas ({unlockedCount})
+                                </button>
+                                <button
+                                    onClick={() => setAchievementFilter('locked')}
+                                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                                        achievementFilter === 'locked' ? 'bg-primary text-white' : 'text-muted hover:text-white'
+                                    }`}
+                                >
+                                    Bloqueadas
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Achievements Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                            {filteredAchievements.map((item) => {
+                                const tierStyles = getTierColorClasses(item.tier);
+                                const isUnlocked = item.unlocked;
+
+                                return (
+                                    <div
+                                        key={item.id}
+                                        onClick={() => {
+                                            soundEffects.playScoreBeep();
+                                            setSelectedAchievement(item);
+                                        }}
+                                        className={`p-3 rounded-2xl border transition-all cursor-pointer relative overflow-hidden group ${
+                                            isUnlocked 
+                                                ? `${tierStyles.bg} hover:border-white/40 shadow-lg` 
+                                                : 'bg-black/30 border-white/5 opacity-60 hover:opacity-90'
+                                        }`}
+                                    >
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shadow-md ${
+                                                    isUnlocked 
+                                                        ? tierStyles.badge 
+                                                        : 'bg-slate-800 text-slate-500 border border-white/5'
+                                                }`}>
+                                                    {isUnlocked ? (
+                                                        item.tier === 'diamond' ? <Crown size={18} /> :
+                                                        item.tier === 'gold' ? <Trophy size={18} /> :
+                                                        item.tier === 'silver' ? <Medal size={18} /> :
+                                                        <Sparkles size={18} />
+                                                    ) : (
+                                                        <Lock size={16} />
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <div className="text-xs font-black text-white flex items-center gap-1.5">
+                                                        {item.title}
+                                                    </div>
+                                                    <div className="text-[10px] text-muted capitalize">
+                                                        Nivel {item.tier}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {isUnlocked && (
+                                                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                                    ✓ Ganado
+                                                </span>
+                                            )}
+                                        </div>
+
+                                        {/* Progress Bar */}
+                                        <div className="mt-2.5 space-y-1">
+                                            <div className="flex justify-between text-[9px]">
+                                                <span className="text-slate-400">{item.progress.label}</span>
+                                                <span className="text-slate-500 font-mono">
+                                                    {Math.round((item.progress.current / item.progress.max) * 100)}%
+                                                </span>
+                                            </div>
+                                            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden border border-white/5">
+                                                <div 
+                                                    className={`h-full rounded-full transition-all duration-500 ${
+                                                        isUnlocked ? 'bg-gradient-to-r from-amber-400 to-primary' : 'bg-slate-600'
+                                                    }`}
+                                                    style={{ width: `${Math.min(100, (item.progress.current / item.progress.max) * 100)}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </Card>
                 </div>
             </div>
+
+            {/* ACHIEVEMENT DETAIL MODAL */}
+            {selectedAchievement && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-in fade-in duration-200">
+                    <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-sm shadow-2xl p-6 relative overflow-hidden space-y-4 text-center">
+                        <button 
+                            onClick={() => setSelectedAchievement(null)}
+                            className="absolute top-4 right-4 text-muted hover:text-white p-1 rounded-xl hover:bg-white/5"
+                        >
+                            <X size={20} />
+                        </button>
+
+                        <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center shadow-xl text-slate-950 font-black text-2xl bg-gradient-to-br from-amber-400 to-orange-500">
+                            {selectedAchievement.tier === 'diamond' ? <Crown size={32} /> :
+                             selectedAchievement.tier === 'gold' ? <Trophy size={32} /> :
+                             selectedAchievement.tier === 'silver' ? <Medal size={32} /> :
+                             <Sparkles size={32} />}
+                        </div>
+
+                        <div className="space-y-1">
+                            <h3 className="text-lg font-black text-white">{selectedAchievement.title}</h3>
+                            <p className="text-xs text-amber-300 font-bold uppercase tracking-wider">
+                                Medalla Nivel {selectedAchievement.tier}
+                            </p>
+                        </div>
+
+                        <p className="text-xs text-slate-300 bg-white/5 p-3 rounded-xl border border-white/5">
+                            {selectedAchievement.description}
+                        </p>
+
+                        <div className="space-y-1.5 text-xs bg-black/40 p-3 rounded-xl border border-white/5 text-left">
+                            <div className="flex justify-between text-muted text-[11px]">
+                                <span>Progreso Actual</span>
+                                <span className="font-bold text-white">{selectedAchievement.progress.label}</span>
+                            </div>
+                            <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                                <div 
+                                    className="h-full bg-primary rounded-full"
+                                    style={{ width: `${Math.min(100, (selectedAchievement.progress.current / selectedAchievement.progress.max) * 100)}%` }}
+                                />
+                            </div>
+                            {selectedAchievement.rewardDescription && (
+                                <div className="text-[10px] text-amber-400/90 pt-1 font-semibold">
+                                    🎁 Recompensa: {selectedAchievement.rewardDescription}
+                                </div>
+                            )}
+                        </div>
+
+                        <button
+                            onClick={() => setSelectedAchievement(null)}
+                            className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl transition-all shadow-md"
+                        >
+                            Cerrar
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* EDIT MODAL */}
             {isEditing && (

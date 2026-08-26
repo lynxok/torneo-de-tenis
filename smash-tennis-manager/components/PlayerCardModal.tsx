@@ -1,8 +1,9 @@
-﻿import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { UserProfile, PlayerStatsSummary } from '../types';
 import { soundEffects } from '../services/soundEffects';
-import { X, Download, Share2, Trophy, Award, Flame, Zap, Shield, Sparkles, Star } from 'lucide-react';
+import { X, Download, Share2, Trophy, Award, Flame, Zap, Shield, Sparkles, Star, Crown, Medal } from 'lucide-react';
 import { formatPlayerName } from '../utils/formatters';
+import { calculatePlayerAchievements, getTopUnlockedAchievements } from '../utils/achievements';
 
 interface PlayerCardModalProps {
   isOpen: boolean;
@@ -21,6 +22,11 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
+
+  const topBadges = useMemo(() => {
+    const all = calculatePlayerAchievements(user, stats || null);
+    return getTopUnlockedAchievements(all, 3);
+  }, [user, stats]);
 
   if (!isOpen) return null;
 
@@ -104,8 +110,11 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
     text += `🏅 *Categoría:* ${user.category || '4ta'} | 📍 *Club:* ${club}\n`;
     text += `📊 *Efectividad:* ${winRate}% Victorias (${matchesWon} PG)\n`;
     text += `🔥 *Mejor Racha:* ${bestStreak} partidos invicto\n`;
-    text += `🏆 *Ranking:* #${rank} Oficial\n\n`;
-    text += `📲 Consultá el perfil completo en: https://smashtenis.lnx.com.ar`;
+    text += `🏆 *Ranking:* #${rank} Oficial\n`;
+    if (topBadges.length > 0) {
+      text += `🎖️ *Medallas:* ${topBadges.map(b => b.title).join(' • ')}\n`;
+    }
+    text += `\n📲 Consultá el perfil completo en: https://smashtenis.lnx.com.ar`;
 
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
@@ -139,7 +148,7 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
           {/* Visual Player Card (Exportable Target) */}
           <div
             ref={cardRef}
-            className="w-[300px] sm:w-[320px] aspect-[1/1.55] rounded-3xl bg-gradient-to-b from-amber-950/90 via-slate-950 to-slate-950 border-2 border-amber-500/50 p-6 flex flex-col justify-between shadow-2xl relative overflow-hidden text-white select-none"
+            className="w-[300px] sm:w-[320px] aspect-[1/1.58] rounded-3xl bg-gradient-to-b from-amber-950/90 via-slate-950 to-slate-950 border-2 border-amber-500/50 p-5 flex flex-col justify-between shadow-2xl relative overflow-hidden text-white select-none"
           >
             {/* Top Shine & Accents */}
             <div className="absolute top-0 right-0 w-48 h-48 bg-amber-500/15 rounded-full blur-3xl pointer-events-none"></div>
@@ -177,8 +186,8 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
             </div>
 
             {/* Player Name & Club */}
-            <div className="text-center z-10 my-2 pt-2 border-t border-amber-500/20">
-              <h3 className="text-lg font-black text-white uppercase tracking-wide truncate">
+            <div className="text-center z-10 my-1.5 pt-1.5 border-t border-amber-500/20">
+              <h3 className="text-base sm:text-lg font-black text-white uppercase tracking-wide truncate">
                 {formattedName}
               </h3>
               <p className="text-[11px] text-amber-200/70 font-semibold truncate">
@@ -187,35 +196,47 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
             </div>
 
             {/* 6 Key Stats Grid (FUT Style) */}
-            <div className="grid grid-cols-2 gap-2 bg-white/5 border border-white/10 rounded-2xl p-3 z-10 backdrop-blur-sm">
+            <div className="grid grid-cols-2 gap-1.5 bg-white/5 border border-white/10 rounded-2xl p-2.5 z-10 backdrop-blur-sm">
               <div className="flex items-center justify-between text-xs px-1">
-                <span className="text-muted font-bold text-[10px]">VICTORIAS</span>
-                <span className="font-extrabold text-amber-300">{matchesWon} PG</span>
+                <span className="text-muted font-bold text-[9px]">VICTORIAS</span>
+                <span className="font-extrabold text-amber-300 text-xs">{matchesWon} PG</span>
               </div>
               <div className="flex items-center justify-between text-xs px-1">
-                <span className="text-muted font-bold text-[10px]">EFECTIVIDAD</span>
-                <span className="font-extrabold text-emerald-400">{winRate}%</span>
+                <span className="text-muted font-bold text-[9px]">EFECTIVIDAD</span>
+                <span className="font-extrabold text-emerald-400 text-xs">{winRate}%</span>
               </div>
               <div className="flex items-center justify-between text-xs px-1">
-                <span className="text-muted font-bold text-[10px]">TIE-BREAKS</span>
-                <span className="font-extrabold text-amber-300">{tieBreakRate}%</span>
+                <span className="text-muted font-bold text-[9px]">TIE-BREAKS</span>
+                <span className="font-extrabold text-amber-300 text-xs">{tieBreakRate}%</span>
               </div>
               <div className="flex items-center justify-between text-xs px-1">
-                <span className="text-muted font-bold text-[10px]">RACHA</span>
-                <span className="font-extrabold text-orange-400">🔥 {streak}</span>
+                <span className="text-muted font-bold text-[9px]">RACHA</span>
+                <span className="font-extrabold text-orange-400 text-xs">🔥 {streak}</span>
               </div>
               <div className="flex items-center justify-between text-xs px-1">
-                <span className="text-muted font-bold text-[10px]">TÍTULOS</span>
-                <span className="font-extrabold text-amber-300">{user.tournaments_won || 0} 🏆</span>
+                <span className="text-muted font-bold text-[9px]">TÍTULOS</span>
+                <span className="font-extrabold text-amber-300 text-xs">{user.tournaments_won || 0} 🏆</span>
               </div>
               <div className="flex items-center justify-between text-xs px-1">
-                <span className="text-muted font-bold text-[10px]">ESTADO</span>
-                <span className="font-extrabold text-emerald-400">PRO</span>
+                <span className="text-muted font-bold text-[9px]">ESTADO</span>
+                <span className="font-extrabold text-emerald-400 text-xs">PRO</span>
               </div>
             </div>
 
+            {/* Top Achievements Badges Row */}
+            {topBadges.length > 0 && (
+              <div className="flex items-center justify-around gap-1 bg-black/40 border border-amber-500/20 rounded-xl px-2 py-1.5 z-10 my-1">
+                {topBadges.map((badge, idx) => (
+                  <div key={idx} className="flex items-center gap-1 text-[9px] font-bold text-amber-200/90 truncate">
+                    <span className="text-[10px]">{badge.unlocked ? '🏅' : '🔒'}</span>
+                    <span className="truncate max-w-[72px]">{badge.title}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Card Footer */}
-            <div className="flex items-center justify-between text-[9px] text-amber-400/60 font-bold z-10 pt-1">
+            <div className="flex items-center justify-between text-[9px] text-amber-400/60 font-bold z-10 pt-0.5">
               <span className="tracking-widest">SMASH TENNIS PRO</span>
               <span>2026 EDITION</span>
             </div>

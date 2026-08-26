@@ -922,6 +922,26 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 <MessageCircle size={16} /> WhatsApp
                             </button>
 
+                            {tournament.type === 'doubles' && !isEnrolled && !isRegClosed && (
+                                <button
+                                    onClick={() => {
+                                        soundEffects.playScoreBeep();
+                                        const phone = tournament.institutions?.phone || '';
+                                        const cleanPhone = phone.replace(/[^0-9]/g, '');
+                                        const msg = encodeURIComponent(`¡Hola! Estoy interesado en jugar el torneo de dobles "${tournament.name}" en ${tournament.institutions?.name || 'el club'}, pero no tengo pareja. ¿Hay otros jugadores de mi categoría buscando dupla?`);
+                                        if (cleanPhone) {
+                                            window.open(`https://wa.me/${cleanPhone.startsWith('54') ? cleanPhone : '549' + cleanPhone}?text=${msg}`, '_blank');
+                                        } else {
+                                            addToast("Podés coordinar o publicar tu búsqueda en la sección Tablón de Rivales.", "info");
+                                        }
+                                    }}
+                                    className="px-4 py-3 bg-purple-600/30 hover:bg-purple-600/50 text-purple-200 font-bold rounded-xl transition-all border border-purple-500/40 flex items-center gap-2 text-sm shadow-md"
+                                    title="Buscar compañero para este torneo de dobles"
+                                >
+                                    <Users size={16} className="text-purple-300" /> Busco Pareja
+                                </button>
+                            )}
+
                             {!isEnrolled ? (
                                 !isRegClosed ? (
                                     <button onClick={handleEnrollClick} disabled={isEnrolling} className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center gap-2 text-sm">

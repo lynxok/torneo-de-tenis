@@ -195,9 +195,16 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
                                                     {(player.name || 'U').charAt(0).toUpperCase()}
                                                 </div>
                                                 <div>
-                                                    <div className={`font-bold transition-colors ${isCurrentUser ? 'text-primary' : 'text-white group-hover:text-primary'
+                                                    <div className={`font-bold transition-colors flex items-center gap-1.5 ${isCurrentUser ? 'text-primary' : 'text-white group-hover:text-primary'
                                                         }`}>
-                                                        {formatPlayerName(player.name, player.lastname)} {isCurrentUser && <span className="text-[10px] bg-primary text-dark px-1.5 py-0.5 rounded ml-2 uppercase">Tú</span>}
+                                                        <span>{formatPlayerName(player.name, player.lastname)}</span>
+                                                        {(player.tournaments_won || 0) > 0 && (
+                                                            <span title={`Campeón: ${player.tournaments_won} títulos`} className="text-xs">👑</span>
+                                                        )}
+                                                        {(player.matches_won || 0) >= 5 && (
+                                                            <span title={`${player.matches_won} partidos ganados`} className="text-xs">🔥</span>
+                                                        )}
+                                                        {isCurrentUser && <span className="text-[10px] bg-primary text-dark font-black px-1.5 py-0.5 rounded ml-1 uppercase">Tú</span>}
                                                     </div>
                                                 </div>
                                             </div>
