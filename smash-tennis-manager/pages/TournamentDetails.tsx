@@ -4,7 +4,7 @@ import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { 
-    Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
+    Trophy, Calendar, MapPin, Users, ChevronLeft, ChevronRight, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
@@ -120,6 +120,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isCustomCourt, setIsCustomCourt] = useState(false);
     const [customCourtName, setCustomCourtName] = useState('');
     const [savingSchedule, setSavingSchedule] = useState(false);
+    const [showCalendarModal, setShowCalendarModal] = useState(false);
+    const [calendarViewMonth, setCalendarViewMonth] = useState<Date>(new Date());
 
     // Derived state
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
@@ -407,6 +409,130 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         if (!list.includes('Cancha Central')) list.push('Cancha Central');
         return list;
     }, [tournament]);
+
+    const formatFullDateDisplay = (dateStr: string) => {
+        if (!dateStr) return '';
+        try {
+            const [y, m, d] = dateStr.split('-').map(Number);
+            const dateObj = new Date(y, m - 1, d);
+            const dayName = dateObj.toLocaleDateString('es-AR', { weekday: 'long' });
+            const dayNum = dateObj.getDate();
+            const monthName = dateObj.toLocaleDateString('es-AR', { month: 'long' });
+            const yearNum = dateObj.getFullYear();
+            return `${dayName.charAt(0).toUpperCase() + dayName.slice(1)} ${dayNum} de ${monthName}, ${yearNum}`;
+        } catch (e) {
+            return dateStr;
+        }
+    };
+
+    const openCalendarPicker = (initialDateStr?: string) => {
+        if (initialDateStr) {
+            const [y, m] = initialDateStr.split('-').map(Number);
+            if (!isNaN(y) && !isNaN(m)) {
+                setCalendarViewMonth(new Date(y, m - 1, 1));
+            } else {
+                setCalendarViewMonth(new Date());
+            }
+        } else {
+            setCalendarViewMonth(new Date());
+        }
+        setShowCalendarModal(true);
+    };
+
+    const handlePrevMonth = () => {
+        setCalendarViewMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    };
+
+    const handleNextMonth = () => {
+        setCalendarViewMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    };
+
+    const handleSelectCalendarDate = (dateStr: string) => {
+        setScheduleDate(dateStr);
+        setShowCalendarModal(false);
+        soundEffects.playScoreBeep();
+    };
+
+    const renderCalendarGrid = () => {
+        const year = calendarViewMonth.getFullYear();
+        const month = calendarViewMonth.getMonth(); // 0-indexed
+        
+        const firstDayOfMonth = new Date(year, month, 1);
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        
+        // 0 is Sunday in JS, so convert to Monday = 0, Sunday = 6
+        const startDayIndex = (firstDayOfMonth.getDay() + 6) % 7;
+        const prevMonthDays = new Date(year, month, 0).getDate();
+        
+        const cells: {
+            dayNum: number;
+            dateStr: string;
+            isCurrentMonth: boolean;
+            isToday: boolean;
+            isSelected: boolean;
+            isTournamentDay: boolean;
+            isWeekend: boolean;
+        }[] = [];
+
+        const todayStr = new Date().toISOString().split('T')[0];
+        const tStart = tournament?.start_date;
+        const tEnd = tournament?.end_date || tournament?.start_date;
+
+        // Previous month filler days
+        for (let i = startDayIndex - 1; i >= 0; i--) {
+            const dayNum = prevMonthDays - i;
+            const prevMonth = month === 0 ? 11 : month - 1;
+            const prevYear = month === 0 ? year - 1 : year;
+            const dateStr = `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+            const dayOfWeek = (startDayIndex - 1 - i + 7) % 7;
+            cells.push({
+                dayNum,
+                dateStr,
+                isCurrentMonth: false,
+                isToday: dateStr === todayStr,
+                isSelected: dateStr === scheduleDate,
+                isTournamentDay: !!(tStart && tEnd && dateStr >= tStart && dateStr <= tEnd),
+                isWeekend: dayOfWeek === 5 || dayOfWeek === 6
+            });
+        }
+
+        // Current month days
+        for (let day = 1; day <= daysInMonth; day++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dayOfWeek = new Date(year, month, day).getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6; // Sunday or Saturday
+            cells.push({
+                dayNum: day,
+                dateStr,
+                isCurrentMonth: true,
+                isToday: dateStr === todayStr,
+                isSelected: dateStr === scheduleDate,
+                isTournamentDay: !!(tStart && tEnd && dateStr >= tStart && dateStr <= tEnd),
+                isWeekend
+            });
+        }
+
+        // Next month trailing days to complete full weeks
+        const remainingCells = (7 - (cells.length % 7)) % 7;
+        for (let day = 1; day <= remainingCells; day++) {
+            const nextMonth = month === 11 ? 0 : month + 1;
+            const nextYear = month === 11 ? year + 1 : year;
+            const dateStr = `${nextYear}-${String(nextMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+            const dayOfWeek = new Date(nextYear, nextMonth, day).getDay();
+            const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+            cells.push({
+                dayNum: day,
+                dateStr,
+                isCurrentMonth: false,
+                isToday: dateStr === todayStr,
+                isSelected: dateStr === scheduleDate,
+                isTournamentDay: !!(tStart && tEnd && dateStr >= tStart && dateStr <= tEnd),
+                isWeekend
+            });
+        }
+
+        return cells;
+    };
 
     const openScheduleModal = (m: Match) => {
         setSelectedMatchForSchedule(m);
@@ -3390,18 +3516,51 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                             {/* Date Field & Quick Buttons */}
                             <div className="space-y-1.5">
-                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                    <Calendar size={13} className="text-primary" /> Fecha del Partido *
-                                </label>
-                                <input
-                                    type="date"
-                                    value={scheduleDate}
-                                    onChange={e => setScheduleDate(e.target.value)}
-                                    className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:border-primary outline-none"
-                                    required
-                                />
+                                <div className="flex justify-between items-center">
+                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                        <Calendar size={13} className="text-primary" /> Fecha del Partido *
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => openCalendarPicker(scheduleDate)}
+                                        className="text-[10px] text-primary hover:underline font-bold flex items-center gap-1"
+                                    >
+                                        <Calendar size={12} /> Abrir Calendario
+                                    </button>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    {/* Main Interactive Date Display & Picker Trigger */}
+                                    <button
+                                        type="button"
+                                        onClick={() => openCalendarPicker(scheduleDate)}
+                                        className="flex-1 bg-sidebar hover:bg-slate-900/90 border border-white/10 hover:border-primary/50 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-bold flex items-center justify-between transition-all group shadow-inner text-left"
+                                        title="Haz clic para abrir el selector de calendario"
+                                    >
+                                        <div className="flex items-center gap-2 min-w-0">
+                                            <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
+                                                <Calendar size={15} />
+                                            </div>
+                                            <span className="truncate">{scheduleDate ? formatFullDateDisplay(scheduleDate) : 'Seleccionar fecha en calendario...'}</span>
+                                        </div>
+                                        <span className="text-[11px] text-primary font-bold flex items-center gap-1 shrink-0 ml-2 group-hover:translate-x-0.5 transition-transform hidden sm:flex">
+                                            Elegir día <ChevronRight size={14} />
+                                        </span>
+                                    </button>
+
+                                    {/* Native fallback picker */}
+                                    <input
+                                        type="date"
+                                        value={scheduleDate}
+                                        onChange={e => setScheduleDate(e.target.value)}
+                                        className="w-10 h-10 p-0 bg-sidebar border border-white/10 rounded-xl text-center text-xs text-white cursor-pointer opacity-70 hover:opacity-100 shrink-0"
+                                        title="Selector nativo del navegador"
+                                        required
+                                    />
+                                </div>
+
                                 {/* Quick Date Presets */}
-                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
                                     {getQuickDatePresets().map((preset, idx) => (
                                         <button
                                             key={idx}
@@ -3409,13 +3568,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             onClick={() => setScheduleDate(preset.dateStr)}
                                             className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
                                                 scheduleDate === preset.dateStr
-                                                    ? 'bg-primary/20 border-primary text-white'
+                                                    ? 'bg-primary/20 border-primary text-white shadow-sm'
                                                     : 'bg-white/5 border-white/10 text-muted hover:text-white'
                                             }`}
                                         >
                                             {preset.label}
                                         </button>
                                     ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => openCalendarPicker(scheduleDate)}
+                                        className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-blue-500/30 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition-all flex items-center gap-1 ml-auto"
+                                    >
+                                        <Calendar size={11} /> Ver Calendario Completo
+                                    </button>
                                 </div>
                             </div>
 
@@ -3542,6 +3708,129 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </div>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* INTERACTIVE CALENDAR DATE PICKER MODAL */}
+            {showCalendarModal && (
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/15 rounded-3xl w-full max-w-sm shadow-2xl relative overflow-hidden flex flex-col p-5 space-y-4">
+                        {/* Header: Month & Year Navigator */}
+                        <div className="flex items-center justify-between">
+                            <button
+                                type="button"
+                                onClick={handlePrevMonth}
+                                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
+                                title="Mes anterior"
+                            >
+                                <ChevronLeft size={18} />
+                            </button>
+
+                            <div className="text-center">
+                                <h4 className="text-base font-black text-white capitalize tracking-tight">
+                                    {calendarViewMonth.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
+                                </h4>
+                                <span className="text-[10px] text-muted uppercase font-bold">Seleccionar Día del Partido</span>
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={handleNextMonth}
+                                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
+                                title="Mes siguiente"
+                            >
+                                <ChevronRight size={18} />
+                            </button>
+                        </div>
+
+                        {/* Quick Jump Buttons */}
+                        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const today = new Date();
+                                    setCalendarViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                                    handleSelectCalendarDate(today.toISOString().split('T')[0]);
+                                }}
+                                className="px-2.5 py-1 bg-white/5 hover:bg-primary/20 text-muted hover:text-white border border-white/10 rounded-lg text-[10px] font-bold transition-all"
+                            >
+                                Ir a Hoy
+                            </button>
+
+                            {tournament?.start_date && (
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const [y, m] = tournament.start_date.split('-').map(Number);
+                                        setCalendarViewMonth(new Date(y, m - 1, 1));
+                                        handleSelectCalendarDate(tournament.start_date);
+                                    }}
+                                    className="px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition-all"
+                                >
+                                    🏆 Inicio Torneo ({tournament.start_date.split('-').slice(1).reverse().join('/')})
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Weekday Labels */}
+                        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black text-slate-400 border-b border-white/10 pb-2">
+                            <span>Lu</span>
+                            <span>Ma</span>
+                            <span>Mi</span>
+                            <span>Ju</span>
+                            <span>Vi</span>
+                            <span className="text-blue-400 font-bold">Sá</span>
+                            <span className="text-blue-400 font-bold">Do</span>
+                        </div>
+
+                        {/* Month Grid */}
+                        <div className="grid grid-cols-7 gap-1">
+                            {renderCalendarGrid().map((cell, idx) => {
+                                return (
+                                    <button
+                                        key={idx}
+                                        type="button"
+                                        onClick={() => handleSelectCalendarDate(cell.dateStr)}
+                                        className={`h-9 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all ${
+                                            cell.isSelected
+                                                ? 'bg-gradient-to-br from-blue-600 to-primary text-white font-black ring-2 ring-primary shadow-lg scale-105 z-10'
+                                                : cell.isToday
+                                                ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40 hover:bg-primary/20'
+                                                : cell.isCurrentMonth
+                                                ? cell.isWeekend
+                                                    ? 'bg-white/5 hover:bg-primary/20 text-slate-100 font-bold border border-white/5 hover:border-primary/40'
+                                                    : 'bg-black/30 hover:bg-primary/20 text-slate-300 font-medium hover:text-white'
+                                                : 'opacity-25 text-slate-500 hover:opacity-50 hover:bg-white/5'
+                                        }`}
+                                        title={cell.dateStr}
+                                    >
+                                        <span>{cell.dayNum}</span>
+                                        {cell.isTournamentDay && !cell.isSelected && (
+                                            <span className="w-1 h-1 rounded-full bg-primary absolute bottom-1"></span>
+                                        )}
+                                    </button>
+                                );
+                            })}
+                        </div>
+
+                        {/* Footer Info & Close */}
+                        <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
+                            <div className="text-[11px] text-slate-300 font-medium truncate">
+                                {scheduleDate ? (
+                                    <span>Elegido: <strong className="text-primary">{formatFullDateDisplay(scheduleDate)}</strong></span>
+                                ) : (
+                                    <span>Toca cualquier día para seleccionarlo</span>
+                                )}
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setShowCalendarModal(false)}
+                                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl transition-colors shrink-0"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
