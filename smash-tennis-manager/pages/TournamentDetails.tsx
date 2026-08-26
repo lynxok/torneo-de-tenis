@@ -3529,35 +3529,23 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     </button>
                                 </div>
 
-                                <div className="flex items-center gap-2">
-                                    {/* Main Interactive Date Display & Picker Trigger */}
-                                    <button
-                                        type="button"
-                                        onClick={() => openCalendarPicker(scheduleDate)}
-                                        className="flex-1 bg-sidebar hover:bg-slate-900/90 border border-white/10 hover:border-primary/50 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-bold flex items-center justify-between transition-all group shadow-inner text-left"
-                                        title="Haz clic para abrir el selector de calendario"
-                                    >
-                                        <div className="flex items-center gap-2 min-w-0">
-                                            <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
-                                                <Calendar size={15} />
-                                            </div>
-                                            <span className="truncate">{scheduleDate ? formatFullDateDisplay(scheduleDate) : 'Seleccionar fecha en calendario...'}</span>
+                                {/* Main Interactive Date Display & Picker Trigger */}
+                                <button
+                                    type="button"
+                                    onClick={() => openCalendarPicker(scheduleDate)}
+                                    className="w-full bg-sidebar hover:bg-slate-900/90 border border-white/10 hover:border-primary/50 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-bold flex items-center justify-between transition-all group shadow-inner text-left"
+                                    title="Haz clic para abrir el selector de calendario"
+                                >
+                                    <div className="flex items-center gap-2 min-w-0">
+                                        <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
+                                            <Calendar size={15} />
                                         </div>
-                                        <span className="text-[11px] text-primary font-bold flex items-center gap-1 shrink-0 ml-2 group-hover:translate-x-0.5 transition-transform hidden sm:flex">
-                                            Elegir día <ChevronRight size={14} />
-                                        </span>
-                                    </button>
-
-                                    {/* Native fallback picker */}
-                                    <input
-                                        type="date"
-                                        value={scheduleDate}
-                                        onChange={e => setScheduleDate(e.target.value)}
-                                        className="w-10 h-10 p-0 bg-sidebar border border-white/10 rounded-xl text-center text-xs text-white cursor-pointer opacity-70 hover:opacity-100 shrink-0"
-                                        title="Selector nativo del navegador"
-                                        required
-                                    />
-                                </div>
+                                        <span className="truncate">{scheduleDate ? formatFullDateDisplay(scheduleDate) : 'Seleccionar fecha en calendario...'}</span>
+                                    </div>
+                                    <span className="text-[11px] text-primary font-bold flex items-center gap-1 shrink-0 ml-2 group-hover:translate-x-0.5 transition-transform">
+                                        Elegir día <ChevronRight size={14} />
+                                    </span>
+                                </button>
 
                                 {/* Quick Date Presets */}
                                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
