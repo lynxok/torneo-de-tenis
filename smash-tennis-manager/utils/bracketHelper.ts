@@ -149,10 +149,9 @@ export function calculateGroupStandings(groupMatches: Match[], players: Tourname
 
                 if (m.winner_id === m.player1_id || p1Sets > p2Sets) {
                     p1Stat.matchesWon += 1;
-                    p1Stat.points += 2;
+                    p1Stat.points += 1;
                 } else {
                     p1Stat.matchesLost += 1;
-                    p1Stat.points += 1;
                 }
             }
 
@@ -165,10 +164,9 @@ export function calculateGroupStandings(groupMatches: Match[], players: Tourname
 
                 if (m.winner_id === m.player2_id || p2Sets > p1Sets) {
                     p2Stat.matchesWon += 1;
-                    p2Stat.points += 2;
+                    p2Stat.points += 1;
                 } else {
                     p2Stat.matchesLost += 1;
-                    p2Stat.points += 1;
                 }
             }
         }
