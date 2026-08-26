@@ -3003,6 +3003,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     playoffRounds={playoffRounds}
                     championName={tournament.champion_name}
                     matches={matches}
+                    currentUser={user}
                 />
             )}
 

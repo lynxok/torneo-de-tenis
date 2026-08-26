@@ -1,9 +1,10 @@
 import React, { useRef, useState } from 'react';
-import { Tournament, Match } from '../types';
+import { Tournament, Match, UserProfile } from '../types';
 import { soundEffects } from '../services/soundEffects';
-import { X, Download, Share2, Sparkles, Trophy, Grid, Calendar, Image as ImageIcon } from 'lucide-react';
+import { X, Download, Share2, Sparkles, Trophy, Grid, Calendar, Image as ImageIcon, Check, Loader2 } from 'lucide-react';
 import { GroupZone, PlayoffRound } from '../utils/bracketHelper';
 import { getTournamentTier } from '../utils/tournamentTiers';
+import { api } from '../services/api';
 
 interface ShareGraphicModalProps {
   isOpen: boolean;
@@ -13,6 +14,7 @@ interface ShareGraphicModalProps {
   playoffRounds?: PlayoffRound[];
   championName?: string;
   matches?: Match[];
+  currentUser?: UserProfile;
 }
 
 export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
@@ -22,7 +24,8 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   zones = [],
   playoffRounds = [],
   championName,
-  matches = []
+  matches = [],
+  currentUser
 }) => {
   const [graphicType, setGraphicType] = useState<'playoffs' | 'standings' | 'order_of_play' | 'champion'>('standings');
   const [aspectRatio, setAspectRatio] = useState<'square' | 'story'>('story'); // 'square' (1:1) or 'story' (9:16)
@@ -30,11 +33,14 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   const [selectedZoneIndex, setSelectedZoneIndex] = useState<number | 'all'>('all');
   const [selectedRoundIndex, setSelectedRoundIndex] = useState<number | 'all'>('all');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isPublishingStory, setIsPublishingStory] = useState(false);
+  const [storyPublished, setStoryPublished] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   if (!isOpen) return null;
 
   const tier = getTournamentTier(tournament);
+  const isOrganizerOrAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
   const formatShortScore = (score: any) => {
     if (!score) return '';
@@ -72,95 +78,432 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     }
   };
 
+  const displayedZones = selectedZoneIndex === 'all' ? zones : [zones[selectedZoneIndex]].filter(Boolean);
+  const displayedRounds = selectedRoundIndex === 'all' ? playoffRounds : [playoffRounds[selectedRoundIndex]].filter(Boolean);
+
+  // Pure HTML5 Canvas rendering engine (guarantees no tainted canvas SecurityErrors)
+  const renderGraphicToCanvas = async (width: number, height: number): Promise<HTMLCanvasElement> => {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error("No se pudo iniciar el renderizado Canvas");
+
+    // 1. Background Gradient
+    const bg = ctx.createLinearGradient(0, 0, 0, height);
+    if (themeStyle === 'clay') {
+      bg.addColorStop(0, '#2c130b');
+      bg.addColorStop(0.5, '#1a0c07');
+      bg.addColorStop(1, '#0d0503');
+    } else if (themeStyle === 'grass') {
+      bg.addColorStop(0, '#071f12');
+      bg.addColorStop(0.5, '#05140b');
+      bg.addColorStop(1, '#020a06');
+    } else {
+      bg.addColorStop(0, '#0d131f');
+      bg.addColorStop(0.5, '#07090e');
+      bg.addColorStop(1, '#040508');
+    }
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, width, height);
+
+    // Outer glow border
+    ctx.strokeStyle = themeStyle === 'clay' ? 'rgba(249, 115, 22, 0.4)' : themeStyle === 'grass' ? 'rgba(16, 185, 129, 0.4)' : 'rgba(225, 91, 52, 0.4)';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(4, 4, width - 8, height - 8);
+
+    // 2. Preload Logo as local Image or stylized fallback
+    const padX = 60;
+    let curY = 80;
+
+    let logoLoaded = false;
+    try {
+      const logoImg = new Image();
+      logoImg.crossOrigin = "anonymous";
+      await new Promise((res, rej) => {
+        logoImg.onload = () => { logoLoaded = true; res(null); };
+        logoImg.onerror = () => res(null);
+        logoImg.src = "/Smash.png";
+      });
+
+      if (logoLoaded && logoImg.width > 0) {
+        // Watermark in background
+        ctx.save();
+        ctx.globalAlpha = 0.08;
+        const wmSize = width * 0.75;
+        ctx.drawImage(logoImg, width - wmSize * 0.75, height - wmSize * 0.75, wmSize, wmSize);
+        ctx.restore();
+
+        // Header logo
+        const lHeight = 70;
+        const lWidth = (logoImg.width / logoImg.height) * lHeight;
+        ctx.drawImage(logoImg, padX, curY, lWidth, lHeight);
+
+        // "OFICIAL" badge
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.beginPath();
+        ctx.roundRect(padX + lWidth + 18, curY + 15, 110, 38, 19);
+        ctx.fill();
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('OFICIAL', padX + lWidth + 73, curY + 40);
+      }
+    } catch (e) {
+      console.warn("Logo fallback:", e);
+    }
+
+    if (!logoLoaded) {
+      ctx.fillStyle = '#e15b34';
+      ctx.font = '900 42px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('SMASH TENIS', padX, curY + 50);
+    }
+
+    // Tier Badge
+    const tierWidth = 190;
+    ctx.fillStyle = themeStyle === 'clay' ? 'rgba(249, 115, 22, 0.2)' : themeStyle === 'grass' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(225, 91, 52, 0.2)';
+    ctx.strokeStyle = themeStyle === 'clay' ? '#f97316' : themeStyle === 'grass' ? '#10b981' : '#e15b34';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.roundRect(width - padX - tierWidth, curY + 10, tierWidth, 48, 24);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(tier.label, width - padX - (tierWidth / 2), curY + 42);
+
+    curY += 100;
+
+    // Header Divider
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padX, curY);
+    ctx.lineTo(width - padX, curY);
+    ctx.stroke();
+
+    curY += 45;
+
+    // Tournament Name
+    ctx.fillStyle = '#ffffff';
+    ctx.font = '900 44px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(tournament.name.toUpperCase(), padX, curY);
+
+    curY += 36;
+
+    // Subtitle (Club & Category)
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '600 24px sans-serif';
+    const clubText = `📍 ${tournament.institutions?.name || 'Club'} • ${tournament.category} ${tournament.gender || 'Caballeros'}`;
+    ctx.fillText(clubText, padX, curY);
+
+    curY += 55;
+
+    // 4. Main Body Content
+    if (graphicType === 'champion') {
+      const centerY = curY + 300;
+      ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 6;
+      ctx.beginPath();
+      ctx.arc(width / 2, centerY - 100, 90, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      ctx.font = '90px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('🏆', width / 2, centerY - 65);
+
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = '900 24px sans-serif';
+      ctx.fillText('CAMPEÓN DEL TORNEO', width / 2, centerY + 30);
+
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '900 52px sans-serif';
+      const cName = championName || tournament.champion_name || 'Por Definir';
+      ctx.fillText(cName, width / 2, centerY + 100);
+
+      ctx.fillStyle = 'rgba(253, 230, 138, 0.8)';
+      ctx.font = 'bold 28px sans-serif';
+      ctx.fillText(`+${tier.pointsWinner} Pts para el Ranking Oficial`, width / 2, centerY + 155);
+    } 
+    else if (graphicType === 'standings') {
+      ctx.fillStyle = themeStyle === 'clay' ? '#fb923c' : themeStyle === 'grass' ? '#34d399' : '#f97316';
+      ctx.font = '900 22px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('📊 TABLA DE POSICIONES', padX, curY);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.textAlign = 'right';
+      const subLabel = selectedZoneIndex === 'all' ? `TODAS LAS ZONAS (${zones.length})` : zones[selectedZoneIndex]?.groupName || '';
+      ctx.fillText(subLabel, width - padX, curY);
+
+      curY += 30;
+
+      const renderZones = displayedZones;
+      const isMultiCol = renderZones.length > 2;
+
+      if (isMultiCol) {
+        const colW = (width - padX * 2 - 30) / 2;
+        const cardH = 260;
+
+        renderZones.forEach((z, i) => {
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          const zX = padX + col * (colW + 30);
+          const zY = curY + row * (cardH + 20);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(zX, zY, colW, cardH, 16);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#fdba74';
+          ctx.font = '900 22px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(z.groupName?.toUpperCase() || `ZONA ${i + 1}`, zX + 20, zY + 38);
+
+          (z.players || []).slice(0, 4).forEach((p, pIdx) => {
+            const rowY = zY + 80 + pIdx * 46;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 20px sans-serif';
+            ctx.textAlign = 'left';
+            const pName = `${pIdx + 1}. ${p.playerName || 'Jugador'}`;
+            ctx.fillText(pName, zX + 20, rowY);
+
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'right';
+            const stats = `${p.matchesWon || 0}G - ${p.matchesLost || 0}P`;
+            ctx.fillText(stats, zX + colW - 20, rowY);
+          });
+        });
+      } else {
+        const cardW = width - padX * 2;
+        renderZones.forEach((z, i) => {
+          const cardH = 80 + (z.players?.length || 3) * 55;
+          const zY = curY;
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(padX, zY, cardW, cardH, 20);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#fdba74';
+          ctx.font = '900 26px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText(z.groupName?.toUpperCase() || `ZONA ${i + 1}`, padX + 25, zY + 45);
+
+          (z.players || []).forEach((p, pIdx) => {
+            const rowY = zY + 100 + pIdx * 55;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 24px sans-serif';
+            ctx.textAlign = 'left';
+            ctx.fillText(`${pIdx + 1}. ${p.playerName || 'Jugador'}`, padX + 25, rowY);
+
+            ctx.fillStyle = '#38bdf8';
+            ctx.font = 'bold 22px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(`${p.matchesWon || 0}G - ${p.matchesLost || 0}P (${p.points || 0} pts)`, padX + cardW - 25, rowY);
+          });
+
+          curY += cardH + 25;
+        });
+      }
+    }
+    else if (graphicType === 'playoffs') {
+      ctx.fillStyle = '#f97316';
+      ctx.font = '900 22px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('🏆 CUADRO DE PLAYOFFS', padX, curY);
+
+      ctx.fillStyle = '#64748b';
+      ctx.font = 'bold 20px sans-serif';
+      ctx.textAlign = 'right';
+      const subLabel = selectedRoundIndex === 'all' ? `LLAVES (${playoffRounds.length} RONDAS)` : playoffRounds[selectedRoundIndex]?.name || '';
+      ctx.fillText(subLabel, width - padX, curY);
+
+      curY += 30;
+
+      const renderRounds = displayedRounds;
+      renderRounds.forEach((r) => {
+        ctx.fillStyle = '#fdba74';
+        ctx.font = '900 22px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`🏆 ${r.name.toUpperCase()}`, padX, curY + 25);
+        curY += 40;
+
+        const mCount = (r.matches || []).length;
+        const isMulti = mCount > 2;
+        const cardW = isMulti ? (width - padX * 2 - 30) / 2 : width - padX * 2;
+        const cardH = 140;
+
+        (r.matches || []).forEach((m, mIdx) => {
+          const col = isMulti ? mIdx % 2 : 0;
+          const row = isMulti ? Math.floor(mIdx / 2) : mIdx;
+          const mX = padX + col * (cardW + 30);
+          const mY = curY + row * (cardH + 16);
+
+          const isP1Win = m.winner_id && m.winner_id === m.player1_id;
+          const isP2Win = m.winner_id && m.winner_id === m.player2_id;
+          const sc = formatShortScore(m.score);
+
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.roundRect(mX, mY, cardW, cardH, 16);
+          ctx.fill();
+          ctx.stroke();
+
+          // Player 1
+          ctx.fillStyle = isP1Win ? '#f97316' : '#ffffff';
+          ctx.font = isP1Win ? '900 20px sans-serif' : 'bold 20px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText((isP1Win ? '▶ ' : '') + (m.player1_name || 'Por Definir'), mX + 16, mY + 36);
+
+          if (isP1Win && sc) {
+            ctx.fillStyle = '#f97316';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('GANADOR', mX + cardW - 16, mY + 36);
+          }
+
+          // Player 2
+          ctx.fillStyle = isP2Win ? '#f97316' : '#ffffff';
+          ctx.font = isP2Win ? '900 20px sans-serif' : 'bold 20px sans-serif';
+          ctx.textAlign = 'left';
+          ctx.fillText((isP2Win ? '▶ ' : '') + (m.player2_name || 'Por Definir'), mX + 16, mY + 76);
+
+          if (isP2Win && sc) {
+            ctx.fillStyle = '#f97316';
+            ctx.font = 'bold 16px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('GANADOR', mX + cardW - 16, mY + 76);
+          }
+
+          // Score footer
+          if (m.is_played && sc) {
+            ctx.fillStyle = '#fde047';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(`Marcador: ${sc}`, mX + cardW - 16, mY + 118);
+          } else if (m.scheduled_at) {
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = 'bold 18px sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText(`📅 ${m.scheduled_at.slice(11, 16)} hs`, mX + cardW - 16, mY + 118);
+          }
+        });
+
+        curY += Math.ceil(mCount / (isMulti ? 2 : 1)) * (cardH + 16) + 20;
+      });
+    }
+    else if (graphicType === 'order_of_play') {
+      ctx.fillStyle = '#f97316';
+      ctx.font = '900 22px sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText('📅 ORDEN DE JUEGO OFICIAL', padX, curY);
+      curY += 40;
+
+      const cardW = width - padX * 2;
+      (matches || []).slice(0, 6).forEach((m, idx) => {
+        const mY = curY + idx * 80;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.roundRect(padX, mY, cardW, 66, 14);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 22px sans-serif';
+        ctx.textAlign = 'left';
+        ctx.fillText(`${m.player1_name || 'Jugador 1'}  vs  ${m.player2_name || 'Jugador 2'}`, padX + 20, mY + 42);
+
+        ctx.fillStyle = '#38bdf8';
+        ctx.font = 'bold 20px sans-serif';
+        ctx.textAlign = 'right';
+        const timeStr = m.scheduled_at ? `${m.scheduled_at.slice(11, 16)} hs` : 'A confirmar';
+        ctx.fillText(timeStr, padX + cardW - 20, mY + 42);
+      });
+    }
+
+    // 5. Footer
+    const footY = height - 70;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(padX, footY);
+    ctx.lineTo(width - padX, footY);
+    ctx.stroke();
+
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('smashtenis.lnx.com.ar', padX, footY + 40);
+
+    ctx.fillStyle = '#f97316';
+    ctx.font = '900 24px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('#SmashTenis', width - padX, footY + 40);
+
+    return canvas;
+  };
+
   const handleDownloadPng = async () => {
     soundEffects.playTennisHit();
     setIsGenerating(true);
     try {
-      const element = previewRef.current;
-      if (!element) return;
+      const width = 1080;
+      const height = aspectRatio === 'story' ? 1920 : 1080;
+      const canvas = await renderGraphicToCanvas(width, height);
 
-      // Clone element to convert images to Base64 data URLs for pristine SVG rendering
-      const clone = element.cloneNode(true) as HTMLElement;
-      const images = clone.querySelectorAll('img');
-      for (const img of Array.from(images)) {
-        if (img.src && !img.src.startsWith('data:')) {
-          try {
-            const res = await fetch(img.src);
-            const blob = await res.blob();
-            await new Promise((resolve) => {
-              const reader = new FileReader();
-              reader.onloadend = () => {
-                img.src = reader.result as string;
-                resolve(null);
-              };
-              reader.readAsDataURL(blob);
-            });
-          } catch (e) {
-            console.warn('Could not inline image for SVG render:', e);
-          }
-        }
-      }
-
-      const canvas = document.createElement('canvas');
-      const rect = element.getBoundingClientRect();
-      const scale = 2; // High DPI
-
-      canvas.width = rect.width * scale;
-      canvas.height = rect.height * scale;
-      const ctx = canvas.getContext('2d');
-
-      if (ctx) {
-        ctx.scale(scale, scale);
-        
-        // Draw background gradient
-        const bgGrad = ctx.createLinearGradient(0, 0, rect.width, rect.height);
-        if (themeStyle === 'clay') {
-          bgGrad.addColorStop(0, '#2c130b');
-          bgGrad.addColorStop(1, '#0d0503');
-        } else if (themeStyle === 'grass') {
-          bgGrad.addColorStop(0, '#071f12');
-          bgGrad.addColorStop(1, '#020a06');
-        } else {
-          bgGrad.addColorStop(0, '#0d131f');
-          bgGrad.addColorStop(1, '#040508');
-        }
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, rect.width, rect.height);
-
-        // Convert HTML element to SVG foreignObject
-        const data = new XMLSerializer().serializeToString(clone);
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${data}</div></foreignObject></svg>`;
-        
-        const img = new Image();
-        const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-        const URLObj = window.URL || window.webkitURL || window;
-        const blobURL = URLObj.createObjectURL(svgBlob);
-
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          URLObj.revokeObjectURL(blobURL);
-
-          const link = document.createElement('a');
-          link.download = `SmashTenis-${tournament.name.replace(/\s+/g, '_')}-${graphicType}.png`;
-          link.href = canvas.toDataURL('image/png', 1.0);
-          link.click();
-          setIsGenerating(false);
-          soundEffects.playBookingSuccess();
-        };
-
-        img.onerror = () => {
-          const link = document.createElement('a');
-          link.download = `SmashTenis-${tournament.name.replace(/\s+/g, '_')}.png`;
-          link.href = canvas.toDataURL('image/png', 1.0);
-          link.click();
-          setIsGenerating(false);
-        };
-
-        img.src = blobURL;
-      }
-    } catch (e) {
+      const link = document.createElement('a');
+      link.download = `SmashTenis-${tournament.name.replace(/\s+/g, '_')}-${graphicType}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+      soundEffects.playBookingSuccess();
+    } catch (e: any) {
       console.error('Error generating graphic:', e);
+      alert('Error al generar la imagen: ' + (e.message || 'Intente nuevamente'));
+    } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handlePublishStory = async () => {
+    if (!currentUser?.id) return;
+    soundEffects.playScoreBeep();
+    setIsPublishingStory(true);
+    try {
+      // 1080x1920 is standard Instagram/App Story format
+      const canvas = await renderGraphicToCanvas(1080, 1920);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.94));
+      if (!blob) throw new Error("No se pudo procesar la imagen de la historia");
+
+      const file = new File([blob], `story_${tournament.id}_${graphicType}_${Date.now()}.jpg`, { type: 'image/jpeg' });
+      await api.stories.createStory(file, [], currentUser.id);
+
+      soundEffects.playBookingSuccess();
+      setStoryPublished(true);
+      setTimeout(() => setStoryPublished(false), 4000);
+    } catch (err: any) {
+      console.error("Error publishing story:", err);
+      alert("Error al publicar historia: " + (err.message || 'Intente nuevamente'));
+    } finally {
+      setIsPublishingStory(false);
     }
   };
 
@@ -215,9 +558,6 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     window.open(url, '_blank');
   };
 
-  const displayedZones = selectedZoneIndex === 'all' ? zones : [zones[selectedZoneIndex]].filter(Boolean);
-  const displayedRounds = selectedRoundIndex === 'all' ? playoffRounds : [playoffRounds[selectedRoundIndex]].filter(Boolean);
-
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
       <div className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden">
@@ -232,7 +572,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
               <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                 Generador de Placas Oficiales
               </h2>
-              <p className="text-xs text-muted">Descargá imágenes listas para Instagram Stories, Feed y WhatsApp con logo oficial</p>
+              <p className="text-xs text-muted">Descargá imágenes listas para Instagram Stories, Feed, Historias Smash y WhatsApp</p>
             </div>
           </div>
           <button onClick={onClose} className="text-muted hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors">
@@ -425,6 +765,36 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 <Download size={18} />
                 {isGenerating ? 'Generando PNG...' : 'Descargar Imagen (PNG)'}
               </button>
+
+              {/* Publish to Smash Stories (Admin & SuperAdmin only) */}
+              {isOrganizerOrAdmin && (
+                <button
+                  onClick={handlePublishStory}
+                  disabled={isPublishingStory || storyPublished}
+                  className={`w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl font-bold transition-all border text-xs ${
+                    storyPublished 
+                      ? 'bg-green-600/30 border-green-500/50 text-green-300'
+                      : 'bg-lime-500/20 hover:bg-lime-500/30 border-lime-500/40 text-lime-300 active:scale-[0.98]'
+                  }`}
+                >
+                  {isPublishingStory ? (
+                    <>
+                      <Loader2 size={16} className="animate-spin" />
+                      Publicando en Historias...
+                    </>
+                  ) : storyPublished ? (
+                    <>
+                      <Check size={16} className="text-green-400" />
+                      ¡Publicado en Historias de Smash!
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles size={16} className="text-lime-400" />
+                      ⭐ Publicar en Historias de Smash
+                    </>
+                  )}
+                </button>
+              )}
 
               <button
                 onClick={handleShareWhatsApp}
