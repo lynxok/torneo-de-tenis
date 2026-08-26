@@ -3008,17 +3008,27 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* PRINTABLE CONTROL SHEET (A4 - Only visible during print) */}
             <div id="print-control-sheet" className="hidden print:block fixed inset-0 bg-white text-black p-6 font-sans z-[99999] overflow-visible">
-                <div className="border-b-2 border-black pb-4 mb-4 flex justify-between items-end">
-                    <div>
-                        <div className="text-xs font-bold tracking-widest text-slate-600 uppercase">SMASH TENNIS MANAGER • PLANILLA OFICIAL DE MESA DE CONTROL</div>
-                        <h1 className="text-2xl font-black text-black uppercase mt-1">{tournament.name}</h1>
-                        <p className="text-sm text-slate-700">
+                <div className="border-b-2 border-black pb-3 mb-4 flex justify-between items-start">
+                    <div className="space-y-1">
+                        <div className="text-[10px] font-black tracking-widest text-slate-700 uppercase">
+                            SMASH TENNIS MANAGER • PLANILLA OFICIAL DE MESA DE CONTROL
+                        </div>
+                        <h1 className="text-2xl font-black text-black uppercase tracking-tight">{tournament.name}</h1>
+                        <p className="text-xs text-slate-800">
                             <strong>Sede / Club:</strong> {tournament.institutions?.name || 'Club'} • <strong>Categoría:</strong> {tournament.category} ({tournament.gender || 'Caballeros'}) • <strong>Modalidad:</strong> {tournament.type === 'doubles' ? 'Dobles' : 'Singles'}
                         </p>
                     </div>
-                    <div className="text-right text-xs">
-                        <div><strong>Fecha de Emisión:</strong> {new Date().toLocaleDateString('es-AR')}</div>
-                        <div><strong>Total Inscriptos:</strong> {players.length}</div>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                        <img
+                            src="/Smash.png"
+                            alt="Smash Tenis"
+                            className="h-10 w-auto object-contain"
+                            crossOrigin="anonymous"
+                        />
+                        <div className="text-right text-[10px] text-slate-700 font-semibold">
+                            <div><strong>Fecha de Emisión:</strong> {new Date().toLocaleDateString('es-AR')}</div>
+                            <div><strong>Total Inscriptos:</strong> {players.length}</div>
+                        </div>
                     </div>
                 </div>
 
@@ -3030,17 +3040,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     <table className="w-full text-xs border-collapse border border-black">
                         <thead>
                             <tr className="bg-slate-100 text-center font-bold">
-                                <th className="border border-black p-1.5 w-10">#</th>
+                                <th className="border border-black p-1.5 w-8">#</th>
                                 <th className="border border-black p-1.5 w-24">Fase / Zona</th>
-                                <th className="border border-black p-1.5 w-20">Horario</th>
-                                <th className="border border-black p-1.5 w-20">Cancha</th>
+                                <th className="border border-black p-1.5 w-16">Horario</th>
+                                <th className="border border-black p-1.5 w-16">Cancha</th>
                                 <th className="border border-black p-1.5 text-left pl-2">Jugador / Pareja 1</th>
                                 <th className="border border-black p-1.5 text-left pl-2">Jugador / Pareja 2</th>
                                 <th className="border border-black p-1.5 w-14">Set 1</th>
                                 <th className="border border-black p-1.5 w-14">Set 2</th>
                                 <th className="border border-black p-1.5 w-14">STB</th>
                                 <th className="border border-black p-1.5 w-28">Ganador</th>
-                                <th className="border border-black p-1.5 w-24">Firma</th>
+                                <th className="border border-black p-1.5 w-20">Firma</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -3049,21 +3059,41 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     <td colSpan={11} className="border border-black p-4 text-center italic">Sin partidos generados</td>
                                 </tr>
                             ) : (
-                                matches.map((m, idx) => (
-                                    <tr key={idx} className="text-center h-8">
-                                        <td className="border border-black p-1 font-bold">{idx + 1}</td>
-                                        <td className="border border-black p-1 font-semibold">{m.round || (m.group_number ? `Zona ${m.group_number}` : 'Fase Previa')}</td>
-                                        <td className="border border-black p-1">{m.scheduled_at ? m.scheduled_at.slice(11, 16) + ' hs' : '___:___'}</td>
-                                        <td className="border border-black p-1">Cancha ___</td>
-                                        <td className="border border-black p-1 text-left pl-2 font-bold truncate max-w-[160px]">{m.player1_name || 'Jugador 1'}</td>
-                                        <td className="border border-black p-1 text-left pl-2 font-bold truncate max-w-[160px]">{m.player2_name || 'Jugador 2'}</td>
-                                        <td className="border border-black p-1"></td>
-                                        <td className="border border-black p-1"></td>
-                                        <td className="border border-black p-1"></td>
-                                        <td className="border border-black p-1 font-semibold">{m.winner_name || ''}</td>
-                                        <td className="border border-black p-1"></td>
-                                    </tr>
-                                ))
+                                matches.map((m, idx) => {
+                                    const isDoubles = tournament.type === 'doubles';
+                                    const p1Name = isDoubles ? (m.team1_name || formatPlayerName(m.player1_name)) : formatPlayerName(m.player1_name) || 'Jugador 1';
+                                    const p2Name = isDoubles ? (m.team2_name || formatPlayerName(m.player2_name)) : formatPlayerName(m.player2_name) || 'Jugador 2';
+                                    
+                                    let s1 = '', s2 = '', s3 = '';
+                                    if (m.score && typeof m.score === 'object') {
+                                        s1 = m.score.set1 || '';
+                                        s2 = m.score.set2 || '';
+                                        s3 = m.score.set3 || m.score.stb || '';
+                                    } else if (typeof m.score === 'string' && m.score.trim()) {
+                                        const parts = m.score.trim().split(/\s+/);
+                                        s1 = parts[0] || '';
+                                        s2 = parts[1] || '';
+                                        s3 = parts[2] || '';
+                                    }
+
+                                    const winnerDisplayName = m.winner_name || (m.winner_id ? (m.winner_id === m.player1_id ? p1Name : p2Name) : '');
+
+                                    return (
+                                        <tr key={idx} className="text-center h-8">
+                                            <td className="border border-black p-1 font-bold">{idx + 1}</td>
+                                            <td className="border border-black p-1 font-semibold">{m.round || (m.group_number ? `Zona ${m.group_number}` : 'Fase Previa')}</td>
+                                            <td className="border border-black p-1">{m.scheduled_at ? m.scheduled_at.slice(11, 16) + ' hs' : '___:___'}</td>
+                                            <td className="border border-black p-1">Cancha ___</td>
+                                            <td className="border border-black p-1 text-left pl-2 font-bold truncate max-w-[160px]">{p1Name}</td>
+                                            <td className="border border-black p-1 text-left pl-2 font-bold truncate max-w-[160px]">{p2Name}</td>
+                                            <td className="border border-black p-1 font-mono font-bold">{m.is_played ? s1 : ''}</td>
+                                            <td className="border border-black p-1 font-mono font-bold">{m.is_played ? s2 : ''}</td>
+                                            <td className="border border-black p-1 font-mono font-bold">{m.is_played ? s3 : ''}</td>
+                                            <td className="border border-black p-1 font-bold text-slate-900">{winnerDisplayName}</td>
+                                            <td className="border border-black p-1"></td>
+                                        </tr>
+                                    );
+                                })
                             )}
                         </tbody>
                     </table>
