@@ -33,15 +33,15 @@ export const VersionUpdatePrompt: React.FC = () => {
   };
 
   useEffect(() => {
-    // 1. Initial check after 3 seconds
+    // 1. Immediate initial check after 400ms
     const initialTimer = setTimeout(() => {
       checkRemoteVersion();
-    }, 3000);
+    }, 400);
 
-    // 2. Periodic check every 4 minutes
+    // 2. Periodic check every 20 seconds (fast update detection)
     const interval = setInterval(() => {
       checkRemoteVersion();
-    }, 4 * 60 * 1000);
+    }, 20 * 1000);
 
     // 3. Check whenever the user returns to the app / tab (crucial for mobile phones)
     const handleVisibilityChange = () => {
@@ -91,8 +91,8 @@ export const VersionUpdatePrompt: React.FC = () => {
         await Promise.all(cacheKeys.map(key => caches.delete(key)));
       }
 
-      // 3. Force clean reload
-      window.location.reload();
+      // 3. Force clean reload with cache-busting timestamp
+      window.location.href = window.location.origin + window.location.pathname + '?v=' + Date.now();
     } catch (err) {
       console.error("Error applying update:", err);
       window.location.reload();
