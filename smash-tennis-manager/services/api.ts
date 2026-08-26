@@ -352,24 +352,21 @@ export const api = {
         },
         async updateUserPassword(userId: string, newPassword: string) {
             // Note: client-side supabase.auth.updateUser updates the CURRENT LOGGED IN USER password.
-            // To update ANOTHER user password from Super Admin, we update using RPC or Auth API if available, 
-            // or if it's the current user, update using updateUser.
+            // To update ANOTHER user password from Super Admin, we update using backend RPC admin_update_user_password.
             const { data: { user } } = await supabase.auth.getUser();
             if (user?.id === userId) {
                 const { data, error } = await supabase.auth.updateUser({ password: newPassword });
                 if (error) throw error;
                 return data;
             } else {
-                // For editing OTHER users as Super Admin: update user via Supabase RPC or auth metadata
+                // For editing OTHER users as Super Admin: update user via Supabase RPC with security definer
                 const { data, error } = await supabase.rpc('admin_update_user_password', {
                     target_user_id: userId,
                     new_password: newPassword
                 });
                 if (error) {
-                    // Fallback attempt if RPC is missing
-                    const { data: fallbackData, error: fallbackError } = await supabase.auth.updateUser({ password: newPassword });
-                    if (fallbackError) throw fallbackError;
-                    return fallbackData;
+                    console.error("Error updating user password via admin RPC:", error);
+                    throw new Error(error.message || 'Error al actualizar la contraseña del usuario.');
                 }
                 return data;
             }
