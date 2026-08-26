@@ -1858,8 +1858,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                 </span>
                                                                             )}
 
-                                                                            {/* Schedule Button for Admin (Solo si el partido NO fue jugado aún) */}
-                                                                            {isClubAdmin && !m.is_played && !m.winner_id && (
+                                                                            {/* Schedule Button for Admin or Assigned Players (Solo si el partido NO fue jugado aún) */}
+                                                                            {(isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
                                                                                 <button
                                                                                     onClick={() => openScheduleModal(m)}
                                                                                     className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
@@ -2266,8 +2266,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
 
                                                                         <div className="flex items-center gap-1">
-                                                                            {/* Schedule Button for Admin (Solo si el partido NO fue jugado aún) */}
-                                                                            {isClubAdmin && !m.is_played && !m.winner_id && (
+                                                                            {/* Schedule Button for Admin or Assigned Players (Solo si el partido NO fue jugado aún) */}
+                                                                            {(isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
                                                                                 <button
                                                                                     onClick={() => openScheduleModal(m)}
                                                                                     className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
@@ -2522,8 +2522,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             </button>
                                                         )}
 
-                                                        {/* Schedule Button for Admin (Solo si el partido NO fue jugado aún) */}
-                                                        {isClubAdmin && !m.is_played && !m.winner_id && (
+                                                        {/* Schedule Button for Admin or Assigned Players (Solo si el partido NO fue jugado aún) */}
+                                                        {(isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
                                                             <button
                                                                 onClick={() => openScheduleModal(m)}
                                                                 className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 ${
