@@ -92,7 +92,7 @@ export const VersionUpdatePrompt: React.FC = () => {
       }
 
       // 3. Force clean reload with cache-busting timestamp
-      window.location.href = window.location.origin + window.location.pathname + '?v=' + Date.now();
+      window.location.href = window.location.origin + window.location.pathname + '?_t=' + Date.now();
     } catch (err) {
       console.error("Error applying update:", err);
       window.location.reload();

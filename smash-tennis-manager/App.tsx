@@ -50,6 +50,22 @@ const AdminUsers = lazyRetry(() => import('./pages/AdminUsers').then(m => ({ def
 const AdminInstitutions = lazyRetry(() => import('./pages/AdminInstitutions').then(m => ({ default: m.AdminInstitutions })), 'AdminInstitutions');
 const AdminSettings = lazyRetry(() => import('./pages/AdminSettings').then(m => ({ default: m.AdminSettings })), 'AdminSettings');
 
+export const VALID_VIEWS = [
+  'dashboard',
+  'tournaments',
+  'tournament-detail',
+  'profile',
+  'rankings',
+  'players',
+  'bookings',
+  'messages',
+  'reports',
+  'admin-users',
+  'admin-institutions',
+  'admin-settings',
+  'tutorials'
+];
+
 const AppContent = () => {
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
@@ -106,7 +122,7 @@ const AppContent = () => {
     const params = new URLSearchParams(window.location.search);
     const tournamentId = params.get('tournament') || params.get('t');
     const clubId = params.get('club') || params.get('institution') || params.get('c');
-    const viewParam = params.get('view') || params.get('v');
+    const viewParam = params.get('view');
 
     if (tournamentId) {
       setActiveView('tournament-detail');
@@ -114,8 +130,10 @@ const AppContent = () => {
     } else if (clubId) {
       setActiveView('bookings');
       setNavData({ clubId });
-    } else if (viewParam) {
+    } else if (viewParam && VALID_VIEWS.includes(viewParam)) {
       setActiveView(viewParam);
+    } else {
+      setActiveView(prev => VALID_VIEWS.includes(prev) ? prev : 'dashboard');
     }
   };
 
@@ -314,7 +332,11 @@ const AppContent = () => {
             <button className="md:hidden text-muted" onClick={() => setMobileMenuOpen(true)}>
               <Menu size={24} />
             </button>
-            <h2 className="font-bold text-lg text-white capitalize">{activeView.replace('-', ' ').replace('detail', 'detalle')}</h2>
+            <h2 className="font-bold text-lg text-white capitalize">
+              {VALID_VIEWS.includes(activeView as any) 
+                ? activeView.replace('-', ' ').replace('detail', 'detalle') 
+                : 'Panel General'}
+            </h2>
           </div>
           <div className="flex items-center gap-4">
             {simulatedRole && (
@@ -383,6 +405,11 @@ const AppContent = () => {
                   user={effectiveUser}
                   onStartTutorial={handleStartTutorial}
                 />
+              )}
+
+              {/* Default Fallback for unmatched/unknown activeView */}
+              {!VALID_VIEWS.includes(activeView as any) && (
+                <Dashboard user={effectiveUser} onNavigate={handleNavigate} />
               )}
             </Suspense>
           </div>
