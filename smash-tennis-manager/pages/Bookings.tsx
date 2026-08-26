@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { Booking, UserProfile, Institution, BookingParticipant } from '../types';
+import { Booking, UserProfile, Institution, BookingParticipant, WaitlistEntry } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { formatPlayerName } from '../utils/formatters';
+import { soundEffects } from '../services/soundEffects';
 import { 
     Calendar, Clock, MapPin, X, Loader2, CheckCircle2, DollarSign, Lock, ChevronLeft, ChevronRight, 
     Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
     ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, 
-    Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning, Users, Check
+    Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning, Users, Check, Flame
 } from 'lucide-react';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
@@ -1056,6 +1057,54 @@ const PlayerNewBookingModal = ({
                                 </div>
                             )}
 
+                            {/* Extra Options */}
+                            {selectedInst && (
+                                <div className="space-y-2 bg-white/5 p-3.5 rounded-xl border border-white/10">
+                                    <label className="text-xs text-muted uppercase font-bold flex items-center gap-1.5">
+                                        <Sparkles size={14} className="text-primary" /> Adicionales Opcionales
+                                    </label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        <label className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                                            extras.balls ? 'bg-primary/20 border-primary text-white' : 'bg-sidebar border-white/10 text-muted hover:border-white/20'
+                                        }`}>
+                                            <span className="flex items-center gap-2">
+                                                🎾 Tubo de Pelotas Nuevas
+                                            </span>
+                                            <input 
+                                                type="checkbox"
+                                                checked={extras.balls}
+                                                onChange={e => {
+                                                    soundEffects.playScoreBeep();
+                                                    setExtras(prev => ({ ...prev, balls: e.target.checked }));
+                                                }}
+                                                className="accent-primary w-4 h-4 rounded cursor-pointer"
+                                            />
+                                        </label>
+
+                                        <label className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                                            (extras.rackets || 0) > 0 ? 'bg-primary/20 border-primary text-white' : 'bg-sidebar border-white/10 text-muted hover:border-white/20'
+                                        }`}>
+                                            <span className="flex items-center gap-2">
+                                                🏸 Alquiler de Raquetas
+                                            </span>
+                                            <select
+                                                value={extras.rackets || 0}
+                                                onChange={e => {
+                                                    soundEffects.playScoreBeep();
+                                                    setExtras(prev => ({ ...prev, rackets: Number(e.target.value) }));
+                                                }}
+                                                className="bg-card border border-white/20 rounded px-1.5 py-0.5 text-xs text-white outline-none"
+                                            >
+                                                <option value={0}>0</option>
+                                                <option value={1}>1 ($1500)</option>
+                                                <option value={2}>2 ($3000)</option>
+                                                <option value={4}>4 ($6000)</option>
+                                            </select>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+
                             <div>
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
@@ -1065,10 +1114,37 @@ const PlayerNewBookingModal = ({
                                 {loadingSlots ? (
                                     <div className="py-8 text-center text-muted"><Loader2 className="animate-spin mx-auto mb-2 text-primary" /> Buscando canchas disponibles...</div>
                                 ) : slots.length === 0 ? (
-                                    <div className="py-8 text-center text-muted border border-dashed border-white/10 rounded-xl flex flex-col items-center gap-2">
+                                    <div className="py-6 px-4 text-center border border-dashed border-white/10 rounded-xl flex flex-col items-center gap-3 bg-white/5">
                                         <Calendar size={24} className="opacity-50 text-primary" />
-                                        <p className="font-bold text-white">No hay horarios disponibles en esta fecha.</p>
-                                        <p className="text-xs text-muted">Prueba cambiando de día con las flechas superiores.</p>
+                                        <div>
+                                            <p className="font-bold text-white text-sm">No hay horarios disponibles en esta fecha.</p>
+                                            <p className="text-xs text-muted mt-0.5">¿Deseas que te avisemos de inmediato si se libera una cancha?</p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                if (!selectedInstId || !date) return;
+                                                soundEffects.playTennisHit();
+                                                try {
+                                                    await api.bookings.addToWaitlist({
+                                                        institution_id: selectedInstId,
+                                                        date: date,
+                                                        start_time: '18:00',
+                                                        court_name: 'Cualquier Cancha',
+                                                        user_id: user.id,
+                                                        user_name: formatPlayerName(user.name, user.lastname),
+                                                        user_phone: user.phone
+                                                    });
+                                                    soundEffects.playBookingSuccess();
+                                                    addToast('¡Te anotaste en la Lista de Espera! Te notificaremos al buzón si se libera un turno.', 'success');
+                                                } catch (e: any) {
+                                                    addToast('Error al sumarte a la lista de espera: ' + e.message, 'error');
+                                                }
+                                            }}
+                                            className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-200 rounded-xl text-xs font-bold hover:brightness-110 flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10"
+                                        >
+                                            <Flame size={14} className="text-amber-400" /> Anotarme en Lista de Espera
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
@@ -1240,14 +1316,18 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
         if (!institution) return;
         try {
             setWeatherActionLoading(true);
+            soundEffects.playTennisHit();
             const startTimeParam = weatherCancelScope === 'from_time' ? weatherStartTime : undefined;
+            const adminName = formatPlayerName(user.name, user.lastname) || 'Administración';
             const cancelled = await api.bookings.bulkCancelByWeather(
                 institution.id,
                 selectedDate,
                 startTimeParam,
-                weatherReason
+                weatherReason,
+                adminName
             );
-            addToast(`Se suspendieron y cancelaron ${cancelled.length} reservas por mal tiempo.`, 'success');
+            soundEffects.playBookingSuccess();
+            addToast(`Se suspendieron y cancelaron ${cancelled.length} reservas por mal tiempo y se notificó a los jugadores.`, 'success');
             setShowWeatherModal(false);
             loadBookingsResult();
         } catch (e: any) {

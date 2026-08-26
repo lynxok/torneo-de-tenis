@@ -1944,13 +1944,10 @@ export const api = {
             }
             return true;
         },
-        async bulkCancelByWeather(institutionId: string, date: string, startTime?: string, reason?: string) {
+        async bulkCancelByWeather(institutionId: string, date: string, startTime?: string, reason?: string, adminName: string = 'Administración del Club') {
             let query = supabase
                 .from('bookings')
-                .update({ 
-                    status: 'cancelled',
-                    title: reason ? `[Cancelado por clima] ${reason}` : '[Cancelado por clima] Lluvia / Mal tiempo'
-                })
+                .select('*')
                 .eq('institution_id', institutionId)
                 .eq('date', date)
                 .neq('status', 'cancelled');
@@ -1959,9 +1956,172 @@ export const api = {
                 query = query.gte('start_time', startTime);
             }
 
-            const { data, error } = await query.select();
-            if (error) throw error;
-            return data || [];
+            const { data: bookingsToCancel, error: fetchErr } = await query;
+            if (fetchErr) throw fetchErr;
+
+            const list = (bookingsToCancel || []) as Booking[];
+            if (list.length === 0) return [];
+
+            const ids = list.map(b => b.id);
+            const cancellationTitle = reason ? `[Suspendido Clima] ${reason}` : '[Suspendido Clima] Lluvia / Mal Tiempo';
+
+            const { data: updated, error: updateErr } = await supabase
+                .from('bookings')
+                .update({
+                    status: 'cancelled',
+                    title: cancellationTitle,
+                    cancellation_reason: 'weather'
+                })
+                .in('id', ids)
+                .select();
+
+            if (updateErr) {
+                // Fallback without cancellation_reason column if not yet migrated
+                await supabase
+                    .from('bookings')
+                    .update({ status: 'cancelled', title: cancellationTitle })
+                    .in('id', ids);
+            }
+
+            // Dispatch in-app notifications to all affected users
+            for (const b of list) {
+                const recipients = new Set<string>();
+                if (b.user_id) recipients.add(b.user_id);
+                if (b.participants && Array.isArray(b.participants)) {
+                    b.participants.forEach(p => {
+                        if (p.user_id) recipients.add(p.user_id);
+                    });
+                }
+
+                for (const recipientId of Array.from(recipients)) {
+                    try {
+                        await api.messages.send({
+                            sender_id: 'system',
+                            sender_name: adminName,
+                            receiver_id: recipientId,
+                            type: 'direct',
+                            institution_id: institutionId,
+                            subject: `🌧️ Turno Suspendido por Clima: ${b.court_name} (${b.date})`,
+                            content: `Atención: Tu turno de tenis programado para el día ${b.date} de ${b.start_time} a ${b.end_time} hs en ${b.court_name} ha sido suspendido por razones climáticas (lluvia / estado de canchas). Por favor contáctate con el club para reprogramar o coordinar tu turno.`,
+                            is_read: false
+                        });
+                    } catch (msgErr) {
+                        console.warn("Error notifying user of weather cancellation:", msgErr);
+                    }
+                }
+            }
+
+            return updated || list;
+        },
+
+        async createRecurring(baseBooking: Partial<Booking>, weeksCount: number = 4, creatorProfile?: UserProfile | null) {
+            const recurrenceGroupId = `rec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            const createdBookings: any[] = [];
+            const [y, m, d] = (baseBooking.date || '').split('-').map(Number);
+            const baseDate = new Date(y, m - 1, d);
+
+            for (let week = 0; week < weeksCount; week++) {
+                const targetDate = new Date(baseDate);
+                targetDate.setDate(baseDate.getDate() + (week * 7));
+                const targetDateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
+
+                const bookingPayload: Partial<Booking> = {
+                    ...baseBooking,
+                    date: targetDateStr,
+                    is_recurring: true,
+                    recurring_weeks: weeksCount,
+                    recurrence_group_id: recurrenceGroupId,
+                    title: baseBooking.title ? `${baseBooking.title} (Fijo #${week + 1})` : `Turno Fijo / Abonado (Semana ${week + 1})`
+                };
+
+                const res = await this.create(bookingPayload, creatorProfile);
+                createdBookings.push(res);
+            }
+
+            return createdBookings;
+        },
+
+        async addToWaitlist(entry: {
+            institution_id: string;
+            date: string;
+            start_time: string;
+            court_name: string;
+            user_id: string;
+            user_name: string;
+            user_phone?: string;
+        }) {
+            const newEntry: WaitlistEntry = {
+                id: `wait-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                ...entry,
+                status: 'waiting',
+                created_at: new Date().toISOString()
+            };
+
+            // 1. Try waitlist table
+            try {
+                const { data, error } = await supabase.from('booking_waitlist').insert(newEntry).select().single();
+                if (!error && data) return data as WaitlistEntry;
+            } catch (e) {}
+
+            // 2. Fallback to system_settings key
+            try {
+                const key = `waitlist_${entry.institution_id}_${entry.date}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                const existing = (setting?.value && Array.isArray(setting.value)) ? setting.value : [];
+                const updated = [...existing, newEntry];
+                await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
+                return newEntry;
+            } catch (e) {
+                console.error("Waitlist fallback error:", e);
+                return newEntry;
+            }
+        },
+
+        async getWaitlist(institutionId: string, date: string): Promise<WaitlistEntry[]> {
+            try {
+                const { data, error } = await supabase
+                    .from('booking_waitlist')
+                    .select('*')
+                    .eq('institution_id', institutionId)
+                    .eq('date', date)
+                    .eq('status', 'waiting');
+                if (!error && data) return data as WaitlistEntry[];
+            } catch (e) {}
+
+            try {
+                const key = `waitlist_${institutionId}_${date}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    return (setting.value as WaitlistEntry[]).filter(w => w.status === 'waiting');
+                }
+            } catch (e) {}
+
+            return [];
+        },
+
+        async notifyWaitlist(institutionId: string, date: string, courtName: string, startTime: string) {
+            try {
+                const list = await this.getWaitlist(institutionId, date);
+                const matching = list.filter(w => w.start_time === startTime || !w.start_time);
+                if (matching.length === 0) return null;
+
+                const firstInLine = matching[0];
+                await api.messages.send({
+                    sender_id: 'system',
+                    sender_name: 'Sistema de Turnos Smash',
+                    receiver_id: firstInLine.user_id,
+                    type: 'direct',
+                    institution_id: institutionId,
+                    subject: `🎾 ¡Cancha Liberada! ${courtName} (${date})`,
+                    content: `¡Buenas noticias ${firstInLine.user_name}! Se acaba de liberar el turno en ${courtName} para el día ${date} a las ${startTime} hs. Ingresá a la sección de Canchas y Reservas para confirmar tu turno antes de que sea reservado por otro jugador.`,
+                    is_read: false
+                });
+
+                return firstInLine;
+            } catch (e) {
+                console.warn("Error checking waitlist notification:", e);
+                return null;
+            }
         }
     },
     messages: {
@@ -2530,6 +2690,181 @@ export const api = {
                 return [];
             }
             return data || [];
+        }
+    },
+    stats: {
+        async getPlayerDetailedStats(userId: string): Promise<PlayerStatsSummary> {
+            try {
+                const [
+                    { data: matchesData },
+                    { data: rankingData },
+                    { data: allProfiles }
+                ] = await Promise.all([
+                    supabase
+                        .from('matches')
+                        .select('*, tournaments(name)')
+                        .eq('is_played', true)
+                        .or(`player1_id.eq.${userId},player2_id.eq.${userId},player1_partner_id.eq.${userId},player2_partner_id.eq.${userId}`)
+                        .order('created_at', { ascending: true }),
+                    supabase
+                        .from('ranking_history')
+                        .select('*')
+                        .eq('player_id', userId)
+                        .order('date_obtained', { ascending: true }),
+                    supabase
+                        .from('profiles')
+                        .select('id, name, lastname')
+                ]);
+
+                const profileMap = new Map<string, string>();
+                (allProfiles || []).forEach(p => {
+                    profileMap.set(p.id, formatPlayerName(p.name, p.lastname));
+                });
+
+                const matches = matchesData || [];
+                const totalMatches = matches.length;
+                let wonMatches = 0;
+                let tieBreaksPlayed = 0;
+                let tieBreaksWon = 0;
+                let threeSetsPlayed = 0;
+                let threeSetsWon = 0;
+
+                let currentStreak = 0;
+                let bestStreak = 0;
+                let runningStreak = 0;
+
+                const opponentMap = new Map<string, { id: string; name: string; matches: number; wins: number; losses: number }>();
+
+                matches.forEach(m => {
+                    const isP1 = m.player1_id === userId || m.player1_partner_id === userId;
+                    const isWinner = (m.winner_id === userId || m.winner_partner_id === userId);
+
+                    if (isWinner) {
+                        wonMatches++;
+                        runningStreak = runningStreak > 0 ? runningStreak + 1 : 1;
+                        if (runningStreak > bestStreak) bestStreak = runningStreak;
+                    } else {
+                        runningStreak = runningStreak < 0 ? runningStreak - 1 : -1;
+                    }
+
+                    // Opponent Tracking
+                    const opponentId = isP1 
+                        ? (m.player2_id || m.player2_partner_id) 
+                        : (m.player1_id || m.player1_partner_id);
+
+                    if (opponentId) {
+                        const oppName = profileMap.get(opponentId) || (isP1 ? (m.player2_name || 'Rival') : (m.player1_name || 'Rival'));
+                        const currentOpp = opponentMap.get(opponentId) || {
+                            id: opponentId,
+                            name: oppName,
+                            matches: 0,
+                            wins: 0,
+                            losses: 0
+                        };
+                        currentOpp.matches++;
+                        if (isWinner) currentOpp.wins++;
+                        else currentOpp.losses++;
+                        opponentMap.set(opponentId, currentOpp);
+                    }
+
+                    // Tie-break and 3-set analysis from score
+                    let hasThirdSet = false;
+                    const score = m.score;
+                    if (Array.isArray(score)) {
+                        if (score.length >= 3) hasThirdSet = true;
+                        score.forEach((set: any, idx: number) => {
+                            const p1Games = typeof set.p1 === 'number' ? set.p1 : parseInt(set.p1 || '0', 10);
+                            const p2Games = typeof set.p2 === 'number' ? set.p2 : parseInt(set.p2 || '0', 10);
+                            const userGames = isP1 ? p1Games : p2Games;
+                            const oppGames = isP1 ? p2Games : p1Games;
+
+                            // Tie-Break or Super Tie-Break (7-6, 6-7, 10-8, 1-0 STB, etc.)
+                            const isTieBreak = (p1Games === 7 && p2Games === 6) || (p1Games === 6 && p2Games === 7) || 
+                                               (idx === 2 && (p1Games >= 10 || p2Games >= 10 || p1Games === 1 || p2Games === 1));
+
+                            if (isTieBreak) {
+                                tieBreaksPlayed++;
+                                if (userGames > oppGames) tieBreaksWon++;
+                            }
+                        });
+                    } else if (typeof score === 'string') {
+                        if (score.split(' ').length >= 3) hasThirdSet = true;
+                        if (score.includes('7-6') || score.includes('6-7') || score.includes('10-') || score.includes('-10')) {
+                            tieBreaksPlayed++;
+                            if (isWinner) tieBreaksWon++;
+                        }
+                    }
+
+                    if (hasThirdSet) {
+                        threeSetsPlayed++;
+                        if (isWinner) threeSetsWon++;
+                    }
+                });
+
+                currentStreak = runningStreak;
+                const lostMatches = totalMatches - wonMatches;
+                const winRate = totalMatches > 0 ? Math.round((wonMatches / totalMatches) * 100) : 0;
+                const tieBreakWinRate = tieBreaksPlayed > 0 ? Math.round((tieBreaksWon / tieBreaksPlayed) * 100) : 0;
+
+                const frequentOpponents = Array.from(opponentMap.values())
+                    .sort((a, b) => b.matches - a.matches)
+                    .slice(0, 5);
+
+                // Build points evolution
+                let accumulatedPoints = 0;
+                const rankingHistory = (rankingData || []).map((r, index) => {
+                    accumulatedPoints += (r.points || 0);
+                    return {
+                        date: r.date_obtained || new Date().toISOString(),
+                        points: accumulatedPoints,
+                        rank: Math.max(1, 10 - index),
+                        tournament_name: r.tournament_name || 'Torneo Oficial'
+                    };
+                });
+
+                // Fallback ranking history if empty
+                if (rankingHistory.length === 0 && wonMatches > 0) {
+                    rankingHistory.push({
+                        date: new Date().toISOString().split('T')[0],
+                        points: wonMatches * 50,
+                        rank: 1,
+                        tournament_name: 'Partidos Oficiales'
+                    });
+                }
+
+                return {
+                    totalMatches,
+                    wonMatches,
+                    lostMatches,
+                    winRate,
+                    tieBreaksPlayed,
+                    tieBreaksWon,
+                    tieBreakWinRate,
+                    threeSetsPlayed,
+                    threeSetsWon,
+                    currentStreak,
+                    bestStreak,
+                    frequentOpponents,
+                    rankingHistory
+                };
+            } catch (err) {
+                console.error("Error in getPlayerDetailedStats:", err);
+                return {
+                    totalMatches: 0,
+                    wonMatches: 0,
+                    lostMatches: 0,
+                    winRate: 0,
+                    tieBreaksPlayed: 0,
+                    tieBreaksWon: 0,
+                    tieBreakWinRate: 0,
+                    threeSetsPlayed: 0,
+                    threeSetsWon: 0,
+                    currentStreak: 0,
+                    bestStreak: 0,
+                    frequentOpponents: [],
+                    rankingHistory: []
+                };
+            }
         }
     }
 };

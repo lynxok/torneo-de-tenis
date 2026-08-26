@@ -347,13 +347,15 @@ export interface Booking {
   end_time: string;
   court_name: string;
   status: 'pending' | 'confirmed' | 'rejected' | 'cancelled' | 'blocked';
-  booking_type?: 'guest' | 'tournament' | 'maintenance' | 'class'; // Added 'class'
-  title?: string; // "Clase", "Torneo: Juan vs Pedro"
+  booking_type?: 'guest' | 'tournament' | 'maintenance' | 'class' | 'recurring';
+  title?: string; // "Clase", "Torneo: Juan vs Pedro", "Turno Fijo"
   description?: string; // Optional details
   total_price: number;
   extras?: {
       rackets?: number;
       balls?: boolean;
+      night_light?: boolean;
+      teacher?: boolean;
   };
   payment_status?: string;
   institutions?: { name: string };
@@ -361,10 +363,51 @@ export interface Booking {
   user_name?: string;
   profiles?: { id: string; name: string; lastname?: string; avatar_url?: string; profile_picture_url?: string };
   deleted_by_user?: boolean;
+  is_recurring?: boolean;
+  recurring_weeks?: number;
+  recurrence_group_id?: string;
+  cancellation_reason?: 'user' | 'weather' | 'maintenance' | 'admin';
   
   // Tournament specific
   match_score?: string; // e.g. "6-4 6-2" if played
   match_id?: string;
+}
+
+export interface WaitlistEntry {
+  id: string;
+  court_name: string;
+  date: string;
+  start_time: string;
+  user_id: string;
+  user_name: string;
+  user_phone?: string;
+  institution_id: string;
+  status: 'waiting' | 'notified' | 'claimed' | 'cancelled';
+  created_at: string;
+}
+
+export interface FrequentOpponent {
+  id: string;
+  name: string;
+  matches: number;
+  wins: number;
+  losses: number;
+}
+
+export interface PlayerStatsSummary {
+  totalMatches: number;
+  wonMatches: number;
+  lostMatches: number;
+  winRate: number;
+  tieBreaksPlayed: number;
+  tieBreaksWon: number;
+  tieBreakWinRate: number;
+  threeSetsPlayed: number;
+  threeSetsWon: number;
+  currentStreak: number;
+  bestStreak: number;
+  frequentOpponents: FrequentOpponent[];
+  rankingHistory: Array<{ date: string; points: number; rank: number; tournament_name?: string }>;
 }
 
 export interface CourtSlot {

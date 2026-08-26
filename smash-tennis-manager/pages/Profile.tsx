@@ -1,17 +1,20 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { UserProfile, Institution, UserClubMembership } from '../types';
+import { UserProfile, Institution, UserClubMembership, PlayerStatsSummary } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { 
     User, Mail, Award, MapPin, Phone, Edit2, Shield, CreditCard, Calendar, X, Check, Save, 
-    AlertTriangle, Camera, UploadCloud, Loader2, Star, Plus, Trash2, Sparkles, Building as BuildingIcon, CheckCircle2, Smartphone, Trophy 
+    AlertTriangle, Camera, UploadCloud, Loader2, Star, Plus, Trash2, Sparkles, Building as BuildingIcon, CheckCircle2, Smartphone, Trophy,
+    Volume2, VolumeX, Flame, Zap, TrendingUp, Activity
 } from 'lucide-react';
 import ImageCropper from '../components/ImageCropper';
 import imageCompression from 'browser-image-compression';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
 import { getUserRankInfo } from '../utils/ranking';
+import { PlayerCardModal } from '../components/PlayerCardModal';
+import { soundEffects } from '../services/soundEffects';
 
 interface ProfileProps {
     user: UserProfile;
@@ -23,6 +26,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
     const [saving, setSaving] = useState(false);
     const [institutions, setInstitutions] = useState<Institution[]>([]);
     const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
+    const [playerStats, setPlayerStats] = useState<PlayerStatsSummary | null>(null);
+    const [loadingStats, setLoadingStats] = useState(true);
+    const [showPlayerCardModal, setShowPlayerCardModal] = useState(false);
+    const [soundEnabled, setSoundEnabled] = useState(soundEffects.getSoundEnabled());
     const { addToast } = useToast();
 
     // Memberships Modal State
@@ -71,7 +78,21 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                 setBannerUrl(config.profile_banner_url);
             }
         });
-    }, []);
+
+        // Load Detailed Player Stats
+        api.stats.getPlayerDetailedStats(user.id)
+            .then(setPlayerStats)
+            .catch(console.error)
+            .finally(() => setLoadingStats(false));
+    }, [user.id]);
+
+    const handleToggleSound = () => {
+        const next = !soundEnabled;
+        soundEffects.setSoundEnabled(next);
+        setSoundEnabled(next);
+        if (next) soundEffects.playTennisHit();
+        addToast(next ? "🔊 Sonidos y vibración activados" : "🔇 Sonidos silenciados", "info");
+    };
 
     const rankInfo = useMemo(() => {
         return getUserRankInfo(user.id, allProfiles.length > 0 ? allProfiles : [user]);
@@ -332,26 +353,53 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                         </div>
                     </div>
 
-                    <div className="flex justify-between items-center bg-white/5 p-4 rounded-2xl border border-white/10">
-                        <div className="flex items-center gap-4">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white/5 p-4 rounded-2xl border border-white/10">
+                        <div className="flex items-center gap-3">
                             <div className={`p-3 rounded-xl border ${user.is_approved || user.role === 'superadmin' ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-yellow-500/10 border-yellow-500/20 text-yellow-400'}`}>
                                 <Shield size={24} />
                             </div>
                             <div>
-                                <div className="text-sm text-muted">Estado de cuenta</div>
-                                <div className={`font-bold ${user.is_approved || user.role === 'superadmin' ? 'text-green-400' : 'text-yellow-400'}`}>
+                                <div className="text-xs text-muted">Estado de cuenta</div>
+                                <div className={`font-bold text-sm ${user.is_approved || user.role === 'superadmin' ? 'text-green-400' : 'text-yellow-400'}`}>
                                     {user.is_approved || user.role === 'superadmin' ? 'Verificado & Activo' : 'Pendiente de Aprobación'}
                                 </div>
                             </div>
-                            {/* Add Edit Profile Button */}
-                            <div className="ml-auto">
-                                <button
-                                    onClick={() => setIsEditing(true)}
-                                    className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
-                                >
-                                    <Edit2 size={16} /> Editar Perfil
-                                </button>
-                            </div>
+                        </div>
+
+                        {/* Action Buttons: Player Card, Sound Toggle, Edit Profile */}
+                        <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+                            <button
+                                onClick={() => {
+                                    soundEffects.playTennisHit();
+                                    setShowPlayerCardModal(true);
+                                }}
+                                className="px-3.5 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-200 text-xs font-bold rounded-xl flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10"
+                                title="Ver y descargar mi tarjeta coleccionable oficial"
+                            >
+                                <Award size={15} className="text-amber-400" /> Mi Tarjeta Smash
+                            </button>
+
+                            <button
+                                onClick={handleToggleSound}
+                                className={`p-2 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                    soundEnabled 
+                                        ? 'bg-primary/20 border-primary text-primary' 
+                                        : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                }`}
+                                title={soundEnabled ? 'Sonidos activos. Clic para silenciar' : 'Sonidos silenciados. Clic para activar'}
+                            >
+                                {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    soundEffects.playScoreBeep();
+                                    setIsEditing(true);
+                                }}
+                                className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-lg shadow-primary/20"
+                            >
+                                <Edit2 size={15} /> Editar Perfil
+                            </button>
                         </div>
                     </div>
 
@@ -483,25 +531,38 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                     </Card>
                 </div>
 
-                {/* Right Column: Stats */}
+                {/* Right Column: Stats & Advanced Performance */}
                 <div className="space-y-6">
-                    <Card className="bg-gradient-to-br from-card to-slate-800 border-primary/20 sticky top-24">
-                        <div id="profile-stats">
-                            <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                                <Award className="text-accent" /> Estadísticas & Ranking
-                            </h3>
-                            <div className="space-y-3">
+                    <Card className="bg-gradient-to-br from-card to-slate-800 border-primary/20">
+                        <div id="profile-stats" className="space-y-5">
+                            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                                    <Award className="text-accent" size={20} /> Estadísticas & Ranking
+                                </h3>
+                                <button
+                                    onClick={() => {
+                                        soundEffects.playTennisHit();
+                                        setShowPlayerCardModal(true);
+                                    }}
+                                    className="text-[11px] font-bold text-amber-400 hover:text-amber-300 flex items-center gap-1 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 transition-colors"
+                                >
+                                    <Zap size={12} /> Ver Tarjeta
+                                </button>
+                            </div>
+
+                            {/* Base Metrics */}
+                            <div className="space-y-2.5">
                                 <div className="flex justify-between items-center p-3 bg-black/20 rounded-xl border border-white/5">
-                                    <span className="text-muted text-sm">Partidos Ganados</span>
-                                    <span className="text-xl font-bold text-white">{user.matches_won || 0}</span>
+                                    <span className="text-muted text-xs font-bold uppercase">Partidos Ganados</span>
+                                    <span className="text-lg font-black text-white">{playerStats ? playerStats.wonMatches : (user.matches_won || 0)} PG</span>
                                 </div>
                                 <div className="flex justify-between items-center p-3 bg-black/20 rounded-xl border border-white/5">
-                                    <span className="text-muted text-sm">Torneos Ganados</span>
-                                    <span className="text-xl font-bold text-accent">{user.tournaments_won || 0}</span>
+                                    <span className="text-muted text-xs font-bold uppercase">Torneos Ganados</span>
+                                    <span className="text-lg font-black text-accent">{user.tournaments_won || 0} 🏆</span>
                                 </div>
                                 <div className="flex justify-between items-center p-3 bg-black/20 rounded-xl border border-white/5">
-                                    <span className="text-muted text-sm">Puntos Oficiales</span>
-                                    <span className="text-xl font-bold text-primary">{rankInfo.points} pts</span>
+                                    <span className="text-muted text-xs font-bold uppercase">Puntos Oficiales</span>
+                                    <span className="text-lg font-black text-primary">{rankInfo.points} pts</span>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2 pt-1">
                                     <div className="p-3 bg-primary/10 rounded-xl border border-primary/20 text-center">
@@ -516,6 +577,135 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Advanced Performance KPIs */}
+                            <div className="pt-3 border-t border-white/10 space-y-2.5">
+                                <div className="text-xs font-bold text-muted uppercase tracking-wider flex items-center gap-1.5">
+                                    <Activity size={14} className="text-primary" /> Rendimiento Avanzado
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl">
+                                        <div className="text-[10px] text-muted font-bold uppercase">Tie-Breaks</div>
+                                        <div className="text-sm font-black text-white mt-0.5">
+                                            {playerStats ? `${playerStats.tieBreakWinRate}%` : '0%'}
+                                        </div>
+                                        <div className="text-[9px] text-muted">
+                                            {playerStats ? `${playerStats.tieBreaksWon}/${playerStats.tieBreaksPlayed} ganados` : '0 jugados'}
+                                        </div>
+                                    </div>
+
+                                    <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl">
+                                        <div className="text-[10px] text-muted font-bold uppercase">3er Set</div>
+                                        <div className="text-sm font-black text-emerald-400 mt-0.5">
+                                            {playerStats ? `${playerStats.threeSetsWon}/${playerStats.threeSetsPlayed}` : '0/0'}
+                                        </div>
+                                        <div className="text-[9px] text-muted">Partidos decisivos</div>
+                                    </div>
+
+                                    <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl">
+                                        <div className="text-[10px] text-muted font-bold uppercase">Racha Actual</div>
+                                        <div className="text-sm font-black text-orange-400 mt-0.5 flex items-center gap-1">
+                                            <Flame size={14} /> {playerStats ? (playerStats.currentStreak > 0 ? `+${playerStats.currentStreak}` : playerStats.currentStreak) : '0'}
+                                        </div>
+                                        <div className="text-[9px] text-muted">Partidos seguidos</div>
+                                    </div>
+
+                                    <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl">
+                                        <div className="text-[10px] text-muted font-bold uppercase">Mejor Racha</div>
+                                        <div className="text-sm font-black text-amber-300 mt-0.5">
+                                            🔥 {playerStats ? playerStats.bestStreak : 0}
+                                        </div>
+                                        <div className="text-[9px] text-muted">Récord invicto</div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Ranking & Points Evolution SVG Chart */}
+                            <div className="pt-3 border-t border-white/10 space-y-2">
+                                <div className="text-xs font-bold text-muted uppercase tracking-wider flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5">
+                                        <TrendingUp size={14} className="text-primary" /> Evolución de Puntos
+                                    </span>
+                                    <span className="text-[10px] text-primary font-bold">Oficial Smash</span>
+                                </div>
+
+                                <div className="bg-black/30 border border-white/10 rounded-xl p-3">
+                                    {playerStats && playerStats.rankingHistory.length > 1 ? (
+                                        <div className="space-y-2">
+                                            {/* Mini SVG Line Chart */}
+                                            <div className="h-20 w-full flex items-end">
+                                                <svg className="w-full h-full overflow-visible" viewBox="0 0 100 50" preserveAspectRatio="none">
+                                                    <defs>
+                                                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                                                            <stop offset="0%" stopColor="#e15b34" stopOpacity="0.5" />
+                                                            <stop offset="100%" stopColor="#e15b34" stopOpacity="0.0" />
+                                                        </linearGradient>
+                                                    </defs>
+                                                    {/* Area */}
+                                                    <polygon
+                                                        fill="url(#chartGrad)"
+                                                        points={
+                                                            `0,50 ` +
+                                                            playerStats.rankingHistory.map((item, idx) => {
+                                                                const x = (idx / (playerStats.rankingHistory.length - 1)) * 100;
+                                                                const maxPts = Math.max(...playerStats.rankingHistory.map(p => p.points), 100);
+                                                                const y = 45 - (item.points / maxPts) * 40;
+                                                                return `${x},${y}`;
+                                                            }).join(' ') +
+                                                            ` 100,50`
+                                                        }
+                                                    />
+                                                    {/* Line */}
+                                                    <polyline
+                                                        fill="none"
+                                                        stroke="#e15b34"
+                                                        strokeWidth="2.5"
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        points={
+                                                            playerStats.rankingHistory.map((item, idx) => {
+                                                                const x = (idx / (playerStats.rankingHistory.length - 1)) * 100;
+                                                                const maxPts = Math.max(...playerStats.rankingHistory.map(p => p.points), 100);
+                                                                const y = 45 - (item.points / maxPts) * 40;
+                                                                return `${x},${y}`;
+                                                            }).join(' ')
+                                                        }
+                                                    />
+                                                </svg>
+                                            </div>
+                                            <div className="flex justify-between text-[9px] text-muted">
+                                                <span>{playerStats.rankingHistory[0].date.slice(5, 10)}</span>
+                                                <span>{playerStats.rankingHistory[playerStats.rankingHistory.length - 1].date.slice(5, 10)}</span>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="text-center py-4 text-xs text-muted">
+                                            Suma partidos oficiales para ver tu curva de progresión en el tiempo.
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Frequent Opponents */}
+                            {playerStats && playerStats.frequentOpponents.length > 0 && (
+                                <div className="pt-3 border-t border-white/10 space-y-2">
+                                    <div className="text-xs font-bold text-muted uppercase tracking-wider">
+                                        Rivales Más Frecuentes
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        {playerStats.frequentOpponents.slice(0, 3).map((opp, i) => (
+                                            <div key={i} className="flex justify-between items-center text-xs p-2 bg-white/5 border border-white/5 rounded-lg">
+                                                <span className="font-bold text-white truncate max-w-[140px]">{opp.name}</span>
+                                                <span className="text-[11px] font-mono">
+                                                    <span className="text-emerald-400 font-bold">{opp.wins}V</span> - <span className="text-red-400 font-bold">{opp.losses}D</span>
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                         </div>
                     </Card>
                 </div>
@@ -791,6 +981,17 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                     imageSrc={tempImageSrc}
                     onCropComplete={handleCropComplete}
                     onCancel={handleCropCancel}
+                />
+            )}
+
+            {/* PLAYER CARD MODAL */}
+            {showPlayerCardModal && (
+                <PlayerCardModal
+                    isOpen={showPlayerCardModal}
+                    onClose={() => setShowPlayerCardModal(false)}
+                    user={user}
+                    stats={playerStats}
+                    rank={rankInfo.globalRank}
                 />
             )}
         </div>

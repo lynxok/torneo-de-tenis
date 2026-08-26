@@ -1,28 +1,32 @@
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense, lazy } from 'react';
 import { supabase } from './services/supabaseClient';
 import { api } from './services/api';
 import { UserProfile, UserRole } from './types';
 import { AuthPage } from './components/AuthPage';
 import { Sidebar } from './components/Sidebar';
-import { Dashboard } from './pages/Dashboard';
-import { Tournaments } from './pages/Tournaments';
-import { TournamentDetails } from './pages/TournamentDetails';
-import { Profile } from './pages/Profile';
-import { Rankings } from './pages/Rankings';
-import { Players } from './pages/Players';
-import { Bookings } from './pages/Bookings';
-import { Messages } from './pages/Messages';
-import { AdminUsers } from './pages/AdminUsers';
-import { AdminInstitutions } from './pages/AdminInstitutions';
-import { AdminSettings } from './pages/AdminSettings';
-import { Reports } from './pages/Reports';
-import { TutorialsPage, TUTORIALS } from './pages/TutorialsPage';
+import { TUTORIALS } from './pages/TutorialsPage';
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { ToastProvider } from './components/ui/Toast';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { VersionUpdatePrompt } from './components/VersionUpdatePrompt';
-import { Menu, ShieldAlert, User, Shield } from 'lucide-react';
+import { soundEffects } from './services/soundEffects';
+import { Menu, ShieldAlert, User, Shield, Loader2 } from 'lucide-react';
+
+// Code-Splitting with React.lazy
+const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const Tournaments = lazy(() => import('./pages/Tournaments').then(m => ({ default: m.Tournaments })));
+const TournamentDetails = lazy(() => import('./pages/TournamentDetails').then(m => ({ default: m.TournamentDetails })));
+const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const Rankings = lazy(() => import('./pages/Rankings').then(m => ({ default: m.Rankings })));
+const Players = lazy(() => import('./pages/Players').then(m => ({ default: m.Players })));
+const Bookings = lazy(() => import('./pages/Bookings').then(m => ({ default: m.Bookings })));
+const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })));
+const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
+const AdminUsers = lazy(() => import('./pages/AdminUsers').then(m => ({ default: m.AdminUsers })));
+const AdminInstitutions = lazy(() => import('./pages/AdminInstitutions').then(m => ({ default: m.AdminInstitutions })));
+const AdminSettings = lazy(() => import('./pages/AdminSettings').then(m => ({ default: m.AdminSettings })));
+const TutorialsPage = lazy(() => import('./pages/TutorialsPage').then(m => ({ default: m.TutorialsPage })));
 
 const AppContent = () => {
   const [session, setSession] = useState<any>(null);
@@ -80,6 +84,7 @@ const AppContent = () => {
     const params = new URLSearchParams(window.location.search);
     const tournamentId = params.get('tournament') || params.get('t');
     const clubId = params.get('club') || params.get('institution') || params.get('c');
+    const viewParam = params.get('view') || params.get('v');
 
     if (tournamentId) {
       setActiveView('tournament-detail');
@@ -87,6 +92,8 @@ const AppContent = () => {
     } else if (clubId) {
       setActiveView('bookings');
       setNavData({ clubId });
+    } else if (viewParam) {
+      setActiveView(viewParam);
     }
   };
 
@@ -130,6 +137,7 @@ const AppContent = () => {
   };
 
   const handleNavigate = (view: string, data?: any) => {
+    soundEffects.playScoreBeep();
     setActiveView(view);
     if (data !== undefined) setNavData(data);
     setMobileMenuOpen(false);
@@ -312,42 +320,49 @@ const AppContent = () => {
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto pb-10">
-            {activeView === 'dashboard' && <Dashboard user={effectiveUser} onNavigate={handleNavigate} />}
-            {activeView === 'tournaments' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={navData} />}
-            {activeView === 'tournament-detail' && (
-              <TournamentDetails
-                tournamentId={navData}
-                user={effectiveUser}
-                onBack={() => handleNavigate('tournaments')}
-              />
-            )}
-            {activeView === 'profile' && (
-              <Profile
-                user={effectiveUser}
-                onProfileUpdate={() => fetchProfile(effectiveUser.id)}
-              />
-            )}
-            {activeView === 'rankings' && <Rankings user={effectiveUser} />}
-            {activeView === 'players' && <Players user={effectiveUser} onNavigate={handleNavigate} />}
-            {activeView === 'bookings' && <Bookings user={effectiveUser} />}
-            {activeView === 'messages' && (
-              <Messages
-                user={effectiveUser}
-                onRefreshNotifications={() => fetchUnreadMessages(effectiveUser)}
-              />
-            )}
-            {activeView === 'reports' && <Reports user={effectiveUser} />}
-            {activeView === 'admin-users' && <AdminUsers user={effectiveUser} />}
-            {activeView === 'admin-institutions' && <AdminInstitutions user={effectiveUser} />}
-            {activeView === 'admin-settings' && <AdminSettings user={effectiveUser} />}
+            <Suspense fallback={
+              <div className="h-72 flex flex-col items-center justify-center space-y-4">
+                <Loader2 className="animate-spin text-primary" size={40} />
+                <span className="text-xs text-muted font-bold tracking-widest uppercase">Cargando pantalla...</span>
+              </div>
+            }>
+              {activeView === 'dashboard' && <Dashboard user={effectiveUser} onNavigate={handleNavigate} />}
+              {activeView === 'tournaments' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={navData} />}
+              {activeView === 'tournament-detail' && (
+                <TournamentDetails
+                  tournamentId={navData}
+                  user={effectiveUser}
+                  onBack={() => handleNavigate('tournaments')}
+                />
+              )}
+              {activeView === 'profile' && (
+                <Profile
+                  user={effectiveUser}
+                  onProfileUpdate={() => fetchProfile(effectiveUser.id)}
+                />
+              )}
+              {activeView === 'rankings' && <Rankings user={effectiveUser} />}
+              {activeView === 'players' && <Players user={effectiveUser} onNavigate={handleNavigate} />}
+              {activeView === 'bookings' && <Bookings user={effectiveUser} />}
+              {activeView === 'messages' && (
+                <Messages
+                  user={effectiveUser}
+                  onRefreshNotifications={() => fetchUnreadMessages(effectiveUser)}
+                />
+              )}
+              {activeView === 'reports' && <Reports user={effectiveUser} />}
+              {activeView === 'admin-users' && <AdminUsers user={effectiveUser} />}
+              {activeView === 'admin-institutions' && <AdminInstitutions user={effectiveUser} />}
+              {activeView === 'admin-settings' && <AdminSettings user={effectiveUser} />}
 
-            {/* Tutorial View */}
-            {activeView === 'tutorials' && (
-              <TutorialsPage
-                user={effectiveUser}
-                onStartTutorial={handleStartTutorial}
-              />
-            )}
+              {/* Tutorial View */}
+              {activeView === 'tutorials' && (
+                <TutorialsPage
+                  user={effectiveUser}
+                  onStartTutorial={handleStartTutorial}
+                />
+              )}
+            </Suspense>
           </div>
         </div>
       </main>

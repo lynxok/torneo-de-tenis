@@ -7,13 +7,16 @@ import {
     Trophy, Calendar, MapPin, Users, ChevronLeft, UserPlus, CheckCircle2, Loader2, Play, Edit3, 
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
-    Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw
+    Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
+    Printer, Image as ImageIcon
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 import { formatPlayerName } from '../utils/formatters';
 import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
+import { ShareGraphicModal } from '../components/ShareGraphicModal';
+import { soundEffects } from '../services/soundEffects';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -27,6 +30,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('groups');
     const { addToast } = useToast();
+
+    // Social Media Graphics Generator State
+    const [showGraphicModal, setShowGraphicModal] = useState(false);
 
     // H2H State
     const [h2hPlayers, setH2hPlayers] = useState<{ p1Id: string; p2Id: string } | null>(null);
@@ -868,8 +874,33 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                         <div className="flex flex-wrap items-center gap-2">
                             <button
                                 onClick={() => {
+                                    soundEffects.playTennisHit();
+                                    setShowGraphicModal(true);
+                                }}
+                                className="px-4 py-3 bg-gradient-to-r from-primary/25 to-orange-500/25 hover:from-primary/35 hover:to-orange-500/35 text-orange-200 font-bold rounded-xl transition-all border border-primary/40 flex items-center gap-2 text-sm shadow-md"
+                                title="Generar placas para Instagram Stories, Feed y WhatsApp"
+                            >
+                                <ImageIcon size={16} className="text-primary" /> Placas Redes
+                            </button>
+
+                            {(user.role === 'admin' || user.role === 'superadmin') && (
+                                <button
+                                    onClick={() => {
+                                        soundEffects.playScoreBeep();
+                                        window.print();
+                                    }}
+                                    className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl transition-all border border-white/10 flex items-center gap-2 text-sm"
+                                    title="Imprimir Planilla Oficial de Mesa de Control A4"
+                                >
+                                    <Printer size={16} className="text-primary" /> Planilla A4
+                                </button>
+                            )}
+
+                            <button
+                                onClick={() => {
                                     const shareUrl = `${window.location.origin}/?tournament=${tournament.id}`;
                                     navigator.clipboard.writeText(shareUrl);
+                                    soundEffects.playBookingSuccess();
                                     addToast('¡Link del torneo copiado al portapapeles!', 'success');
                                 }}
                                 className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-semibold rounded-xl transition-all border border-white/10 flex items-center gap-2 text-sm"
@@ -880,6 +911,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                             <button
                                 onClick={() => {
+                                    soundEffects.playScoreBeep();
                                     const shareUrl = `${window.location.origin}/?tournament=${tournament.id}`;
                                     const message = encodeURIComponent(`🎾 ¡Te invito a participar en el torneo "${tournament.name}" en ${tournament.institutions?.name || 'nuestro club'}! Regístrate o inscríbete directamente aquí: ${shareUrl}`);
                                     window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
@@ -2960,6 +2992,95 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </div>
                 </div>
             )}
+
+            {/* SOCIAL MEDIA GRAPHIC GENERATOR MODAL */}
+            {showGraphicModal && tournament && (
+                <ShareGraphicModal
+                    isOpen={showGraphicModal}
+                    onClose={() => setShowGraphicModal(false)}
+                    tournament={tournament}
+                    zones={zones}
+                    playoffRounds={playoffRounds}
+                    championName={tournament.champion_name}
+                    matches={matches}
+                />
+            )}
+
+            {/* PRINTABLE CONTROL SHEET (A4 - Only visible during print) */}
+            <div id="print-control-sheet" className="hidden print:block fixed inset-0 bg-white text-black p-6 font-sans z-[99999] overflow-visible">
+                <div className="border-b-2 border-black pb-4 mb-4 flex justify-between items-end">
+                    <div>
+                        <div className="text-xs font-bold tracking-widest text-slate-600 uppercase">SMASH TENNIS MANAGER • PLANILLA OFICIAL DE MESA DE CONTROL</div>
+                        <h1 className="text-2xl font-black text-black uppercase mt-1">{tournament.name}</h1>
+                        <p className="text-sm text-slate-700">
+                            <strong>Sede / Club:</strong> {tournament.institutions?.name || 'Club'} • <strong>Categoría:</strong> {tournament.category} ({tournament.gender || 'Caballeros'}) • <strong>Modalidad:</strong> {tournament.type === 'doubles' ? 'Dobles' : 'Singles'}
+                        </p>
+                    </div>
+                    <div className="text-right text-xs">
+                        <div><strong>Fecha de Emisión:</strong> {new Date().toLocaleDateString('es-AR')}</div>
+                        <div><strong>Total Inscriptos:</strong> {players.length}</div>
+                    </div>
+                </div>
+
+                {/* Matches Table */}
+                <div className="mb-6">
+                    <h2 className="text-sm font-black uppercase tracking-wider bg-slate-200 p-1.5 border border-black mb-2">
+                        ORDEN DE JUEGO & RESULTADOS DE PARTIDOS
+                    </h2>
+                    <table className="w-full text-xs border-collapse border border-black">
+                        <thead>
+                            <tr className="bg-slate-100 text-center font-bold">
+                                <th className="border border-black p-1.5 w-10">#</th>
+                                <th className="border border-black p-1.5 w-24">Fase / Zona</th>
+                                <th className="border border-black p-1.5 w-20">Horario</th>
+                                <th className="border border-black p-1.5 w-20">Cancha</th>
+                                <th className="border border-black p-1.5 text-left pl-2">Jugador / Pareja 1</th>
+                                <th className="border border-black p-1.5 text-left pl-2">Jugador / Pareja 2</th>
+                                <th className="border border-black p-1.5 w-14">Set 1</th>
+                                <th className="border border-black p-1.5 w-14">Set 2</th>
+                                <th className="border border-black p-1.5 w-14">STB</th>
+                                <th className="border border-black p-1.5 w-28">Ganador</th>
+                                <th className="border border-black p-1.5 w-24">Firma</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {matches.length === 0 ? (
+                                <tr>
+                                    <td colSpan={11} className="border border-black p-4 text-center italic">Sin partidos generados</td>
+                                </tr>
+                            ) : (
+                                matches.map((m, idx) => (
+                                    <tr key={idx} className="text-center h-8">
+                                        <td className="border border-black p-1 font-bold">{idx + 1}</td>
+                                        <td className="border border-black p-1 font-semibold">{m.round || (m.group_number ? `Zona ${m.group_number}` : 'Fase Previa')}</td>
+                                        <td className="border border-black p-1">{m.scheduled_at ? m.scheduled_at.slice(11, 16) + ' hs' : '___:___'}</td>
+                                        <td className="border border-black p-1">Cancha ___</td>
+                                        <td className="border border-black p-1 text-left pl-2 font-bold truncate max-w-[160px]">{m.player1_name || 'Jugador 1'}</td>
+                                        <td className="border border-black p-1 text-left pl-2 font-bold truncate max-w-[160px]">{m.player2_name || 'Jugador 2'}</td>
+                                        <td className="border border-black p-1"></td>
+                                        <td className="border border-black p-1"></td>
+                                        <td className="border border-black p-1"></td>
+                                        <td className="border border-black p-1 font-semibold">{m.winner_name || ''}</td>
+                                        <td className="border border-black p-1"></td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Signatures & Footer */}
+                <div className="mt-8 pt-4 border-t border-black flex justify-between items-end text-xs">
+                    <div className="text-center w-48">
+                        <div className="border-b border-black mb-1 h-8"></div>
+                        <span>Firma Fiscalizador / Juez de Mesa</span>
+                    </div>
+                    <div className="text-center w-48">
+                        <div className="border-b border-black mb-1 h-8"></div>
+                        <span>Firma Director del Torneo</span>
+                    </div>
+                </div>
+            </div>
         </div>
     );
 };
