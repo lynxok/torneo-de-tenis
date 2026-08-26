@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { Tournament, Match, TournamentPlayer } from '../types';
+import { Tournament, Match } from '../types';
 import { soundEffects } from '../services/soundEffects';
-import { X, Download, Share2, Sparkles, Trophy, Grid, Calendar, Image as ImageIcon, Check } from 'lucide-react';
+import { X, Download, Share2, Sparkles, Trophy, Grid, Calendar, Image as ImageIcon } from 'lucide-react';
 import { GroupZone, PlayoffRound } from '../utils/bracketHelper';
 import { getTournamentTier } from '../utils/tournamentTiers';
 
@@ -24,11 +24,11 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   championName,
   matches = []
 }) => {
-  const [graphicType, setGraphicType] = useState<'playoffs' | 'standings' | 'order_of_play' | 'champion'>('playoffs');
+  const [graphicType, setGraphicType] = useState<'playoffs' | 'standings' | 'order_of_play' | 'champion'>('standings');
   const [aspectRatio, setAspectRatio] = useState<'square' | 'story'>('story'); // 'square' (1:1) or 'story' (9:16)
   const [themeStyle, setThemeStyle] = useState<'dark' | 'clay' | 'grass'>('dark');
+  const [selectedZoneIndex, setSelectedZoneIndex] = useState<number | 'all'>('all');
   const [isGenerating, setIsGenerating] = useState(false);
-  const [copiedLink, setCopiedLink] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
 
   if (!isOpen) return null;
@@ -63,11 +63,31 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     soundEffects.playTennisHit();
     setIsGenerating(true);
     try {
-      // Dynamic import of html2canvas or inline canvas renderer
       const element = previewRef.current;
       if (!element) return;
 
-      // Use HTML5 Canvas to capture high-res image
+      // Clone element to convert images to Base64 data URLs for pristine SVG rendering
+      const clone = element.cloneNode(true) as HTMLElement;
+      const images = clone.querySelectorAll('img');
+      for (const img of Array.from(images)) {
+        if (img.src && !img.src.startsWith('data:')) {
+          try {
+            const res = await fetch(img.src);
+            const blob = await res.blob();
+            await new Promise((resolve) => {
+              const reader = new FileReader();
+              reader.onloadend = () => {
+                img.src = reader.result as string;
+                resolve(null);
+              };
+              reader.readAsDataURL(blob);
+            });
+          } catch (e) {
+            console.warn('Could not inline image for SVG render:', e);
+          }
+        }
+      }
+
       const canvas = document.createElement('canvas');
       const rect = element.getBoundingClientRect();
       const scale = 2; // High DPI
@@ -95,7 +115,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
         ctx.fillRect(0, 0, rect.width, rect.height);
 
         // Convert HTML element to SVG foreignObject
-        const data = new XMLSerializer().serializeToString(element);
+        const data = new XMLSerializer().serializeToString(clone);
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${data}</div></foreignObject></svg>`;
         
         const img = new Image();
@@ -107,7 +127,6 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
           ctx.drawImage(img, 0, 0);
           URLObj.revokeObjectURL(blobURL);
 
-          // Download as PNG
           const link = document.createElement('a');
           link.download = `SmashTenis-${tournament.name.replace(/\s+/g, '_')}-${graphicType}.png`;
           link.href = canvas.toDataURL('image/png', 1.0);
@@ -117,7 +136,6 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
         };
 
         img.onerror = () => {
-          // Fallback direct download
           const link = document.createElement('a');
           link.download = `SmashTenis-${tournament.name.replace(/\s+/g, '_')}.png`;
           link.href = canvas.toDataURL('image/png', 1.0);
@@ -148,7 +166,23 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
         text += `• *${r.name}:* ${(r.matches || []).length} partido(s)\n`;
       });
     } else if (graphicType === 'standings' && zones && zones.length > 0) {
-      text += `📊 *Fase de Zonas:* ${zones.length} grupos definidos.\n`;
+      if (selectedZoneIndex === 'all') {
+        text += `📊 *Fase de Zonas (${zones.length} Grupos Definidos):*\n`;
+        zones.forEach(z => {
+          text += `\n*${z.groupName}:*\n`;
+          (z.players || []).forEach((p, idx) => {
+            text += `${idx + 1}. ${p.playerName} (${p.matchesWon || 0}G-${p.matchesLost || 0}P, ${p.points || 0} pts)\n`;
+          });
+        });
+      } else {
+        const z = zones[selectedZoneIndex];
+        if (z) {
+          text += `📊 *Posiciones ${z.groupName}:*\n`;
+          (z.players || []).forEach((p, idx) => {
+            text += `${idx + 1}. ${p.playerName} (${p.matchesWon || 0}G-${p.matchesLost || 0}P, ${p.points || 0} pts)\n`;
+          });
+        }
+      }
     }
 
     text += `\n📲 Seguí los resultados en vivo en: https://smashtenis.lnx.com.ar/?t=${tournament.id}`;
@@ -156,6 +190,8 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
+
+  const displayedZones = selectedZoneIndex === 'all' ? zones : [zones[selectedZoneIndex]].filter(Boolean);
 
   return (
     <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 overflow-y-auto animate-in fade-in duration-200">
@@ -171,7 +207,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
               <h2 className="text-lg sm:text-xl font-bold text-white flex items-center gap-2">
                 Generador de Placas Oficiales
               </h2>
-              <p className="text-xs text-muted">Descargá imágenes listas para Instagram Stories, Feed y WhatsApp</p>
+              <p className="text-xs text-muted">Descargá imágenes listas para Instagram Stories, Feed y WhatsApp con logo oficial</p>
             </div>
           </div>
           <button onClick={onClose} className="text-muted hover:text-white p-2 rounded-xl hover:bg-white/5 transition-colors">
@@ -183,23 +219,12 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
         <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-6 p-4 sm:p-6 overflow-y-auto">
           
           {/* Controls Column (Left) */}
-          <div className="md:col-span-5 space-y-5">
+          <div className="md:col-span-5 space-y-4">
             
             {/* Type Selector */}
             <div>
               <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">1. Tipo de Placa</label>
               <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => { setGraphicType('playoffs'); soundEffects.playScoreBeep(); }}
-                  className={`p-3 rounded-xl border text-left text-xs font-bold transition-all flex items-center gap-2 ${
-                    graphicType === 'playoffs' 
-                      ? 'bg-primary/20 border-primary text-white shadow-lg shadow-primary/10' 
-                      : 'bg-white/5 border-white/10 text-muted hover:text-white'
-                  }`}
-                >
-                  <Trophy size={16} className={graphicType === 'playoffs' ? 'text-primary' : ''} />
-                  Cuadro Playoffs
-                </button>
                 <button
                   onClick={() => { setGraphicType('standings'); soundEffects.playScoreBeep(); }}
                   className={`p-3 rounded-xl border text-left text-xs font-bold transition-all flex items-center gap-2 ${
@@ -210,6 +235,17 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 >
                   <Grid size={16} className={graphicType === 'standings' ? 'text-primary' : ''} />
                   Posiciones Zonas
+                </button>
+                <button
+                  onClick={() => { setGraphicType('playoffs'); soundEffects.playScoreBeep(); }}
+                  className={`p-3 rounded-xl border text-left text-xs font-bold transition-all flex items-center gap-2 ${
+                    graphicType === 'playoffs' 
+                      ? 'bg-primary/20 border-primary text-white shadow-lg shadow-primary/10' 
+                      : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                  }`}
+                >
+                  <Trophy size={16} className={graphicType === 'playoffs' ? 'text-primary' : ''} />
+                  Cuadro Playoffs
                 </button>
                 <button
                   onClick={() => { setGraphicType('order_of_play'); soundEffects.playScoreBeep(); }}
@@ -236,13 +272,45 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
               </div>
             </div>
 
+            {/* Zone Selector Sub-Filter (Only when 'standings' is active) */}
+            {graphicType === 'standings' && zones.length > 1 && (
+              <div className="animate-in fade-in duration-150">
+                <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-1.5">Zonas a Incluir</label>
+                <div className="flex flex-wrap gap-1.5 p-1.5 bg-black/30 rounded-xl border border-white/5">
+                  <button
+                    onClick={() => { setSelectedZoneIndex('all'); soundEffects.playScoreBeep(); }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                      selectedZoneIndex === 'all'
+                        ? 'bg-primary text-white shadow-sm'
+                        : 'text-muted hover:text-white'
+                    }`}
+                  >
+                    Todas ({zones.length})
+                  </button>
+                  {zones.map((z, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => { setSelectedZoneIndex(idx); soundEffects.playScoreBeep(); }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                        selectedZoneIndex === idx
+                          ? 'bg-primary text-white shadow-sm'
+                          : 'text-muted hover:text-white'
+                      }`}
+                    >
+                      {z.groupName?.replace('Grupo ', 'Zona ') || `Z${idx + 1}`}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Aspect Ratio Selector */}
             <div>
               <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">2. Formato de Imagen</label>
               <div className="grid grid-cols-2 gap-2">
                 <button
                   onClick={() => { setAspectRatio('story'); soundEffects.playScoreBeep(); }}
-                  className={`p-3 rounded-xl border text-center text-xs font-bold transition-all ${
+                  className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
                     aspectRatio === 'story' ? 'bg-primary/20 border-primary text-white' : 'bg-white/5 border-white/10 text-muted'
                   }`}
                 >
@@ -250,7 +318,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 </button>
                 <button
                   onClick={() => { setAspectRatio('square'); soundEffects.playScoreBeep(); }}
-                  className={`p-3 rounded-xl border text-center text-xs font-bold transition-all ${
+                  className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all ${
                     aspectRatio === 'square' ? 'bg-primary/20 border-primary text-white' : 'bg-white/5 border-white/10 text-muted'
                   }`}
                 >
@@ -261,11 +329,11 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
             {/* Theme Style Selector */}
             <div>
-              <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">3. Estilo Visual</label>
+              <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-2">3. Superficie</label>
               <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => { setThemeStyle('dark'); soundEffects.playScoreBeep(); }}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                  className={`p-2 rounded-xl border text-xs font-bold transition-all ${
                     themeStyle === 'dark' ? 'bg-blue-900/40 border-blue-500 text-blue-200' : 'bg-white/5 border-white/10 text-muted'
                   }`}
                 >
@@ -273,15 +341,15 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 </button>
                 <button
                   onClick={() => { setThemeStyle('clay'); soundEffects.playScoreBeep(); }}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                  className={`p-2 rounded-xl border text-xs font-bold transition-all ${
                     themeStyle === 'clay' ? 'bg-orange-950/60 border-orange-500 text-orange-200' : 'bg-white/5 border-white/10 text-muted'
                   }`}
                 >
-                  🧱 Polvo Ladrillo
+                  🧱 Ladrillo
                 </button>
                 <button
                   onClick={() => { setThemeStyle('grass'); soundEffects.playScoreBeep(); }}
-                  className={`p-2.5 rounded-xl border text-xs font-bold transition-all ${
+                  className={`p-2 rounded-xl border text-xs font-bold transition-all ${
                     themeStyle === 'grass' ? 'bg-emerald-950/60 border-emerald-500 text-emerald-200' : 'bg-white/5 border-white/10 text-muted'
                   }`}
                 >
@@ -295,7 +363,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
               <button
                 onClick={handleDownloadPng}
                 disabled={isGenerating}
-                className="w-full flex items-center justify-center gap-2 py-3.5 px-4 bg-gradient-to-r from-primary to-orange-500 text-white rounded-xl font-bold hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-primary/25 disabled:opacity-50"
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-gradient-to-r from-primary to-orange-500 text-white rounded-xl font-bold hover:brightness-110 active:scale-[0.98] transition-all shadow-lg shadow-primary/25 disabled:opacity-50"
               >
                 <Download size={18} />
                 {isGenerating ? 'Generando PNG...' : 'Descargar Imagen (PNG)'}
@@ -303,9 +371,9 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
               <button
                 onClick={handleShareWhatsApp}
-                className="w-full flex items-center justify-center gap-2 py-3 px-4 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 rounded-xl font-bold hover:bg-emerald-600/30 active:scale-[0.98] transition-all"
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 rounded-xl font-bold hover:bg-emerald-600/30 active:scale-[0.98] transition-all text-xs"
               >
-                <Share2 size={18} />
+                <Share2 size={16} />
                 Compartir por WhatsApp
               </button>
             </div>
@@ -323,35 +391,42 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
               ref={previewRef}
               className={`w-full max-w-[340px] ${
                 aspectRatio === 'story' ? 'aspect-[9/16]' : 'aspect-square'
-              } rounded-2xl bg-gradient-to-b ${getThemeBg()} border p-5 flex flex-col justify-between shadow-2xl relative overflow-hidden text-white select-none transition-all duration-300`}
+              } rounded-2xl bg-gradient-to-b ${getThemeBg()} border p-4 sm:p-5 flex flex-col justify-between shadow-2xl relative overflow-hidden text-white select-none transition-all duration-300`}
             >
               {/* Subtle Watermark BG Logo */}
-              <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full bg-primary/5 blur-2xl pointer-events-none"></div>
+              <div className="absolute -right-6 -bottom-6 w-36 h-36 opacity-15 pointer-events-none">
+                <img src="/Smash.png" alt="" className="w-full h-full object-contain filter grayscale brightness-200" crossOrigin="anonymous" />
+              </div>
 
-              {/* Graphic Header */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              {/* Graphic Header with Official Smash Logo */}
+              <div className="space-y-1.5 shrink-0">
+                <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-black tracking-wider text-primary font-display">SMASH</span>
-                    <span className="text-[10px] uppercase font-bold text-muted bg-white/5 px-2 py-0.5 rounded-full">Oficial</span>
+                    <img 
+                      src="/Smash.png" 
+                      alt="Smash Tenis" 
+                      className="h-7 w-auto object-contain drop-shadow-[0_0_8px_rgba(255,107,0,0.5)]" 
+                      crossOrigin="anonymous" 
+                    />
+                    <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 bg-white/10 px-2 py-0.5 rounded-full border border-white/10">OFICIAL</span>
                   </div>
                   <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getAccentColor()}`}>
                     {tier.label}
                   </span>
                 </div>
 
-                <div className="pt-1">
-                  <h3 className="text-base font-extrabold text-white leading-tight uppercase line-clamp-2">
+                <div className="pt-0.5">
+                  <h3 className="text-sm sm:text-base font-extrabold text-white leading-tight uppercase line-clamp-2">
                     {tournament.name}
                   </h3>
-                  <p className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
+                  <p className="text-[10px] text-muted flex items-center gap-1 mt-0.5">
                     📍 {tournament.institutions?.name || 'Club'} • {tournament.category} {tournament.gender || 'Caballeros'}
                   </p>
                 </div>
               </div>
 
               {/* Graphic Content Body */}
-              <div className="my-auto py-3">
+              <div className="my-auto py-2 w-full overflow-hidden">
                 {graphicType === 'champion' && (
                   <div className="text-center space-y-3 py-4">
                     <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20 animate-bounce">
@@ -359,7 +434,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                     </div>
                     <div>
                       <div className="text-[10px] font-black tracking-widest text-amber-400 uppercase">CAMPEÓN DEL TORNEO</div>
-                      <div className="text-xl font-black text-white mt-1">
+                      <div className="text-lg sm:text-xl font-black text-white mt-1">
                         {championName || tournament.champion_name || 'Por Definir'}
                       </div>
                       <div className="text-xs text-amber-200/70 mt-0.5">+{tier.pointsWinner} Pts para el Ranking</div>
@@ -368,15 +443,15 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 )}
 
                 {graphicType === 'playoffs' && (
-                  <div className="space-y-2 text-xs">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
+                  <div className="space-y-1.5 text-xs">
+                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1 mb-1">
                       <Trophy size={12} /> Cuadro de Eliminación
                     </div>
                     {(!playoffRounds || playoffRounds.length === 0) ? (
                       <div className="text-center py-6 text-muted text-xs italic">Fase final en preparación</div>
                     ) : (
-                      <div className="space-y-1.5 max-h-[190px] overflow-hidden">
-                        {playoffRounds.slice(0, 3).map((r, i) => (
+                      <div className="space-y-1.5 max-h-[220px] overflow-hidden">
+                        {playoffRounds.map((r, i) => (
                           <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2 flex justify-between items-center">
                             <span className="font-bold text-white text-[11px]">{r.name}</span>
                             <span className="text-[10px] text-primary font-bold">{(r.matches || []).length} Partido(s)</span>
@@ -388,28 +463,41 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 )}
 
                 {graphicType === 'standings' && (
-                  <div className="space-y-2 text-xs">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
-                      <Grid size={12} /> Tabla de Posiciones
+                  <div className="space-y-1.5 text-xs">
+                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center justify-between mb-1">
+                      <span className="flex items-center gap-1"><Grid size={12} /> Tabla de Posiciones</span>
+                      <span className="text-[9px] text-muted">
+                        {selectedZoneIndex === 'all' ? `Todas las Zonas (${zones.length})` : zones[selectedZoneIndex]?.groupName}
+                      </span>
                     </div>
-                    {(!zones || zones.length === 0) ? (
+                    {(!displayedZones || displayedZones.length === 0) ? (
                       <div className="text-center py-6 text-muted text-xs italic">Zonas aún no generadas</div>
                     ) : (
-                      <div className="space-y-2 max-h-[220px] overflow-hidden">
-                        {zones.slice(0, 3).map((z, i) => {
+                      <div className={`gap-1.5 max-h-[250px] overflow-hidden ${
+                        displayedZones.length > 2 ? 'grid grid-cols-2' : 'space-y-1.5'
+                      }`}>
+                        {displayedZones.map((z, i) => {
                           const zoneTitle = z.groupName || (z as any).name || `Zona ${z.groupNumber || (i + 1)}`;
                           const zonePlayers = z.players || (z as any).standings || [];
+                          const isCompact = displayedZones.length > 2;
+
                           return (
-                            <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2">
-                              <div className="font-black text-[10px] text-orange-300 uppercase mb-1">{zoneTitle}</div>
-                              {zonePlayers.slice(0, 3).map((st: any, idx: number) => {
+                            <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-1.5">
+                              <div className="font-black text-[9px] sm:text-[10px] text-orange-300 uppercase mb-0.5 truncate">
+                                {zoneTitle}
+                              </div>
+                              {zonePlayers.map((st: any, idx: number) => {
                                 const playerName = st.playerName || st.name || 'Jugador';
                                 const won = st.matchesWon ?? st.won ?? 0;
                                 const lost = st.matchesLost ?? st.lost ?? 0;
                                 return (
-                                  <div key={idx} className="flex justify-between items-center text-[10px] py-0.5 border-b border-white/5 last:border-0">
-                                    <span className="font-bold text-white truncate max-w-[150px]">{idx + 1}. {playerName}</span>
-                                    <span className="text-muted font-bold text-[9px]">{won}G - {lost}P ({st.points ?? 0} pts)</span>
+                                  <div key={idx} className="flex justify-between items-center text-[9px] py-0.5 border-b border-white/5 last:border-0">
+                                    <span className="font-bold text-white truncate max-w-[90px] sm:max-w-[110px]">
+                                      {idx + 1}. {playerName}
+                                    </span>
+                                    <span className="text-muted font-bold text-[8px] sm:text-[9px] shrink-0 ml-1">
+                                      {won}G-{lost}P {isCompact ? '' : `(${st.points ?? 0}p)`}
+                                    </span>
                                   </div>
                                 );
                               })}
@@ -422,20 +510,20 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 )}
 
                 {graphicType === 'order_of_play' && (
-                  <div className="space-y-2 text-xs">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1">
+                  <div className="space-y-1.5 text-xs">
+                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1 mb-1">
                       <Calendar size={12} /> Orden de Juego Oficial
                     </div>
                     {(!matches || matches.length === 0) ? (
                       <div className="text-center py-6 text-muted text-xs italic">Sin partidos programados hoy</div>
                     ) : (
-                      <div className="space-y-1.5 max-h-[190px] overflow-hidden">
-                        {matches.slice(0, 4).map((m, i) => (
-                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-2 flex justify-between items-center text-[10px]">
+                      <div className="space-y-1 max-h-[220px] overflow-hidden">
+                        {matches.slice(0, 5).map((m, i) => (
+                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-1.5 flex justify-between items-center text-[9px]">
                             <span className="font-bold text-white truncate max-w-[170px]">
                               {m.player1_name || 'Jugador 1'} vs {m.player2_name || 'Jugador 2'}
                             </span>
-                            <span className="text-primary font-bold">{m.scheduled_at ? m.scheduled_at.slice(11, 16) : 'A confirmar'}</span>
+                            <span className="text-primary font-bold shrink-0">{m.scheduled_at ? m.scheduled_at.slice(11, 16) : 'A conf.'}</span>
                           </div>
                         ))}
                       </div>
@@ -445,9 +533,12 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
               </div>
 
               {/* Graphic Footer */}
-              <div className="border-t border-white/10 pt-2 flex items-center justify-between text-[9px] text-muted">
-                <span>smashtenis.lnx.com.ar</span>
-                <span className="font-bold text-white">#SmashTennis</span>
+              <div className="border-t border-white/10 pt-2 flex items-center justify-between text-[9px] text-muted shrink-0">
+                <div className="flex items-center gap-1.5 font-bold text-slate-300">
+                  <img src="/Smash.png" alt="" className="h-3 w-auto object-contain opacity-80" crossOrigin="anonymous" />
+                  <span>smashtenis.lnx.com.ar</span>
+                </div>
+                <span className="font-bold text-primary">#SmashTenis</span>
               </div>
             </div>
 
@@ -459,3 +550,4 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     </div>
   );
 };
+
