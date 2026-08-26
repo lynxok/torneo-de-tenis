@@ -5,7 +5,7 @@ import { api } from './services/api';
 import { UserProfile, UserRole } from './types';
 import { AuthPage } from './components/AuthPage';
 import { Sidebar } from './components/Sidebar';
-import { TUTORIALS } from './pages/TutorialsPage';
+import { TUTORIALS, TutorialsPage } from './pages/TutorialsPage';
 import { TutorialOverlay } from './components/TutorialOverlay';
 import { ToastProvider } from './components/ui/Toast';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
@@ -13,20 +13,42 @@ import { VersionUpdatePrompt } from './components/VersionUpdatePrompt';
 import { soundEffects } from './services/soundEffects';
 import { Menu, ShieldAlert, User, Shield, Loader2 } from 'lucide-react';
 
-// Code-Splitting with React.lazy
-const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
-const Tournaments = lazy(() => import('./pages/Tournaments').then(m => ({ default: m.Tournaments })));
-const TournamentDetails = lazy(() => import('./pages/TournamentDetails').then(m => ({ default: m.TournamentDetails })));
-const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
-const Rankings = lazy(() => import('./pages/Rankings').then(m => ({ default: m.Rankings })));
-const Players = lazy(() => import('./pages/Players').then(m => ({ default: m.Players })));
-const Bookings = lazy(() => import('./pages/Bookings').then(m => ({ default: m.Bookings })));
-const Messages = lazy(() => import('./pages/Messages').then(m => ({ default: m.Messages })));
-const Reports = lazy(() => import('./pages/Reports').then(m => ({ default: m.Reports })));
-const AdminUsers = lazy(() => import('./pages/AdminUsers').then(m => ({ default: m.AdminUsers })));
-const AdminInstitutions = lazy(() => import('./pages/AdminInstitutions').then(m => ({ default: m.AdminInstitutions })));
-const AdminSettings = lazy(() => import('./pages/AdminSettings').then(m => ({ default: m.AdminSettings })));
-const TutorialsPage = lazy(() => import('./pages/TutorialsPage').then(m => ({ default: m.TutorialsPage })));
+// Resilient Code-Splitting with auto-retry on new version deployments
+function lazyRetry<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>,
+  name: string
+): React.LazyExoticComponent<T> {
+  return lazy(async () => {
+    const retryKey = `smash_retry_${name}`;
+    const pageHasBeenForceRefreshed = window.sessionStorage.getItem(retryKey);
+    try {
+      const component = await factory();
+      window.sessionStorage.removeItem(retryKey);
+      return component;
+    } catch (error: any) {
+      console.warn(`[Vite Chunk Retry] Chunk loading failed for ${name}. Reloading for latest build...`, error);
+      if (!pageHasBeenForceRefreshed) {
+        window.sessionStorage.setItem(retryKey, 'true');
+        window.location.reload();
+        return new Promise(() => {});
+      }
+      throw error;
+    }
+  });
+}
+
+const Dashboard = lazyRetry(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })), 'Dashboard');
+const Tournaments = lazyRetry(() => import('./pages/Tournaments').then(m => ({ default: m.Tournaments })), 'Tournaments');
+const TournamentDetails = lazyRetry(() => import('./pages/TournamentDetails').then(m => ({ default: m.TournamentDetails })), 'TournamentDetails');
+const Profile = lazyRetry(() => import('./pages/Profile').then(m => ({ default: m.Profile })), 'Profile');
+const Rankings = lazyRetry(() => import('./pages/Rankings').then(m => ({ default: m.Rankings })), 'Rankings');
+const Players = lazyRetry(() => import('./pages/Players').then(m => ({ default: m.Players })), 'Players');
+const Bookings = lazyRetry(() => import('./pages/Bookings').then(m => ({ default: m.Bookings })), 'Bookings');
+const Messages = lazyRetry(() => import('./pages/Messages').then(m => ({ default: m.Messages })), 'Messages');
+const Reports = lazyRetry(() => import('./pages/Reports').then(m => ({ default: m.Reports })), 'Reports');
+const AdminUsers = lazyRetry(() => import('./pages/AdminUsers').then(m => ({ default: m.AdminUsers })), 'AdminUsers');
+const AdminInstitutions = lazyRetry(() => import('./pages/AdminInstitutions').then(m => ({ default: m.AdminInstitutions })), 'AdminInstitutions');
+const AdminSettings = lazyRetry(() => import('./pages/AdminSettings').then(m => ({ default: m.AdminSettings })), 'AdminSettings');
 
 const AppContent = () => {
   const [session, setSession] = useState<any>(null);
