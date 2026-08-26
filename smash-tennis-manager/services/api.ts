@@ -178,7 +178,7 @@ export const api = {
             try {
                 let query = supabase
                     .from('profiles')
-                    .select('id, name, lastname, role, institution_id, created_at, avatar_url, profile_picture_url, is_approved')
+                    .select('id, name, lastname, role, institution_id, created_at, avatar_url, profile_picture_url, is_approved, member_status')
                     .eq('is_approved', false)
                     .neq('role', 'superadmin')
                     .order('created_at', { ascending: false });
@@ -189,7 +189,12 @@ export const api = {
 
                 const { data, error } = await query;
                 if (error) throw error;
-                return (data || []) as UserProfile[];
+                return ((data || []) as UserProfile[]).filter(
+                    (p: any) => p.role !== 'inactive' &&
+                                p.member_status !== 'deleted' &&
+                                !p.name?.includes('[Usuario Eliminado]') &&
+                                !p.name?.includes('[Eliminado]')
+                );
             } catch (err) {
                 console.error("Error fetching pending profiles:", err);
                 return [] as UserProfile[];
@@ -403,8 +408,9 @@ export const api = {
                 .update({
                     name: '[Usuario Eliminado]',
                     lastname: '',
-                    is_approved: false,
-                    role: 'player',
+                    is_approved: true,
+                    role: 'inactive',
+                    member_status: 'deleted',
                     category: null,
                     institution_id: null
                 })
