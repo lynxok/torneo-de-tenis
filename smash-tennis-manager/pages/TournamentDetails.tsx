@@ -1716,8 +1716,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                 </span>
                                                                             )}
 
-                                                                            {/* Schedule Button for Admin */}
-                                                                            {isClubAdmin && (
+                                                                            {/* Schedule Button for Admin (Solo si el partido NO fue jugado aún) */}
+                                                                            {isClubAdmin && !m.is_played && !m.winner_id && (
                                                                                 <button
                                                                                     onClick={() => openScheduleModal(m)}
                                                                                     className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
@@ -1744,8 +1744,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
                                                                     </div>
 
-                                                                    {/* Scheduled Info Badge */}
-                                                                    {scheduledInfo && (
+                                                                    {/* Scheduled Info Badge (Solo si está pendiente por jugar) */}
+                                                                    {scheduledInfo && !m.is_played && !m.winner_id && (
                                                                         <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-lg">
                                                                             <span className="flex items-center gap-1">
                                                                                 <Calendar size={11} className="text-blue-400" /> {scheduledInfo.dateStr}
@@ -2001,8 +2001,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
                                                                     </div>
 
-                                                                    {/* Scheduled Info Badge */}
-                                                                    {scheduledInfo && (
+                                                                    {/* Scheduled Info Badge (Solo si está pendiente por jugar) */}
+                                                                    {scheduledInfo && !m.is_played && !m.winner_id && (
                                                                         <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg">
                                                                             <span className="flex items-center gap-1">
                                                                                 <Calendar size={10} className="text-blue-400" /> {scheduledInfo.dateStr}
@@ -2019,7 +2019,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                     )}
 
                                                                     {/* Player Highlight & WhatsApp Coordination Banner */}
-                                                                    {isUserInMatch && scheduledInfo && !m.is_played && (
+                                                                    {isUserInMatch && scheduledInfo && !m.is_played && !m.winner_id && (
                                                                         <div className="p-1.5 bg-blue-500/15 border border-blue-500/30 rounded-xl flex items-center justify-between gap-1.5 text-[10px]">
                                                                             <span className="text-blue-200 truncate"><strong>Tu partido:</strong> {scheduledInfo.timeStr} ({scheduledInfo.courtStr})</span>
                                                                             <button
@@ -2061,8 +2061,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
 
                                                                         <div className="flex items-center gap-1">
-                                                                            {/* Schedule Button for Admin */}
-                                                                            {isClubAdmin && (
+                                                                            {/* Schedule Button for Admin (Solo si el partido NO fue jugado aún) */}
+                                                                            {isClubAdmin && !m.is_played && !m.winner_id && (
                                                                                 <button
                                                                                     onClick={() => openScheduleModal(m)}
                                                                                     className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
@@ -2166,7 +2166,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                     Tu Partido
                                                                 </span>
                                                             )}
-                                                            {scheduledInfo && (
+                                                            {scheduledInfo && !m.is_played && !m.winner_id && (
                                                                 <span className="text-[10px] font-semibold text-blue-300 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-md flex items-center gap-1.5">
                                                                     <Calendar size={11} className="text-blue-400" />
                                                                     <span>{scheduledInfo.dateStr}</span>
@@ -2207,7 +2207,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                         </div>
 
                                                         {/* Player Highlight & WhatsApp Coordination Banner */}
-                                                        {isUserInMatch && scheduledInfo && !m.is_played && (
+                                                        {isUserInMatch && scheduledInfo && !m.is_played && !m.winner_id && (
                                                             <div className="p-2 bg-gradient-to-r from-blue-500/20 via-primary/10 to-transparent border border-blue-500/30 rounded-xl flex items-center justify-between gap-2 mt-1">
                                                                 <div className="flex items-center gap-1.5 text-xs text-blue-200 truncate">
                                                                     <Clock size={12} className="text-blue-400 shrink-0" />
@@ -2251,8 +2251,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             </button>
                                                         )}
 
-                                                        {/* Schedule Button for Admin */}
-                                                        {isClubAdmin && (
+                                                        {/* Schedule Button for Admin (Solo si el partido NO fue jugado aún) */}
+                                                        {isClubAdmin && !m.is_played && !m.winner_id && (
                                                             <button
                                                                 onClick={() => openScheduleModal(m)}
                                                                 className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 ${
