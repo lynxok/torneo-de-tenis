@@ -590,7 +590,9 @@ export const api = {
                                 try {
                                     await supabase.from('matches').update({
                                         score_status: 'confirmed',
-                                        score_confirmed_at: new Date().toISOString()
+                                        score_confirmed_at: new Date().toISOString(),
+                                        scheduling_status: 'finished',
+                                        is_played: true
                                     }).eq('id', m.id);
                                 } catch (e) {
                                     try {
@@ -614,6 +616,20 @@ export const api = {
                                             date_obtained: new Date().toISOString(),
                                             year: new Date().getFullYear()
                                         });
+
+                                        if (m.winner_partner_id) {
+                                            const { data: partnerWp } = await supabase.from('profiles').select('matches_won').eq('id', m.winner_partner_id).single();
+                                            if (partnerWp) {
+                                                await supabase.from('profiles').update({ matches_won: (partnerWp.matches_won || 0) + 1 }).eq('id', m.winner_partner_id);
+                                            }
+                                            await supabase.from('ranking_history').insert({
+                                                player_id: m.winner_partner_id,
+                                                points: 50,
+                                                tournament_name: tournament?.name || 'Torneo Oficial (Dobles)',
+                                                date_obtained: new Date().toISOString(),
+                                                year: new Date().getFullYear()
+                                            });
+                                        }
                                     } catch (e) {
                                         console.warn("Auto-confirm point award fallback:", e);
                                     }
@@ -1702,15 +1718,73 @@ export const api = {
                 .order('created_at', { ascending: false });
 
             if (error) return [];
-            return (data || []).map((m: any) => ({
-                ...m,
-                scheduled_at: m.scheduled_at || m.proposal_data?.scheduled_at || null,
-                court_name: m.court_name || m.proposal_data?.court_name || m.court_slot_id || null,
-                player1_name: formatPlayerName(m.player1_name),
-                player2_name: formatPlayerName(m.player2_name),
-                player1_partner_name: m.player1_partner_name ? formatPlayerName(m.player1_partner_name) : undefined,
-                player2_partner_name: m.player2_partner_name ? formatPlayerName(m.player2_partner_name) : undefined
-            })) as Match[];
+
+            const now = Date.now();
+            const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+
+            return (data || []).map((m: any) => {
+                let updatedScoreStatus = m.score_status;
+
+                // Auto-confirm if pending confirmation for > 24 hours
+                if (m.score_status === 'pending_confirmation' && m.score_submitted_at) {
+                    const submittedTime = new Date(m.score_submitted_at).getTime();
+                    if (now - submittedTime >= TWENTY_FOUR_HOURS) {
+                        updatedScoreStatus = 'confirmed';
+                        // Trigger async background confirmation update
+                        (async () => {
+                            try {
+                                await supabase.from('matches').update({
+                                    score_status: 'confirmed',
+                                    score_confirmed_at: new Date().toISOString(),
+                                    scheduling_status: 'finished',
+                                    is_played: true
+                                }).eq('id', m.id);
+
+                                if (m.winner_id) {
+                                    const { data: wp } = await supabase.from('profiles').select('matches_won').eq('id', m.winner_id).single();
+                                    if (wp) {
+                                        await supabase.from('profiles').update({ matches_won: (wp.matches_won || 0) + 1 }).eq('id', m.winner_id);
+                                    }
+                                    await supabase.from('ranking_history').insert({
+                                        player_id: m.winner_id,
+                                        points: 50,
+                                        tournament_name: m.tournaments?.name || 'Torneo Oficial',
+                                        date_obtained: new Date().toISOString(),
+                                        year: new Date().getFullYear()
+                                    });
+
+                                    if (m.winner_partner_id) {
+                                        const { data: partnerWp } = await supabase.from('profiles').select('matches_won').eq('id', m.winner_partner_id).single();
+                                        if (partnerWp) {
+                                            await supabase.from('profiles').update({ matches_won: (partnerWp.matches_won || 0) + 1 }).eq('id', m.winner_partner_id);
+                                        }
+                                        await supabase.from('ranking_history').insert({
+                                            player_id: m.winner_partner_id,
+                                            points: 50,
+                                            tournament_name: m.tournaments?.name || 'Torneo Oficial (Dobles)',
+                                            date_obtained: new Date().toISOString(),
+                                            year: new Date().getFullYear()
+                                        });
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn("Auto-confirm point award fallback in getByUser:", e);
+                            }
+                        })();
+                    }
+                }
+
+                return {
+                    ...m,
+                    score_status: updatedScoreStatus,
+                    scheduled_at: m.scheduled_at || m.proposal_data?.scheduled_at || null,
+                    court_name: m.court_name || m.proposal_data?.court_name || m.court_slot_id || null,
+                    player1_name: formatPlayerName(m.player1_name),
+                    player2_name: formatPlayerName(m.player2_name),
+                    player1_partner_name: m.player1_partner_name ? formatPlayerName(m.player1_partner_name) : undefined,
+                    player2_partner_name: m.player2_partner_name ? formatPlayerName(m.player2_partner_name) : undefined
+                };
+            }) as Match[];
         }
     },
     matchmaking: {

@@ -1031,8 +1031,39 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         finalMatch.winner_id === finalMatch.player1_id ? finalMatch.player1_name : finalMatch.player2_name
     ) : null;
 
+    const handleConfirmAllGroupMatches = async () => {
+        const pending = groupMatches.filter(m => (m.score || m.is_played) && m.score_status !== 'confirmed');
+        if (pending.length === 0) {
+            addToast("Todos los partidos con resultado en la fase de grupos ya están validados.", "info");
+            return;
+        }
+        if (!confirm(`¿Deseas validar y confirmar oficialmente los ${pending.length} partidos pendientes de la fase de grupos?`)) return;
+
+        try {
+            for (const pm of pending) {
+                await api.matches.confirmScore(pm.id, user);
+            }
+            addToast(`Se validaron ${pending.length} partidos de grupos con éxito.`, "success");
+            await loadTournament();
+        } catch (e: any) {
+            addToast("Error al validar partidos: " + e.message, "error");
+        }
+    };
+
     const handleGeneratePlayoffsFromZones = async () => {
         if (!tournament || zones.length === 0) return;
+
+        // Auto-validate all group matches that have scores loaded but are still pending or disputed
+        const pendingGroupMatches = groupMatches.filter(m => (m.score || m.is_played) && m.score_status !== 'confirmed');
+        if (pendingGroupMatches.length > 0) {
+            try {
+                for (const pm of pendingGroupMatches) {
+                    await api.matches.confirmScore(pm.id, user);
+                }
+            } catch (err) {
+                console.error("Error auto-confirming pending group matches on playoff generation:", err);
+            }
+        }
 
         const qualifiers: { zoneName: string; rank: number; player: GroupStandingRow }[] = [];
         for (const z of zones) {
@@ -1403,6 +1434,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             </button>
                                         )}
 
+                                        {groupMatches.some(m => (m.score || m.is_played) && m.score_status !== 'confirmed') && (
+                                            <button
+                                                onClick={handleConfirmAllGroupMatches}
+                                                className="px-4 py-2 bg-purple-500/20 border border-purple-500/40 text-purple-300 hover:bg-purple-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                                                title="Validar y confirmar oficialmente todos los resultados pendientes de la fase de grupos"
+                                            >
+                                                <CheckCircle2 size={14} className="text-purple-400" /> Validar Resultados Pendientes
+                                            </button>
+                                        )}
+
                                         <button
                                             onClick={openManualEnrollModal}
                                             className="px-4 py-2 bg-primary/20 border border-primary/40 text-primary hover:bg-primary/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
@@ -1735,10 +1776,27 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
                                                             const canEditScore = isClubAdmin || (isUserInMatch && m.score_status !== 'confirmed');
                                                             const formattedScore = formatMatchScore(m.score);
-                                                            const isDoubles = tournament.type === 'doubles';
+                                                            const isDoubles = tournament.type === 'doubles' || !!m.player1_partner_id;
                                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
                                                             const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
-                                                            const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
+                                                            
+                                                            // Accurate team separation for Singles and Doubles
+                                                            const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
+                                                            const isSubmitterTeam2 = m.score_submitted_by === m.player2_id || (!!m.player2_partner_id && m.score_submitted_by === m.player2_partner_id);
+                                                            const isUserInTeam1 = user.id === m.player1_id || (!!m.player1_partner_id && user.id === m.player1_partner_id);
+                                                            const isUserInTeam2 = user.id === m.player2_id || (!!m.player2_partner_id && user.id === m.player2_partner_id);
+
+                                                            const isOpponent = (isSubmitterTeam1 && isUserInTeam2) || (isSubmitterTeam2 && isUserInTeam1) || (!isSubmitterTeam1 && !isSubmitterTeam2 && isUserInMatch && user.id !== m.score_submitted_by);
+                                                            const isOpponentPending = isOpponent && m.score_status === 'pending_confirmation';
+                                                            const isSubmitterPending = (isUserInTeam1 && isSubmitterTeam1 || isUserInTeam2 && isSubmitterTeam2 || user.id === m.score_submitted_by) && m.score_status === 'pending_confirmation';
+                                                            
+                                                            let hoursRemaining = 24;
+                                                            if (m.score_submitted_at) {
+                                                                const elapsed = Date.now() - new Date(m.score_submitted_at).getTime();
+                                                                const remMs = 24 * 60 * 60 * 1000 - elapsed;
+                                                                hoursRemaining = remMs > 0 ? Math.ceil(remMs / (60 * 60 * 1000)) : 0;
+                                                            }
+
                                                             const scheduledInfo = formatScheduledInfo(m.scheduled_at, m.court_name);
 
                                                             return (
@@ -1779,8 +1837,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                         {formattedScore}
                                                                                     </span>
                                                                                     {m.score_status === 'pending_confirmation' && (
-                                                                                        <span className="text-[9px] text-amber-400 font-bold flex items-center gap-0.5">
-                                                                                            <Clock size={10} /> Pendiente 24h
+                                                                                        <span className="text-[9px] text-amber-400 font-bold flex items-center gap-0.5" title={`Auto-confirmación en ${hoursRemaining} hs`}>
+                                                                                            <Clock size={10} /> Pendiente ({hoursRemaining}h)
                                                                                         </span>
                                                                                     )}
                                                                                     {m.score_status === 'disputed' && (
@@ -1881,26 +1939,60 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
                                                                     )}
 
+                                                                    {/* Submitter Pending Feedback Banner */}
+                                                                    {isSubmitterPending && (
+                                                                        <div className="mt-1 px-2.5 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[10px] text-blue-300 flex items-center gap-1.5">
+                                                                            <Clock size={11} className="text-blue-400 shrink-0" />
+                                                                            <span>Esperando confirmación de rivales (se auto-valida en <strong>{hoursRemaining} hs</strong>).</span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Dispute Reason Banner */}
+                                                                    {m.score_status === 'disputed' && (m.score_dispute_reason || m.proposal_data?.dispute_reason) && (
+                                                                        <div className="mt-1 px-2.5 py-1.5 bg-red-500/15 border border-red-500/30 rounded-lg text-[10px] text-red-200">
+                                                                            <span className="font-bold text-red-300">Motivo del rechazo: </span>
+                                                                            <span className="italic">"{m.score_dispute_reason || m.proposal_data?.dispute_reason}"</span>
+                                                                        </div>
+                                                                    )}
+
                                                                     {/* Rival Score Confirmation Banner */}
                                                                     {isOpponentPending && (
-                                                                        <div className="mt-1 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-2">
-                                                                            <span className="text-[11px] text-amber-300 font-medium">
-                                                                                ¿Confirmas este marcador cargado por {m.score_submitted_by_name || m.score?.submitted_by_name || 'tu rival'}?
-                                                                            </span>
-                                                                            <div className="flex items-center gap-1.5">
+                                                                        <div className="mt-1 p-2.5 bg-amber-500/15 border border-amber-500/35 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 shadow-sm">
+                                                                            <div className="text-[11px] text-amber-200">
+                                                                                <span>¿Confirmas este marcador cargado por <strong>{m.score_submitted_by_name || m.score?.submitted_by_name || 'tu rival'}</strong>?</span>
+                                                                                <span className="text-amber-400/90 text-[10px] block sm:inline sm:ml-1 font-semibold">• Auto-valida en {hoursRemaining} hs</span>
+                                                                            </div>
+                                                                            <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto justify-end">
                                                                                 <button
                                                                                     onClick={() => handleConfirmScore(m.id)}
-                                                                                    className="px-2.5 py-1 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold rounded-md flex items-center gap-1 transition-all"
+                                                                                    className="flex-1 sm:flex-none px-2.5 py-1 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold rounded-md flex items-center justify-center gap-1 transition-all"
                                                                                 >
                                                                                     <Check size={12} /> Confirmar
                                                                                 </button>
                                                                                 <button
                                                                                     onClick={() => setDisputeMatchId(m.id)}
-                                                                                    className="px-2.5 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-[10px] font-bold rounded-md flex items-center gap-1 transition-all"
+                                                                                    className="flex-1 sm:flex-none px-2.5 py-1 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-[10px] font-bold rounded-md flex items-center justify-center gap-1 transition-all"
                                                                                 >
                                                                                     <AlertTriangle size={12} /> Disputar
                                                                                 </button>
                                                                             </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Admin Direct Validation Banner */}
+                                                                    {isClubAdmin && (m.score_status === 'pending_confirmation' || m.score_status === 'disputed') && (
+                                                                        <div className="mt-1 p-2 bg-purple-500/15 border border-purple-500/30 rounded-xl flex items-center justify-between gap-2 shadow-sm">
+                                                                            <span className="text-[10px] text-purple-200 flex items-center gap-1 font-medium">
+                                                                                <Shield size={12} className="text-purple-400" />
+                                                                                {m.score_status === 'disputed' ? 'En disputa (requiere arbitraje)' : `Pendiente de validación (${hoursRemaining}h)`}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={() => handleConfirmScore(m.id)}
+                                                                                className="px-2.5 py-1 bg-purple-600 hover:bg-purple-500 text-white text-[10px] font-bold rounded-lg flex items-center gap-1 shadow-sm transition-all"
+                                                                                title="Validar y confirmar oficialmente como Administrador"
+                                                                            >
+                                                                                <Check size={11} /> Validar (Admin)
+                                                                            </button>
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -2053,7 +2145,24 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             const isFinished = !!m.winner_id || (m.score && m.scheduling_status === 'finished');
                                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
                                                             const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
-                                                            const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
+                                                            
+                                                            // Accurate team separation for Singles and Doubles
+                                                            const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
+                                                            const isSubmitterTeam2 = m.score_submitted_by === m.player2_id || (!!m.player2_partner_id && m.score_submitted_by === m.player2_partner_id);
+                                                            const isUserInTeam1 = user.id === m.player1_id || (!!m.player1_partner_id && user.id === m.player1_partner_id);
+                                                            const isUserInTeam2 = user.id === m.player2_id || (!!m.player2_partner_id && user.id === m.player2_partner_id);
+
+                                                            const isOpponent = (isSubmitterTeam1 && isUserInTeam2) || (isSubmitterTeam2 && isUserInTeam1) || (!isSubmitterTeam1 && !isSubmitterTeam2 && isUserInMatch && user.id !== m.score_submitted_by);
+                                                            const isOpponentPending = isOpponent && m.score_status === 'pending_confirmation';
+                                                            const isSubmitterPending = (isUserInTeam1 && isSubmitterTeam1 || isUserInTeam2 && isSubmitterTeam2 || user.id === m.score_submitted_by) && m.score_status === 'pending_confirmation';
+                                                            
+                                                            let hoursRemaining = 24;
+                                                            if (m.score_submitted_at) {
+                                                                const elapsed = Date.now() - new Date(m.score_submitted_at).getTime();
+                                                                const remMs = 24 * 60 * 60 * 1000 - elapsed;
+                                                                hoursRemaining = remMs > 0 ? Math.ceil(remMs / (60 * 60 * 1000)) : 0;
+                                                            }
+
                                                             const scheduledInfo = formatScheduledInfo(m.scheduled_at, m.court_name);
 
                                                             return (
@@ -2134,9 +2243,21 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                 </button>
                                                                             )}
                                                                             {formattedScore ? (
-                                                                                <span className="font-mono font-bold text-primary text-xs bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
-                                                                                    {formattedScore}
-                                                                                </span>
+                                                                                <div className="flex flex-col gap-0.5">
+                                                                                    <span className="font-mono font-bold text-primary text-xs bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
+                                                                                        {formattedScore}
+                                                                                    </span>
+                                                                                    {m.score_status === 'pending_confirmation' && (
+                                                                                        <span className="text-[8px] text-amber-400 font-bold flex items-center gap-0.5">
+                                                                                            <Clock size={9} /> Pendiente ({hoursRemaining}h)
+                                                                                        </span>
+                                                                                    )}
+                                                                                    {m.score_status === 'disputed' && (
+                                                                                        <span className="text-[8px] text-red-400 font-bold flex items-center gap-0.5">
+                                                                                            <AlertTriangle size={9} /> En Disputa
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
                                                                             ) : (
                                                                                 <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
                                                                                     Por Jugar
@@ -2180,24 +2301,57 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
                                                                     )}
 
+                                                                    {/* Submitter Pending Feedback Banner */}
+                                                                    {isSubmitterPending && (
+                                                                        <div className="mt-1 px-2 py-1 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[9px] text-blue-300 flex items-center gap-1">
+                                                                            <Clock size={10} className="text-blue-400 shrink-0" />
+                                                                            <span>Esperando confirmación (valida en <strong>{hoursRemaining} hs</strong>).</span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Dispute Reason Banner */}
+                                                                    {m.score_status === 'disputed' && (m.score_dispute_reason || m.proposal_data?.dispute_reason) && (
+                                                                        <div className="mt-1 px-2 py-1 bg-red-500/15 border border-red-500/30 rounded-lg text-[9px] text-red-200">
+                                                                            <span className="font-bold text-red-300">Motivo: </span>
+                                                                            <span className="italic">"{m.score_dispute_reason || m.proposal_data?.dispute_reason}"</span>
+                                                                        </div>
+                                                                    )}
+
                                                                     {/* Rival Score Confirmation Banner */}
                                                                     {isOpponentPending && (
-                                                                        <div className="mt-1 p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-between gap-2">
-                                                                            <span className="text-[10px] text-amber-300 font-medium">¿Confirmas resultado?</span>
-                                                                            <div className="flex items-center gap-1">
+                                                                        <div className="mt-1 p-2 bg-amber-500/15 border border-amber-500/35 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-1.5">
+                                                                            <span className="text-[10px] text-amber-200 font-medium">¿Confirmas? ({hoursRemaining}h)</span>
+                                                                            <div className="flex items-center gap-1 w-full sm:w-auto justify-end">
                                                                                 <button
                                                                                     onClick={() => handleConfirmScore(m.id)}
-                                                                                    className="px-2 py-0.5 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold rounded"
+                                                                                    className="flex-1 sm:flex-none px-2 py-0.5 bg-green-600 hover:bg-green-500 text-white text-[10px] font-bold rounded-lg flex items-center justify-center gap-0.5"
                                                                                 >
-                                                                                    ✓ Sí
+                                                                                    <Check size={11} /> Confirmar
                                                                                 </button>
                                                                                 <button
                                                                                     onClick={() => setDisputeMatchId(m.id)}
-                                                                                    className="px-2 py-0.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-[10px] font-bold rounded"
+                                                                                    className="flex-1 sm:flex-none px-2 py-0.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-[10px] font-bold rounded-lg flex items-center justify-center gap-0.5"
                                                                                 >
-                                                                                    Disputar
+                                                                                    <AlertTriangle size={11} /> Disputar
                                                                                 </button>
                                                                             </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Admin Direct Validation Banner */}
+                                                                    {isClubAdmin && (m.score_status === 'pending_confirmation' || m.score_status === 'disputed') && (
+                                                                        <div className="mt-1 p-2 bg-purple-500/15 border border-purple-500/30 rounded-xl flex items-center justify-between gap-1.5 shadow-sm">
+                                                                            <span className="text-[9px] text-purple-200 flex items-center gap-1 font-medium">
+                                                                                <Shield size={11} className="text-purple-400" />
+                                                                                {m.score_status === 'disputed' ? 'En disputa' : `Pendiente (${hoursRemaining}h)`}
+                                                                            </span>
+                                                                            <button
+                                                                                onClick={() => handleConfirmScore(m.id)}
+                                                                                className="px-2 py-0.5 bg-purple-600 hover:bg-purple-500 text-white text-[9px] font-bold rounded flex items-center gap-1 shadow-sm transition-all"
+                                                                                title="Validar y confirmar oficialmente como Administrador"
+                                                                            >
+                                                                                <Check size={10} /> Validar (Admin)
+                                                                            </button>
                                                                         </div>
                                                                     )}
                                                                 </div>
@@ -2228,7 +2382,24 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             const formattedScore = formatMatchScore(m.score);
                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
                                             const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
-                                            const isOpponentPending = isUserInMatch && m.score_status === 'pending_confirmation' && user.id !== m.score_submitted_by;
+                                            
+                                            // Accurate team separation for Singles and Doubles
+                                            const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
+                                            const isSubmitterTeam2 = m.score_submitted_by === m.player2_id || (!!m.player2_partner_id && m.score_submitted_by === m.player2_partner_id);
+                                            const isUserInTeam1 = user.id === m.player1_id || (!!m.player1_partner_id && user.id === m.player1_partner_id);
+                                            const isUserInTeam2 = user.id === m.player2_id || (!!m.player2_partner_id && user.id === m.player2_partner_id);
+
+                                            const isOpponent = (isSubmitterTeam1 && isUserInTeam2) || (isSubmitterTeam2 && isUserInTeam1) || (!isSubmitterTeam1 && !isSubmitterTeam2 && isUserInMatch && user.id !== m.score_submitted_by);
+                                            const isOpponentPending = isOpponent && m.score_status === 'pending_confirmation';
+                                            const isSubmitterPending = (isUserInTeam1 && isSubmitterTeam1 || isUserInTeam2 && isSubmitterTeam2 || user.id === m.score_submitted_by) && m.score_status === 'pending_confirmation';
+                                            
+                                            let hoursRemaining = 24;
+                                            if (m.score_submitted_at) {
+                                                const elapsed = Date.now() - new Date(m.score_submitted_at).getTime();
+                                                const remMs = 24 * 60 * 60 * 1000 - elapsed;
+                                                hoursRemaining = remMs > 0 ? Math.ceil(remMs / (60 * 60 * 1000)) : 0;
+                                            }
+
                                             const scheduledInfo = formatScheduledInfo(m.scheduled_at, m.court_name);
 
                                             return (
@@ -2263,8 +2434,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                 </span>
                                                             )}
                                                             {m.score_status === 'pending_confirmation' && (
-                                                                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
-                                                                    <Clock size={10} /> Pendiente 24h
+                                                                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5" title={`Auto-confirmación en ${hoursRemaining} hs`}>
+                                                                    <Clock size={10} /> Pendiente ({hoursRemaining}h)
                                                                 </span>
                                                             )}
                                                             {m.score_status === 'disputed' && (
@@ -2320,6 +2491,22 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         • {new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs ({new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleDateString([], { day: '2-digit', month: '2-digit' })})
                                                                     </span>
                                                                 )}
+                                                            </div>
+                                                        )}
+
+                                                        {/* Submitter Pending Feedback Banner */}
+                                                        {isSubmitterPending && (
+                                                            <div className="mt-1 px-2.5 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[10px] text-blue-300 flex items-center gap-1.5">
+                                                                <Clock size={11} className="text-blue-400 shrink-0" />
+                                                                <span>Esperando confirmación de rivales (se auto-valida en <strong>{hoursRemaining} hs</strong>).</span>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Dispute Reason Banner */}
+                                                        {m.score_status === 'disputed' && (m.score_dispute_reason || m.proposal_data?.dispute_reason) && (
+                                                            <div className="mt-1 px-2.5 py-1.5 bg-red-500/15 border border-red-500/30 rounded-lg text-[10px] text-red-200">
+                                                                <span className="font-bold text-red-300">Motivo del rechazo: </span>
+                                                                <span className="italic">"{m.score_dispute_reason || m.proposal_data?.dispute_reason}"</span>
                                                             </div>
                                                         )}
                                                     </div>
@@ -2389,6 +2576,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                     <AlertTriangle size={13} /> Disputar
                                                                 </button>
                                                             </div>
+                                                        )}
+
+                                                        {isClubAdmin && (m.score_status === 'pending_confirmation' || m.score_status === 'disputed') && (
+                                                            <button
+                                                                onClick={() => handleConfirmScore(m.id)}
+                                                                className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-md transition-all"
+                                                                title="Validar y confirmar oficialmente como Administrador"
+                                                            >
+                                                                <Check size={13} /> Validar (Admin)
+                                                            </button>
                                                         )}
                                                     </div>
                                                 </div>

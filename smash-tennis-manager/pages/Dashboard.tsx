@@ -28,10 +28,13 @@ import {
     Shield,
     AlertTriangle,
     Flame,
-    UserCircle
+    UserCircle,
+    X,
+    Loader2
 } from 'lucide-react';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { StoriesBar } from '../components/stories/StoriesBar';
+import { formatMatchScore } from '../utils/formatters';
 
 
 interface DashboardProps {
@@ -375,6 +378,10 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
     const [nextMatch, setNextMatch] = useState<Match | null>(null);
     const [rankingHistory, setRankingHistory] = useState<RankingPointRecord[]>([]); // New for points
     const [loading, setLoading] = useState(true);
+    const [actionLoadingMatchId, setActionLoadingMatchId] = useState<string | null>(null);
+    const [disputeMatch, setDisputeMatch] = useState<Match | null>(null);
+    const [disputeReason, setDisputeReason] = useState('');
+    const [submittingDispute, setSubmittingDispute] = useState(false);
     const [stats, setStats] = useState({
         winRate: 0,
         totalPlayed: 0,
@@ -413,6 +420,57 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
         };
         loadData();
     }, [user.id]);
+
+    // Pending review matches for this user as opponent
+    const pendingReviewMatches = matches.filter(m => {
+        if (m.score_status !== 'pending_confirmation') return false;
+        const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
+        if (!isUserInMatch) return false;
+
+        const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
+        const isSubmitterTeam2 = m.score_submitted_by === m.player2_id || (!!m.player2_partner_id && m.score_submitted_by === m.player2_partner_id);
+        const isUserInTeam1 = user.id === m.player1_id || (!!m.player1_partner_id && user.id === m.player1_partner_id);
+        const isUserInTeam2 = user.id === m.player2_id || (!!m.player2_partner_id && user.id === m.player2_partner_id);
+
+        const isOpponent = (isSubmitterTeam1 && isUserInTeam2) || (isSubmitterTeam2 && isUserInTeam1) || (!isSubmitterTeam1 && !isSubmitterTeam2 && user.id !== m.score_submitted_by);
+        return isOpponent;
+    });
+
+    const handleConfirmMatchScore = async (matchId: string) => {
+        setActionLoadingMatchId(matchId);
+        try {
+            await api.matches.confirmScore(matchId, user);
+            const [tournamentsData, matchesData, rankingData] = await Promise.all([
+                api.tournaments.getActive(),
+                api.matches.getByUser(user.id),
+                api.rankings.getHistory(user.id)
+            ]);
+            setActiveTournaments(tournamentsData);
+            setMatches(matchesData);
+            setRankingHistory(rankingData);
+        } catch (e: any) {
+            alert("Error al confirmar marcador: " + (e.message || e));
+        } finally {
+            setActionLoadingMatchId(null);
+        }
+    };
+
+    const handleDisputeMatchScore = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!disputeMatch) return;
+        setSubmittingDispute(true);
+        try {
+            await api.matches.disputeScore(disputeMatch.id, disputeReason, user);
+            setDisputeMatch(null);
+            setDisputeReason('');
+            const matchesData = await api.matches.getByUser(user.id);
+            setMatches(matchesData);
+        } catch (e: any) {
+            alert("Error al enviar disputa: " + (e.message || e));
+        } finally {
+            setSubmittingDispute(false);
+        }
+    };
 
     // Logic: Identify points expiring soon (Age between 8 and 12 months)
     const expiringPoints = rankingHistory.filter(pt => {
@@ -485,6 +543,79 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 <div id="dashboard-main-content" className="lg:col-span-2 space-y-8">
                     {/* Weather Widget (Clima en Diamante - OpenResa Style) */}
                     <WeatherWidget />
+
+                    {/* --- PENDING SCORE CONFIRMATION ALERTS (24h Window) --- */}
+                    {pendingReviewMatches.length > 0 && (
+                        <div className="space-y-4 animate-in slide-in-from-top-4 fade-in duration-300">
+                            <div className="bg-gradient-to-r from-amber-950/50 via-card to-amber-900/30 border-2 border-amber-500/50 rounded-3xl p-6 shadow-xl relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-10 text-amber-500"><Clock size={120} /></div>
+                                <div className="relative z-10 space-y-4">
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 bg-amber-500 text-black rounded-xl font-bold shadow-lg shadow-amber-500/20">
+                                                <Clock size={20} />
+                                            </div>
+                                            <div>
+                                                <h3 className="text-lg font-bold text-white">Resultado(s) Pendientes de tu Revisión</h3>
+                                                <p className="text-xs text-amber-200/80">Tu rival cargó el tanteador. Tienes 24 horas para confirmarlo o reportar discrepancia.</p>
+                                            </div>
+                                        </div>
+                                        <span className="text-xs bg-amber-500/20 text-amber-300 font-bold px-3 py-1 rounded-full border border-amber-500/30 shrink-0 hidden sm:inline-block">
+                                            {pendingReviewMatches.length} pendiente(s)
+                                        </span>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {pendingReviewMatches.map(m => {
+                                            const elapsed = Date.now() - new Date(m.score_submitted_at || Date.now()).getTime();
+                                            const remMs = 24 * 60 * 60 * 1000 - elapsed;
+                                            const hoursRem = remMs > 0 ? Math.ceil(remMs / (60 * 60 * 1000)) : 0;
+                                            const formattedScore = formatMatchScore(m.score) || 'Sin marcador';
+                                            const submitterName = m.score_submitted_by_name || 'Tu rival';
+                                            const isLoading = actionLoadingMatchId === m.id;
+
+                                            return (
+                                                <div key={m.id} className="bg-black/50 border border-white/10 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                                    <div className="space-y-1.5 min-w-0">
+                                                        <div className="flex items-center gap-2 text-xs text-muted">
+                                                            <Trophy size={13} className="text-primary" />
+                                                            <span className="text-white font-semibold">{m.tournaments?.name || 'Torneo Oficial'}</span>
+                                                            <span>•</span>
+                                                            <span className="text-amber-400 font-bold flex items-center gap-1">
+                                                                <Clock size={11} /> Auto-valida en {hoursRem} hs
+                                                            </span>
+                                                        </div>
+                                                        <div className="text-sm text-slate-200">
+                                                            <strong className="text-white">{submitterName}</strong> cargó el marcador: 
+                                                            <span className="font-mono text-primary text-base font-bold ml-2 bg-black/40 px-2.5 py-0.5 rounded-lg border border-white/10">{formattedScore}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+                                                        <button
+                                                            disabled={isLoading}
+                                                            onClick={() => handleConfirmMatchScore(m.id)}
+                                                            className="flex-1 md:flex-none px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 shadow-md shadow-green-600/20 transition-all disabled:opacity-50"
+                                                        >
+                                                            {isLoading ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />} 
+                                                            Confirmar
+                                                        </button>
+                                                        <button
+                                                            disabled={isLoading}
+                                                            onClick={() => { setDisputeMatch(m); setDisputeReason(''); }}
+                                                            className="flex-1 md:flex-none px-3.5 py-2 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                                                        >
+                                                            <AlertTriangle size={14} /> Disputar
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
                     {/* --- NEW SECTION: POINTS DEFENSE ALERT --- */}
                     {expiringPoints.length > 0 && (
@@ -777,6 +908,44 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                     </Card>
                 </div>
             </div>
+
+            {/* DISPUTE MODAL (Dashboard) */}
+            {disputeMatch && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4">
+                        <div className="flex justify-between items-center border-b border-white/10 pb-3">
+                            <h3 className="font-bold text-white text-base flex items-center gap-2">
+                                <AlertTriangle className="text-red-400" size={18} /> Reportar Discrepancia de Marcador
+                            </h3>
+                            <button onClick={() => setDisputeMatch(null)} className="text-muted hover:text-white"><X size={18} /></button>
+                        </div>
+                        <form onSubmit={handleDisputeMatchScore} className="space-y-3">
+                            <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 text-xs text-slate-300">
+                                Partido: <strong className="text-white">{disputeMatch.tournaments?.name || 'Oficial'}</strong> • Marcador cargado: <strong className="text-primary font-mono">{formatMatchScore(disputeMatch.score)}</strong>
+                            </div>
+                            <p className="text-xs text-slate-300">
+                                Indica cuál fue el resultado real o el motivo del desacuerdo. El organizador del torneo o SuperAdmin intervendrá para arbitrar.
+                            </p>
+                            <textarea
+                                rows={3}
+                                required
+                                placeholder="Ej: El segundo set terminó 6-4 a mi favor, no 4-6..."
+                                className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-red-500"
+                                value={disputeReason}
+                                onChange={e => setDisputeReason(e.target.value)}
+                            />
+                            <div className="flex justify-end gap-2 pt-2">
+                                <button type="button" onClick={() => setDisputeMatch(null)} className="px-4 py-2 bg-white/10 text-white rounded-xl text-xs font-bold">
+                                    Cancelar
+                                </button>
+                                <button type="submit" disabled={submittingDispute} className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-lg shadow-red-600/20">
+                                    {submittingDispute ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />} Enviar Disputa
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
