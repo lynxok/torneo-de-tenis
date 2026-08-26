@@ -6,19 +6,23 @@
 --  2. Blindar políticas RLS de Supabase Storage para los buckets avatars, stories y assets
 -- ==============================================================================
 
+-- 0. ASEGURAR COLUMNA deleted_by_user EN BOOKINGS
+ALTER TABLE public.bookings
+  ADD COLUMN IF NOT EXISTS deleted_by_user BOOLEAN DEFAULT FALSE;
+
 -- ==============================================================================
--- 1. TRIGGER ANTI-SOLAPAMIENTO DE RESERVAS DE CANCHAS (CONCURRENCY LOCK)
+-- 1. TRIGGER ANTI-SOLAPAMIENTO Y DOBLE RESERVA DE CANCHAS (CONCURRENCY LOCK)
 -- ==============================================================================
 
 CREATE OR REPLACE FUNCTION public.check_booking_overlap()
 RETURNS TRIGGER AS $$
 BEGIN
-    -- Ignorar reservas que están canceladas, rechazadas o eliminadas lógicamente
-    IF NEW.status IN ('cancelled', 'rejected') OR NEW.deleted_by_user = TRUE THEN
+    -- Ignorar reservas que están canceladas, rechazadas o eliminadas
+    IF NEW.status IN ('cancelled', 'rejected') OR COALESCE(NEW.deleted_by_user, FALSE) = TRUE THEN
         RETURN NEW;
     END IF;
 
-    -- Validar si ya existe otra reserva activa que se solape en la misma institución, fecha y cancha
+    -- Validar si ya existe otra reserva activa que se superponga en la misma cancha y fecha
     IF EXISTS (
         SELECT 1 FROM public.bookings
         WHERE institution_id = NEW.institution_id
@@ -26,7 +30,7 @@ BEGIN
           AND date = NEW.date
           AND id != COALESCE(NEW.id, '00000000-0000-00-0000-000000000000'::uuid)
           AND (status IS NULL OR status NOT IN ('cancelled', 'rejected'))
-          AND (deleted_by_user IS NULL OR deleted_by_user = FALSE)
+          AND COALESCE(deleted_by_user, FALSE) = FALSE
           AND (
               -- Condición de solapamiento de intervalos de tiempo:
               (NEW.start_time < end_time AND NEW.end_time > start_time)
@@ -44,17 +48,17 @@ $$ LANGUAGE plpgsql;
 
 DROP TRIGGER IF EXISTS trg_check_booking_overlap ON public.bookings;
 CREATE TRIGGER trg_check_booking_overlap
-    BEFORE INSERT OR UPDATE OF date, start_time, end_time, court_name, status, deleted_by_user
+    BEFORE INSERT OR UPDATE
     ON public.bookings
     FOR EACH ROW
     EXECUTE FUNCTION public.check_booking_overlap();
 
 
 -- ==============================================================================
--- 2. BLINDAJE DE POLÍTICAS DE STORAGE (BUCKETS AVATARS, STORIES Y ASSETS)
+-- 2. BLINDAJE DE POLÍTICAS EN STORAGE (BUCKETS AVATARS, STORIES Y ASSETS)
 -- ==============================================================================
 
--- BUCKET: AVATARS
+-- BUCKET AVATARS: Lectura pública, subida y edición para autenticados
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('avatars', 'avatars', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
@@ -65,23 +69,19 @@ DROP POLICY IF EXISTS "Avatars Authenticated Update" ON storage.objects;
 DROP POLICY IF EXISTS "Avatars Authenticated Delete" ON storage.objects;
 
 CREATE POLICY "Avatars Public Read" ON storage.objects
-    FOR SELECT TO public, authenticated, anon
-    USING (bucket_id = 'avatars');
+    FOR SELECT TO public, authenticated, anon USING (bucket_id = 'avatars');
 
 CREATE POLICY "Avatars Authenticated Upload" ON storage.objects
-    FOR INSERT TO authenticated
-    WITH CHECK (bucket_id = 'avatars');
+    FOR INSERT TO authenticated WITH CHECK (bucket_id = 'avatars');
 
 CREATE POLICY "Avatars Authenticated Update" ON storage.objects
-    FOR UPDATE TO authenticated
-    USING (bucket_id = 'avatars');
+    FOR UPDATE TO authenticated USING (bucket_id = 'avatars');
 
 CREATE POLICY "Avatars Authenticated Delete" ON storage.objects
-    FOR DELETE TO authenticated
-    USING (bucket_id = 'avatars');
+    FOR DELETE TO authenticated USING (bucket_id = 'avatars');
 
 
--- BUCKET: STORIES
+-- BUCKET STORIES: Solo el autor o administradores pueden borrar
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('stories', 'stories', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
@@ -93,12 +93,10 @@ DROP POLICY IF EXISTS "Stories delete policy" ON storage.objects;
 DROP POLICY IF EXISTS "Stories update policy" ON storage.objects;
 
 CREATE POLICY "Stories public select policy" ON storage.objects
-    FOR SELECT TO public, authenticated, anon
-    USING (bucket_id = 'stories');
+    FOR SELECT TO public, authenticated, anon USING (bucket_id = 'stories');
 
 CREATE POLICY "Stories upload policy" ON storage.objects
-    FOR INSERT TO authenticated
-    WITH CHECK (bucket_id = 'stories');
+    FOR INSERT TO authenticated WITH CHECK (bucket_id = 'stories');
 
 CREATE POLICY "Stories delete policy" ON storage.objects
     FOR DELETE TO authenticated
@@ -125,7 +123,7 @@ CREATE POLICY "Stories update policy" ON storage.objects
     );
 
 
--- BUCKET: ASSETS (Banners y recursos del sistema)
+-- BUCKET ASSETS: Solo SuperAdmin puede subir o borrar banners del sistema
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('assets', 'assets', true)
 ON CONFLICT (id) DO UPDATE SET public = true;
@@ -136,38 +134,27 @@ DROP POLICY IF EXISTS "Superadmin Update Assets" ON storage.objects;
 DROP POLICY IF EXISTS "Superadmin Delete Assets" ON storage.objects;
 
 CREATE POLICY "Public Access Assets" ON storage.objects
-    FOR SELECT TO public, authenticated, anon
-    USING (bucket_id = 'assets');
+    FOR SELECT TO public, authenticated, anon USING (bucket_id = 'assets');
 
 CREATE POLICY "Superadmin Write Assets" ON storage.objects
     FOR INSERT TO authenticated
     WITH CHECK (
         bucket_id = 'assets' AND
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.role = 'superadmin'
-        )
+        EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'superadmin')
     );
 
 CREATE POLICY "Superadmin Update Assets" ON storage.objects
     FOR UPDATE TO authenticated
     USING (
         bucket_id = 'assets' AND
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.role = 'superadmin'
-        )
+        EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'superadmin')
     );
 
 CREATE POLICY "Superadmin Delete Assets" ON storage.objects
     FOR DELETE TO authenticated
     USING (
         bucket_id = 'assets' AND
-        EXISTS (
-            SELECT 1 FROM public.profiles
-            WHERE profiles.id = auth.uid() AND profiles.role = 'superadmin'
-        )
+        EXISTS (SELECT 1 FROM public.profiles WHERE profiles.id = auth.uid() AND profiles.role = 'superadmin')
     );
 
--- Recargar configuración PostgREST
 NOTIFY pgrst, 'reload config';
