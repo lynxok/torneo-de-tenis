@@ -240,8 +240,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const openScoreModal = (m: Match) => {
         const isClubAdmin = user.role === 'superadmin' || (user.role === 'admin' && user.institution_id === tournament?.institution_id);
         
-        // If match is already confirmed or disputed, only club admin/superadmin can edit
-        if ((m.score_status === 'confirmed' || m.score_status === 'disputed') && !isClubAdmin) {
+        // If match is already played and officially confirmed or disputed, only club admin/superadmin can edit
+        if (m.is_played && (m.score_status === 'confirmed' || m.score_status === 'disputed') && !isClubAdmin) {
             addToast("Este marcador ya ha sido verificado u oficializado. Solo el organizador o SuperAdmin puede modificarlo.", "info");
             return;
         }
@@ -1774,7 +1774,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     <div className="grid grid-cols-1 gap-2">
                                                         {zone.matches.map(m => {
                                                             const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
-                                                            const canEditScore = isClubAdmin || (isUserInMatch && m.score_status !== 'confirmed');
+                                                            const isMatchFinishedAndConfirmed = !!(m.is_played && m.score_status === 'confirmed');
+                                                            const canEditScore = isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed);
                                                             const formattedScore = formatMatchScore(m.score);
                                                             const isDoubles = tournament.type === 'doubles' || !!m.player1_partner_id;
                                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
@@ -1877,10 +1878,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             {canEditScore && (
                                                                                 <button
                                                                                     onClick={() => openScoreModal(m)}
-                                                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors"
-                                                                                    title="Cargar o editar resultado"
+                                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                        !m.is_played
+                                                                                            ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
+                                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                    }`}
+                                                                                    title={m.is_played ? "Modificar resultado" : "Cargar resultado del partido"}
                                                                                 >
-                                                                                    <Edit3 size={13} />
+                                                                                    <Edit3 size={12} className={!m.is_played ? "text-primary" : ""} />
+                                                                                    <span className="hidden sm:inline">{m.is_played ? "Editar" : "Resultado"}</span>
                                                                                 </button>
                                                                             )}
                                                                         </div>
@@ -2140,7 +2146,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     <div className="space-y-4 flex flex-col justify-around flex-1">
                                                         {round.matches.map((m) => {
                                                             const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
-                                                            const canEditScore = isClubAdmin || (isUserInMatch && m.score_status !== 'confirmed');
+                                                            const isMatchFinishedAndConfirmed = !!(m.is_played && m.score_status === 'confirmed');
+                                                            const canEditScore = isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed);
                                                             const formattedScore = formatMatchScore(m.score);
                                                             const isFinished = !!m.winner_id || (m.score && m.scheduling_status === 'finished');
                                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
@@ -2285,10 +2292,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             {canEditScore && (
                                                                                 <button
                                                                                     onClick={() => openScoreModal(m)}
-                                                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[11px] font-bold flex items-center gap-1"
-                                                                                    title="Cargar marcador"
+                                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                        !m.is_played
+                                                                                            ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
+                                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                    }`}
+                                                                                    title={m.is_played ? "Modificar marcador" : "Cargar marcador"}
                                                                                 >
-                                                                                    <Edit3 size={12} /> Cargar
+                                                                                    <Edit3 size={11} className={!m.is_played ? "text-primary" : ""} />
+                                                                                    <span>{m.is_played ? "Editar" : "Resultado"}</span>
                                                                                 </button>
                                                                             )}
                                                                         </div>
@@ -2378,7 +2390,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     <div className="grid grid-cols-1 gap-3">
                                         {displayedMatches.map(m => {
                                             const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
-                                            const canEditScore = isClubAdmin || (isUserInMatch && m.score_status !== 'confirmed');
+                                            const isMatchFinishedAndConfirmed = !!(m.is_played && m.score_status === 'confirmed');
+                                            const canEditScore = isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed);
                                             const formattedScore = formatMatchScore(m.score);
                                             const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
                                             const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
@@ -2552,10 +2565,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                         {canEditScore && !isSwapMode && (
                                                             <button
                                                                 onClick={() => openScoreModal(m)}
-                                                                className="p-2 rounded-xl bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-all border border-white/10"
-                                                                title="Cargar o modificar resultado"
+                                                                className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 ${
+                                                                    !m.is_played
+                                                                        ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
+                                                                        : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                }`}
+                                                                title={m.is_played ? "Modificar resultado" : "Cargar resultado del partido"}
                                                             >
-                                                                <Edit3 size={16} />
+                                                                <Edit3 size={14} className={!m.is_played ? "text-primary" : ""} />
+                                                                <span>{m.is_played ? "Editar" : "Resultado"}</span>
                                                             </button>
                                                         )}
 

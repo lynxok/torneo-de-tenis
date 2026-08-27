@@ -585,6 +585,11 @@ export const api = {
             const formattedMatches = (matches || []).map(m => {
                 let updatedScoreStatus = m.score_status;
 
+                // Unplayed matches with no score must not inherit 'confirmed' status from DB column default
+                if (!m.is_played && !m.winner_id && !m.score) {
+                    updatedScoreStatus = null;
+                }
+
                 // Auto-confirm if pending confirmation for > 24 hours
                 if (m.score_status === 'pending_confirmation' && m.score_submitted_at) {
                     const submittedTime = new Date(m.score_submitted_at).getTime();
@@ -1730,6 +1735,11 @@ export const api = {
 
             return (data || []).map((m: any) => {
                 let updatedScoreStatus = m.score_status;
+
+                // Unplayed matches with no score must not inherit 'confirmed' status from DB column default
+                if (!m.is_played && !m.winner_id && !m.score) {
+                    updatedScoreStatus = null;
+                }
 
                 // Auto-confirm if pending confirmation for > 24 hours
                 if (m.score_status === 'pending_confirmation' && m.score_submitted_at) {
