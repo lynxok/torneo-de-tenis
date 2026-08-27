@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
-import { formatPlayerName } from '../utils/formatters';
+import { formatPlayerName, formatMatchScore } from '../utils/formatters';
 import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { ShareGraphicModal } from '../components/ShareGraphicModal';
@@ -95,15 +95,24 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [replaceCategory, setReplaceCategory] = useState('4ta');
     const [isSubmittingReplace, setIsSubmittingReplace] = useState(false);
 
-    // Score Modal State (with 24h confirmation & doubles support)
+    // Score Modal State (with 24h confirmation, tiebreaks & doubles support)
     const [selectedMatchForScore, setSelectedMatchForScore] = useState<Match | null>(null);
     const [scoreP1Set1, setScoreP1Set1] = useState<number | ''>('');
     const [scoreP2Set1, setScoreP2Set1] = useState<number | ''>('');
+    const [tbP1Set1, setTbP1Set1] = useState<number | ''>('');
+    const [tbP2Set1, setTbP2Set1] = useState<number | ''>('');
+
     const [scoreP1Set2, setScoreP1Set2] = useState<number | ''>('');
     const [scoreP2Set2, setScoreP2Set2] = useState<number | ''>('');
+    const [tbP1Set2, setTbP1Set2] = useState<number | ''>('');
+    const [tbP2Set2, setTbP2Set2] = useState<number | ''>('');
+
     const [scoreP1Set3, setScoreP1Set3] = useState<number | ''>('');
     const [scoreP2Set3, setScoreP2Set3] = useState<number | ''>('');
+    const [tbP1Set3, setTbP1Set3] = useState<number | ''>('');
+    const [tbP2Set3, setTbP2Set3] = useState<number | ''>('');
     const [hasSet3, setHasSet3] = useState(false);
+    const [isSet3SuperTiebreak, setIsSet3SuperTiebreak] = useState(true);
     const [selectedWinnerId, setSelectedWinnerId] = useState<string>('');
     const [savingScore, setSavingScore] = useState(false);
 
@@ -237,6 +246,47 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
+    const parseSetForInput = (setStr?: string) => {
+        if (!setStr) return { p1: '' as number | '', p2: '' as number | '', tbP1: '' as number | '', tbP2: '' as number | '', isSTB: false };
+        const clean = setStr.trim();
+        const match = clean.match(/^(\d+)\s*[-/]\s*(\d+)(?:\s*\((.*?)\))?/);
+        if (!match) return { p1: '' as number | '', p2: '' as number | '', tbP1: '' as number | '', tbP2: '' as number | '', isSTB: false };
+
+        let p1 = parseInt(match[1], 10);
+        let p2 = parseInt(match[2], 10);
+        let tb = match[3] ? match[3].trim() : '';
+
+        if (p1 >= 10 || p2 >= 10) {
+            return { p1: 7, p2: 6, tbP1: p1, tbP2: p2, isSTB: true };
+        }
+
+        let tbP1: number | '' = '';
+        let tbP2: number | '' = '';
+        let isSTB = false;
+
+        if (tb) {
+            const tbParts = tb.split(/[-/]/);
+            if (tbParts.length === 2) {
+                tbP1 = parseInt(tbParts[0], 10) || 0;
+                tbP2 = parseInt(tbParts[1], 10) || 0;
+                if (tbP1 >= 10 || tbP2 >= 10) {
+                    isSTB = true;
+                }
+            } else if (tbParts.length === 1 && /^\d+$/.test(tbParts[0])) {
+                const loser = parseInt(tbParts[0], 10);
+                if (p1 === 7) {
+                    tbP1 = 7;
+                    tbP2 = loser;
+                } else {
+                    tbP1 = loser;
+                    tbP2 = 7;
+                }
+            }
+        }
+
+        return { p1, p2, tbP1, tbP2, isSTB };
+    };
+
     const openScoreModal = (m: Match) => {
         const isClubAdmin = user.role === 'superadmin' || (user.role === 'admin' && user.institution_id === tournament?.institution_id);
         
@@ -252,42 +302,75 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         // If match has existing score, parse and preload values
         if (m.score && m.is_played) {
             if (typeof m.score === 'object') {
-                const s1 = (m.score.set1 || '').split('-').map(Number);
-                const s2 = (m.score.set2 || '').split('-').map(Number);
-                const s3 = (m.score.set3 || '').split('-').map(Number);
+                const s1 = parseSetForInput(m.score.set1);
+                const s2 = parseSetForInput(m.score.set2);
+                const s3 = parseSetForInput(m.score.set3);
                 
-                setScoreP1Set1(!isNaN(s1[0]) ? s1[0] : '');
-                setScoreP2Set1(!isNaN(s1[1]) ? s1[1] : '');
-                setScoreP1Set2(!isNaN(s2[0]) ? s2[0] : '');
-                setScoreP2Set2(!isNaN(s2[1]) ? s2[1] : '');
+                setScoreP1Set1(s1.p1);
+                setScoreP2Set1(s1.p2);
+                setTbP1Set1(s1.tbP1);
+                setTbP2Set1(s1.tbP2);
+                
+                setScoreP1Set2(s2.p1);
+                setScoreP2Set2(s2.p2);
+                setTbP1Set2(s2.tbP1);
+                setTbP2Set2(s2.tbP2);
                 
                 if (m.score.set3) {
                     setHasSet3(true);
-                    setScoreP1Set3(!isNaN(s3[0]) ? s3[0] : '');
-                    setScoreP2Set3(!isNaN(s3[1]) ? s3[1] : '');
+                    if (s3.isSTB) {
+                        setIsSet3SuperTiebreak(true);
+                        setScoreP1Set3(s3.tbP1 !== '' ? s3.tbP1 : (s3.p1 >= 10 ? s3.p1 : 10));
+                        setScoreP2Set3(s3.tbP2 !== '' ? s3.tbP2 : (s3.p2 >= 10 ? s3.p2 : 8));
+                        setTbP1Set3('');
+                        setTbP2Set3('');
+                    } else {
+                        setIsSet3SuperTiebreak(false);
+                        setScoreP1Set3(s3.p1);
+                        setScoreP2Set3(s3.p2);
+                        setTbP1Set3(s3.tbP1);
+                        setTbP2Set3(s3.tbP2);
+                    }
                 } else {
                     setHasSet3(false);
+                    setIsSet3SuperTiebreak(true);
                     setScoreP1Set3('');
                     setScoreP2Set3('');
+                    setTbP1Set3('');
+                    setTbP2Set3('');
                 }
             } else {
                 setHasSet3(false);
+                setIsSet3SuperTiebreak(true);
                 setScoreP1Set1('');
                 setScoreP2Set1('');
+                setTbP1Set1('');
+                setTbP2Set1('');
                 setScoreP1Set2('');
                 setScoreP2Set2('');
+                setTbP1Set2('');
+                setTbP2Set2('');
                 setScoreP1Set3('');
                 setScoreP2Set3('');
+                setTbP1Set3('');
+                setTbP2Set3('');
             }
         } else {
             // New / unplayed match: keep completely blank
             setHasSet3(false);
+            setIsSet3SuperTiebreak(true);
             setScoreP1Set1('');
             setScoreP2Set1('');
+            setTbP1Set1('');
+            setTbP2Set1('');
             setScoreP1Set2('');
             setScoreP2Set2('');
+            setTbP1Set2('');
+            setTbP2Set2('');
             setScoreP1Set3('');
             setScoreP2Set3('');
+            setTbP1Set3('');
+            setTbP2Set3('');
         }
     };
 
@@ -311,6 +394,29 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
+    const formatSetPayload = (p1: number | '', p2: number | '', tbP1: number | '', tbP2: number | '', isSTB = false): string => {
+        if (p1 === '' || p2 === '') return '';
+        const n1 = Number(p1);
+        const n2 = Number(p2);
+
+        if (isSTB) {
+            if (n1 > n2) {
+                return `7-6 (${n1}-${n2})`;
+            } else {
+                return `6-7 (${n1}-${n2})`;
+            }
+        }
+
+        if ((n1 === 7 && n2 === 6) || (n1 === 6 && n2 === 7)) {
+            if (tbP1 !== '' && tbP2 !== '') {
+                return `${n1}-${n2} (${tbP1}-${tbP2})`;
+            }
+            return `${n1}-${n2}`;
+        }
+
+        return `${n1}-${n2}`;
+    };
+
     const handleSaveScore = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!selectedMatchForScore) return;
@@ -328,11 +434,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         setSavingScore(true);
         try {
             const scoreObj: any = {
-                set1: `${scoreP1Set1}-${scoreP2Set1}`,
-                set2: `${scoreP1Set2}-${scoreP2Set2}`,
+                set1: formatSetPayload(scoreP1Set1, scoreP2Set1, tbP1Set1, tbP2Set1, false),
+                set2: formatSetPayload(scoreP1Set2, scoreP2Set2, tbP1Set2, tbP2Set2, false),
             };
             if (hasSet3) {
-                scoreObj.set3 = `${scoreP1Set3}-${scoreP2Set3}`;
+                scoreObj.set3 = formatSetPayload(scoreP1Set3, scoreP2Set3, tbP1Set3, tbP2Set3, isSet3SuperTiebreak);
             }
 
             const isDoubles = tournament?.type === 'doubles';
@@ -994,22 +1100,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
-    const formatMatchScore = (score: any) => {
-        if (!score) return null;
-        if (typeof score === 'string') return score;
-        if (typeof score === 'object') {
-            if (score.set1 || score.set2) {
-                const s1 = score.set1 || '';
-                const s2 = score.set2 || '';
-                const s3 = score.set3 ? ` ${score.set3}` : '';
-                return `${s1} ${s2}${s3}`.trim();
-            }
-            if (Array.isArray(score)) {
-                return score.map((s: any) => `${s.p1}-${s.p2}`).join(' ');
-            }
-        }
-        return JSON.stringify(score);
-    };
+
 
     if (loading) return <div className="text-center py-20 text-muted">Cargando detalles del torneo...</div>;
     if (!tournament) return <div className="text-center py-20 text-red-500">Torneo no encontrado.</div>;
@@ -2980,96 +3071,276 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             {/* SETS INPUT */}
                             <div className="space-y-3">
                                 {/* Set 1 */}
-                                <div className="grid grid-cols-3 items-center gap-2 bg-slate-900/60 p-3 rounded-xl border border-white/5">
-                                    <span className="text-xs font-bold text-white">Set 1</span>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={7}
-                                        placeholder="0"
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                        value={scoreP1Set1}
-                                        onChange={e => setScoreP1Set1(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
-                                        required
-                                    />
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={7}
-                                        placeholder="0"
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                        value={scoreP2Set1}
-                                        onChange={e => setScoreP2Set1(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
-                                        required
-                                    />
+                                <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 space-y-2">
+                                    <div className="grid grid-cols-3 items-center gap-2">
+                                        <span className="text-xs font-bold text-white">Set 1</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={7}
+                                            placeholder="0"
+                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
+                                            value={scoreP1Set1}
+                                            onChange={e => {
+                                                const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
+                                                setScoreP1Set1(val);
+                                                if (val === 7 && scoreP2Set1 === 6) { setTbP1Set1(7); setTbP2Set1(5); }
+                                                else if (val === 6 && scoreP2Set1 === 7) { setTbP1Set1(5); setTbP2Set1(7); }
+                                            }}
+                                            required
+                                        />
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={7}
+                                            placeholder="0"
+                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
+                                            value={scoreP2Set1}
+                                            onChange={e => {
+                                                const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
+                                                setScoreP2Set1(val);
+                                                if (scoreP1Set1 === 7 && val === 6) { setTbP1Set1(7); setTbP2Set1(5); }
+                                                else if (scoreP1Set1 === 6 && val === 7) { setTbP1Set1(5); setTbP2Set1(7); }
+                                            }}
+                                            required
+                                        />
+                                    </div>
+
+                                    {/* Set 1 Tiebreak sub-input */}
+                                    {((scoreP1Set1 === 7 && scoreP2Set1 === 6) || (scoreP1Set1 === 6 && scoreP2Set1 === 7)) && (
+                                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 rounded-lg animate-fade-up">
+                                            <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
+                                                <Trophy size={12} className="text-amber-400" /> Puntos Tie-Break:
+                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={30}
+                                                    placeholder={scoreP1Set1 === 7 ? "7" : "5"}
+                                                    className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
+                                                    value={tbP1Set1}
+                                                    onChange={e => setTbP1Set1(e.target.value === '' ? '' : Number(e.target.value))}
+                                                />
+                                                <span className="text-muted text-xs font-bold">-</span>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={30}
+                                                    placeholder={scoreP2Set1 === 7 ? "7" : "5"}
+                                                    className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
+                                                    value={tbP2Set1}
+                                                    onChange={e => setTbP2Set1(e.target.value === '' ? '' : Number(e.target.value))}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Set 2 */}
-                                <div className="grid grid-cols-3 items-center gap-2 bg-slate-900/60 p-3 rounded-xl border border-white/5">
-                                    <span className="text-xs font-bold text-white">Set 2</span>
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={7}
-                                        placeholder="0"
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                        value={scoreP1Set2}
-                                        onChange={e => setScoreP1Set2(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
-                                        required
-                                    />
-                                    <input
-                                        type="number"
-                                        min={0}
-                                        max={7}
-                                        placeholder="0"
-                                        className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                        value={scoreP2Set2}
-                                        onChange={e => setScoreP2Set2(e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value))))}
-                                        required
-                                    />
+                                <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 space-y-2">
+                                    <div className="grid grid-cols-3 items-center gap-2">
+                                        <span className="text-xs font-bold text-white">Set 2</span>
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={7}
+                                            placeholder="0"
+                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
+                                            value={scoreP1Set2}
+                                            onChange={e => {
+                                                const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
+                                                setScoreP1Set2(val);
+                                                if (val === 7 && scoreP2Set2 === 6) { setTbP1Set2(7); setTbP2Set2(5); }
+                                                else if (val === 6 && scoreP2Set2 === 7) { setTbP1Set2(5); setTbP2Set2(7); }
+                                            }}
+                                            required
+                                        />
+                                        <input
+                                            type="number"
+                                            min={0}
+                                            max={7}
+                                            placeholder="0"
+                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
+                                            value={scoreP2Set2}
+                                            onChange={e => {
+                                                const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
+                                                setScoreP2Set2(val);
+                                                if (scoreP1Set2 === 7 && val === 6) { setTbP1Set2(7); setTbP2Set2(5); }
+                                                else if (scoreP1Set2 === 6 && val === 7) { setTbP1Set2(5); setTbP2Set2(7); }
+                                            }}
+                                            required
+                                        />
+                                    </div>
+
+                                    {/* Set 2 Tiebreak sub-input */}
+                                    {((scoreP1Set2 === 7 && scoreP2Set2 === 6) || (scoreP1Set2 === 6 && scoreP2Set2 === 7)) && (
+                                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 rounded-lg animate-fade-up">
+                                            <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
+                                                <Trophy size={12} className="text-amber-400" /> Puntos Tie-Break:
+                                            </span>
+                                            <div className="flex items-center gap-1.5">
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={30}
+                                                    placeholder={scoreP1Set2 === 7 ? "7" : "5"}
+                                                    className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
+                                                    value={tbP1Set2}
+                                                    onChange={e => setTbP1Set2(e.target.value === '' ? '' : Number(e.target.value))}
+                                                />
+                                                <span className="text-muted text-xs font-bold">-</span>
+                                                <input
+                                                    type="number"
+                                                    min={0}
+                                                    max={30}
+                                                    placeholder={scoreP2Set2 === 7 ? "7" : "5"}
+                                                    className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
+                                                    value={tbP2Set2}
+                                                    onChange={e => setTbP2Set2(e.target.value === '' ? '' : Number(e.target.value))}
+                                                />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Set 3 / Super Tiebreak */}
                                 {hasSet3 ? (
-                                    <div className="grid grid-cols-3 items-center gap-2 bg-slate-900/60 p-3 rounded-xl border border-white/5 animate-fade-up">
+                                    <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 space-y-2.5 animate-fade-up">
                                         <div className="flex items-center justify-between">
-                                            <span className="text-xs font-bold text-white">Set 3 / STB</span>
+                                            <div className="flex items-center gap-1.5">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsSet3SuperTiebreak(true)}
+                                                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
+                                                        isSet3SuperTiebreak
+                                                            ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                                                            : 'bg-white/5 text-muted hover:text-white border border-transparent'
+                                                    }`}
+                                                >
+                                                    ⚡ Súper Tie-Break (10 pts)
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setIsSet3SuperTiebreak(false)}
+                                                    className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
+                                                        !isSet3SuperTiebreak
+                                                            ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
+                                                            : 'bg-white/5 text-muted hover:text-white border border-transparent'
+                                                    }`}
+                                                >
+                                                    🎾 Set Regular
+                                                </button>
+                                            </div>
                                             <button 
                                                 type="button" 
-                                                onClick={() => { setHasSet3(false); setScoreP1Set3(''); setScoreP2Set3(''); }} 
+                                                onClick={() => { 
+                                                    setHasSet3(false); 
+                                                    setScoreP1Set3(''); 
+                                                    setScoreP2Set3(''); 
+                                                    setTbP1Set3(''); 
+                                                    setTbP2Set3(''); 
+                                                }} 
                                                 className="text-[10px] text-red-400 hover:text-red-300 font-bold"
                                             >
                                                 Quitar
                                             </button>
                                         </div>
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            max={30}
-                                            placeholder="0"
-                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                            value={scoreP1Set3}
-                                            onChange={e => setScoreP1Set3(e.target.value === '' ? '' : Math.min(30, Math.max(0, Number(e.target.value))))}
-                                            required={hasSet3}
-                                        />
-                                        <input
-                                            type="number"
-                                            min={0}
-                                            max={30}
-                                            placeholder="0"
-                                            className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                            value={scoreP2Set3}
-                                            onChange={e => setScoreP2Set3(e.target.value === '' ? '' : Math.min(30, Math.max(0, Number(e.target.value))))}
-                                            required={hasSet3}
-                                        />
+
+                                        <div className="grid grid-cols-3 items-center gap-2">
+                                            <span className="text-xs font-bold text-white truncate">
+                                                {isSet3SuperTiebreak ? "Puntos STB" : "Set 3 (Games)"}
+                                            </span>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={isSet3SuperTiebreak ? 40 : 7}
+                                                placeholder={isSet3SuperTiebreak ? "10" : "0"}
+                                                className={`bg-sidebar border rounded-lg p-2 text-center text-white font-bold font-mono outline-none ${
+                                                    isSet3SuperTiebreak ? "border-amber-500/40 focus:border-amber-400 text-amber-300" : "border-white/10 focus:border-primary"
+                                                }`}
+                                                value={scoreP1Set3}
+                                                onChange={e => {
+                                                    const maxVal = isSet3SuperTiebreak ? 40 : 7;
+                                                    const val = e.target.value === '' ? '' : Math.min(maxVal, Math.max(0, Number(e.target.value)));
+                                                    setScoreP1Set3(val);
+                                                    if (!isSet3SuperTiebreak) {
+                                                        if (val === 7 && scoreP2Set3 === 6) { setTbP1Set3(7); setTbP2Set3(5); }
+                                                        else if (val === 6 && scoreP2Set3 === 7) { setTbP1Set3(5); setTbP2Set3(7); }
+                                                    }
+                                                }}
+                                                required={hasSet3}
+                                            />
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={isSet3SuperTiebreak ? 40 : 7}
+                                                placeholder={isSet3SuperTiebreak ? "8" : "0"}
+                                                className={`bg-sidebar border rounded-lg p-2 text-center text-white font-bold font-mono outline-none ${
+                                                    isSet3SuperTiebreak ? "border-amber-500/40 focus:border-amber-400 text-amber-300" : "border-white/10 focus:border-primary"
+                                                }`}
+                                                value={scoreP2Set3}
+                                                onChange={e => {
+                                                    const maxVal = isSet3SuperTiebreak ? 40 : 7;
+                                                    const val = e.target.value === '' ? '' : Math.min(maxVal, Math.max(0, Number(e.target.value)));
+                                                    setScoreP2Set3(val);
+                                                    if (!isSet3SuperTiebreak) {
+                                                        if (scoreP1Set3 === 7 && val === 6) { setTbP1Set3(7); setTbP2Set3(5); }
+                                                        else if (scoreP1Set3 === 6 && val === 7) { setTbP1Set3(5); setTbP2Set3(7); }
+                                                    }
+                                                }}
+                                                required={hasSet3}
+                                            />
+                                        </div>
+
+                                        {/* Notice about 7-6 computation for STB */}
+                                        {isSet3SuperTiebreak ? (
+                                            <div className="text-[10px] text-amber-300/80 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded">
+                                                ℹ️ El desempate se guardará oficialmente como <span className="font-mono font-bold text-amber-300">{Number(scoreP1Set3) > Number(scoreP2Set3) ? `7-6 (${scoreP1Set3 || 10}-${scoreP2Set3 || 8})` : `6-7 (${scoreP1Set3 || 8}-${scoreP2Set3 || 10})`}</span> sumando 7 y 6 games a la tabla.
+                                            </div>
+                                        ) : (
+                                            ((scoreP1Set3 === 7 && scoreP2Set3 === 6) || (scoreP1Set3 === 6 && scoreP2Set3 === 7)) && (
+                                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 rounded-lg animate-fade-up">
+                                                    <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
+                                                        <Trophy size={12} className="text-amber-400" /> Puntos Tie-Break:
+                                                    </span>
+                                                    <div className="flex items-center gap-1.5">
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            max={30}
+                                                            placeholder={scoreP1Set3 === 7 ? "7" : "5"}
+                                                            className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
+                                                            value={tbP1Set3}
+                                                            onChange={e => setTbP1Set3(e.target.value === '' ? '' : Number(e.target.value))}
+                                                        />
+                                                        <span className="text-muted text-xs font-bold">-</span>
+                                                        <input
+                                                            type="number"
+                                                            min={0}
+                                                            max={30}
+                                                            placeholder={scoreP2Set3 === 7 ? "7" : "5"}
+                                                            className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
+                                                            value={tbP2Set3}
+                                                            onChange={e => setTbP2Set3(e.target.value === '' ? '' : Number(e.target.value))}
+                                                        />
+                                                    </div>
+                                                </div>
+                                            )
+                                        )}
                                     </div>
                                 ) : (
                                     <button
                                         type="button"
-                                        onClick={() => setHasSet3(true)}
-                                        className="w-full py-2 border border-dashed border-white/20 text-xs text-muted hover:text-white rounded-xl hover:bg-white/5 transition-colors"
+                                        onClick={() => {
+                                            setHasSet3(true);
+                                            setIsSet3SuperTiebreak(true);
+                                            setScoreP1Set3('');
+                                            setScoreP2Set3('');
+                                        }}
+                                        className="w-full py-2 border border-dashed border-white/20 text-xs text-muted hover:text-white rounded-xl hover:bg-white/5 transition-colors flex items-center justify-center gap-1.5"
                                     >
-                                        + Agregar 3er Set / Super Tiebreak
+                                        <Plus size={13} /> Agregar 3er Set / Súper Tie-Break
                                     </button>
                                 )}
                             </div>

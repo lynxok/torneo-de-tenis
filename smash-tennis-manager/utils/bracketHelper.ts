@@ -31,6 +31,35 @@ interface ParsedSets {
     p2Games: number;
 }
 
+export function parseSingleSetForStats(setStr: string): { g1: number; g2: number } | null {
+    if (!setStr) return null;
+    const clean = setStr.trim();
+    if (!clean) return null;
+
+    // Handle walkover notation
+    if (/^[WOwo]$/i.test(clean) || clean.toLowerCase() === 'wo' || clean.toLowerCase() === 'w/o') {
+        return null;
+    }
+
+    // Match "7-6 (10-8)" or "7-6(7-5)" or "6-4" or "10-8"
+    const match = clean.match(/^(\d+)\s*[-/]\s*(\d+)/);
+    if (!match) return null;
+
+    let g1 = parseInt(match[1], 10) || 0;
+    let g2 = parseInt(match[2], 10) || 0;
+
+    // If it's a raw STB score (e.g. 10-8 or 8-10 or 12-10)
+    if (g1 >= 10 || g2 >= 10) {
+        if (g1 > g2) {
+            return { g1: 7, g2: 6 };
+        } else {
+            return { g1: 6, g2: 7 };
+        }
+    }
+
+    return { g1, g2 };
+}
+
 export function parseMatchScore(score: any): ParsedSets {
     let p1Sets = 0;
     let p2Sets = 0;
@@ -43,37 +72,45 @@ export function parseMatchScore(score: any): ParsedSets {
         const setKeys = ['set1', 'set2', 'set3'];
         for (const key of setKeys) {
             if (score[key] && typeof score[key] === 'string') {
-                const parts = score[key].split(/[-/]/);
-                if (parts.length === 2) {
-                    const g1 = parseInt(parts[0], 10) || 0;
-                    const g2 = parseInt(parts[1], 10) || 0;
-                    p1Games += g1;
-                    p2Games += g2;
-                    if (g1 > g2) p1Sets++;
-                    else if (g2 > g1) p2Sets++;
+                const parsed = parseSingleSetForStats(score[key]);
+                if (parsed) {
+                    p1Games += parsed.g1;
+                    p2Games += parsed.g2;
+                    if (parsed.g1 > parsed.g2) p1Sets++;
+                    else if (parsed.g2 > parsed.g1) p2Sets++;
                 }
             }
         }
     } else if (Array.isArray(score)) {
         for (const s of score) {
-            const g1 = Number(s.p1 || s[0]) || 0;
-            const g2 = Number(s.p2 || s[1]) || 0;
-            p1Games += g1;
-            p2Games += g2;
-            if (g1 > g2) p1Sets++;
-            else if (g2 > g1) p2Sets++;
+            const rawStr = typeof s === 'string' ? s : `${s.p1 || s[0] || 0}-${s.p2 || s[1] || 0}`;
+            const parsed = parseSingleSetForStats(rawStr);
+            if (parsed) {
+                p1Games += parsed.g1;
+                p2Games += parsed.g2;
+                if (parsed.g1 > parsed.g2) p1Sets++;
+                else if (parsed.g2 > parsed.g1) p2Sets++;
+            }
         }
     } else if (typeof score === 'string') {
-        const chunks = score.trim().split(/\s+/);
-        for (const chunk of chunks) {
-            const parts = chunk.split(/[-/]/);
-            if (parts.length === 2) {
-                const g1 = parseInt(parts[0], 10) || 0;
-                const g2 = parseInt(parts[1], 10) || 0;
-                p1Games += g1;
-                p2Games += g2;
-                if (g1 > g2) p1Sets++;
-                else if (g2 > g1) p2Sets++;
+        const clean = score.trim();
+        const chunks = clean.split(/\s+/);
+        // Merge chunks if parens were separated e.g. ["7-6", "(10-8)"]
+        const merged: string[] = [];
+        for (const c of chunks) {
+            if (c.startsWith('(') && merged.length > 0) {
+                merged[merged.length - 1] += ` ${c}`;
+            } else {
+                merged.push(c);
+            }
+        }
+        for (const chunk of merged) {
+            const parsed = parseSingleSetForStats(chunk);
+            if (parsed) {
+                p1Games += parsed.g1;
+                p2Games += parsed.g2;
+                if (parsed.g1 > parsed.g2) p1Sets++;
+                else if (parsed.g2 > parsed.g1) p2Sets++;
             }
         }
     }

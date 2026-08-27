@@ -4,6 +4,7 @@ import { soundEffects } from '../services/soundEffects';
 import { X, Download, Share2, Sparkles, Trophy, Grid, Calendar, Image as ImageIcon, Check, Loader2 } from 'lucide-react';
 import { GroupZone, PlayoffRound } from '../utils/bracketHelper';
 import { getTournamentTier } from '../utils/tournamentTiers';
+import { formatMatchScore } from '../utils/formatters';
 import { api } from '../services/api';
 
 interface ShareGraphicModalProps {
@@ -43,15 +44,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   const isOrganizerOrAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
   const formatShortScore = (score: any) => {
-    if (!score) return '';
-    if (typeof score === 'string') return score;
-    if (typeof score === 'object') {
-      const s1 = score.set1 || '';
-      const s2 = score.set2 || '';
-      const s3 = score.set3 ? ` ${score.set3}` : '';
-      return `${s1} ${s2}${s3}`.trim();
-    }
-    return '';
+    return formatMatchScore(score) || '';
   };
 
   const getThemeBg = () => {
