@@ -6,6 +6,7 @@ import { GroupZone, PlayoffRound } from '../utils/bracketHelper';
 import { getTournamentTier } from '../utils/tournamentTiers';
 import { formatMatchScore } from '../utils/formatters';
 import { api } from '../services/api';
+import { useToast } from './ui/Toast';
 
 interface ShareGraphicModalProps {
   isOpen: boolean;
@@ -28,12 +29,14 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   matches = [],
   currentUser
 }) => {
+  const { addToast } = useToast();
   const [graphicType, setGraphicType] = useState<'playoffs' | 'standings' | 'order_of_play' | 'champion'>('standings');
   const [aspectRatio, setAspectRatio] = useState<'square' | 'story'>('story'); // 'square' (1:1) or 'story' (9:16)
   const [themeStyle, setThemeStyle] = useState<'dark' | 'clay' | 'grass'>('dark');
   const [selectedZoneIndex, setSelectedZoneIndex] = useState<number | 'all'>('all');
   const [selectedRoundIndex, setSelectedRoundIndex] = useState<number | 'all'>('all');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const [isPublishingStory, setIsPublishingStory] = useState(false);
   const [storyPublished, setStoryPublished] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -500,55 +503,67 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     }
   };
 
-  const handleShareWhatsApp = () => {
+  const handleShareWhatsApp = async () => {
     soundEffects.playScoreBeep();
-    const clubName = tournament.institutions?.name || 'Smash Tenis';
-    let text = `🎾 *${tournament.name.toUpperCase()}* - ${clubName}\n`;
-    text += `🏆 *Categoría:* ${tournament.category} | ${tournament.gender || 'Caballeros'}\n`;
-    text += `📍 *Circuito:* ${tier.label} (+${tier.pointsWinner} pts)\n\n`;
+    setIsSharing(true);
 
-    if (graphicType === 'champion' && championName) {
-      text += `👑 *¡CAMPEÓN CONSAGRADO!* 👑\n🥇 *${championName}*\n\n`;
-    } else if (graphicType === 'playoffs' && playoffRounds && playoffRounds.length > 0) {
-      text += `🔥 *Cuadro de Eliminación (Playoffs):*\n`;
-      const roundsToShare = selectedRoundIndex === 'all' ? playoffRounds : [playoffRounds[selectedRoundIndex]].filter(Boolean);
-      roundsToShare.forEach(r => {
-        text += `\n*🏆 ${r.name}:*\n`;
-        (r.matches || []).forEach(m => {
-          const p1 = m.player1_name || 'Por definir';
-          const p2 = m.player2_name || 'Por definir';
-          const sc = formatShortScore(m.score);
-          if (m.is_played && sc) {
-            text += `• ${p1} vs ${p2} ➔ *${sc}* (Ganador: ${m.winner_name || 'Definido'})\n`;
-          } else {
-            text += `• ${p1} vs ${p2}\n`;
-          }
+    try {
+      const width = 1080;
+      const height = aspectRatio === 'story' ? 1920 : 1080;
+      const canvas = await renderGraphicToCanvas(width, height);
+
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 1.0));
+      if (!blob) throw new Error('No se pudo generar la imagen de la placa');
+
+      const fileName = `SmashTenis-${tournament.name.replace(/\s+/g, '_')}-${graphicType}.png`;
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      // 1. If Web Share API supports file sharing (Mobile & modern supported OS)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Placa Smash - ${tournament.name}`
         });
-      });
-    } else if (graphicType === 'standings' && zones && zones.length > 0) {
-      if (selectedZoneIndex === 'all') {
-        text += `📊 *Fase de Zonas (${zones.length} Grupos Definidos):*\n`;
-        zones.forEach(z => {
-          text += `\n*${z.groupName}:*\n`;
-          (z.players || []).forEach((p, idx) => {
-            text += `${idx + 1}. ${p.playerName} (${p.matchesWon || 0}G-${p.matchesLost || 0}P, ${p.points || 0} pts)\n`;
-          });
-        });
+        soundEffects.playBookingSuccess();
       } else {
-        const z = zones[selectedZoneIndex];
-        if (z) {
-          text += `📊 *Posiciones ${z.groupName}:*\n`;
-          (z.players || []).forEach((p, idx) => {
-            text += `${idx + 1}. ${p.playerName} (${p.matchesWon || 0}G-${p.matchesLost || 0}P, ${p.points || 0} pts)\n`;
-          });
+        // 2. Desktop Web fallback: copy image directly to clipboard & download file, then open WhatsApp
+        let copied = false;
+        try {
+          if (navigator.clipboard && window.ClipboardItem) {
+            const item = new ClipboardItem({ 'image/png': blob });
+            await navigator.clipboard.write([item]);
+            copied = true;
+          }
+        } catch (clipErr) {
+          console.warn('Clipboard image write not supported or permitted:', clipErr);
+        }
+
+        // Trigger file download
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = url;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+        // Open WhatsApp Web
+        window.open('https://web.whatsapp.com', '_blank');
+
+        soundEffects.playBookingSuccess();
+        if (copied) {
+          addToast('¡Imagen copiada al portapapeles y descargada! Pegala en el chat de WhatsApp (Ctrl+V).', 'success');
+        } else {
+          addToast('¡Imagen descargada! Podés adjuntarla en tu chat de WhatsApp.', 'info');
         }
       }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.error('Error sharing graphic to WhatsApp:', err);
+        addToast('Error al compartir la imagen: ' + (err.message || 'Intente nuevamente'), 'error');
+      }
+    } finally {
+      setIsSharing(false);
     }
-
-    text += `\n📲 Seguí los resultados en vivo en: https://smashtenis.lnx.com.ar/?t=${tournament.id}`;
-
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
   };
 
   return (
@@ -791,10 +806,20 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
               <button
                 onClick={handleShareWhatsApp}
-                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 rounded-xl font-bold hover:bg-emerald-600/30 active:scale-[0.98] transition-all text-xs"
+                disabled={isSharing || isGenerating}
+                className="w-full flex items-center justify-center gap-2 py-2.5 px-4 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 rounded-xl font-bold hover:bg-emerald-600/30 active:scale-[0.98] transition-all text-xs disabled:opacity-50"
               >
-                <Share2 size={16} />
-                Compartir por WhatsApp
+                {isSharing ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    Preparando Imagen...
+                  </>
+                ) : (
+                  <>
+                    <Share2 size={16} />
+                    Compartir por WhatsApp
+                  </>
+                )}
               </button>
             </div>
 

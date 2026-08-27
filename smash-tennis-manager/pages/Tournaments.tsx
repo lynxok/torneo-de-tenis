@@ -3,7 +3,7 @@ import { Tournament, UserProfile, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2 } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier } from '../utils/tournamentTiers';
 
@@ -13,10 +13,19 @@ interface TournamentsProps {
     initialState?: any; // To handle potential params passed
 }
 
+export const canDeleteTournament = (t: Tournament, u: UserProfile): boolean => {
+    if (u.role === 'superadmin') return true;
+    if (t.created_by && t.created_by === u.id) return true;
+    if (u.role === 'admin' && u.institution_id && t.institution_id === u.institution_id) return true;
+    return false;
+};
+
 export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) => {
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [loading, setLoading] = useState(true);
     const [warningTournament, setWarningTournament] = useState<Tournament | null>(null);
+    const [deletingTournament, setDeletingTournament] = useState<Tournament | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false); // For admins
     const [currentInstitution, setCurrentInstitution] = useState<Institution | null>(null);
 
@@ -109,13 +118,33 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                 return;
             }
 
-            await api.tournaments.create({ ...newTournament, institution_id: targetInstitutionId });
+            await api.tournaments.create({ 
+                ...newTournament, 
+                institution_id: targetInstitutionId,
+                created_by: user.id
+            });
             addToast("Torneo creado exitosamente", 'success');
             setShowCreateModal(false);
             loadTournaments();
         } catch (e: any) {
             console.error("Error al crear torneo:", e);
             addToast(e?.message ? `Error al crear torneo: ${e.message}` : "Error al crear torneo", 'error');
+        }
+    };
+
+    const handleConfirmDelete = async () => {
+        if (!deletingTournament) return;
+        setIsDeleting(true);
+        try {
+            await api.tournaments.delete(deletingTournament.id);
+            addToast(`Torneo "${deletingTournament.name}" eliminado correctamente`, 'success');
+            setDeletingTournament(null);
+            await loadTournaments();
+        } catch (err: any) {
+            console.error("Error al eliminar torneo:", err);
+            addToast(err?.message ? `Error al eliminar torneo: ${err.message}` : "Error al eliminar torneo", 'error');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -296,6 +325,18 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                                             >
                                                                 <MessageCircle size={14} />
                                                             </button>
+                                                            {canDeleteTournament(t, user) && (
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setDeletingTournament(t);
+                                                                    }}
+                                                                    className="p-1.5 rounded-lg bg-red-500/10 hover:bg-red-500/25 text-red-400 border border-red-500/20 transition-colors"
+                                                                    title="Eliminar torneo de forma permanente"
+                                                                >
+                                                                    <Trash2 size={14} />
+                                                                </button>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -464,6 +505,56 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                             </div>
                             <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl shadow-lg mt-4">Crear Torneo</button>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Tournament Confirmation Modal */}
+            {deletingTournament && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-card border border-red-500/30 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center gap-3 text-red-400">
+                            <div className="w-10 h-10 rounded-xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                                <Trash2 size={20} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">¿Eliminar Torneo?</h3>
+                                <p className="text-xs text-muted">{deletingTournament.institutions?.name || 'Sede del torneo'}</p>
+                            </div>
+                        </div>
+                        
+                        <p className="text-sm text-slate-300 leading-relaxed">
+                            Estás por eliminar permanentemente el torneo <strong className="text-white font-bold">"{deletingTournament.name}"</strong>.
+                        </p>
+
+                        <div className="p-3.5 bg-red-500/10 border border-red-500/20 rounded-xl text-xs text-red-300 space-y-1.5">
+                            <div className="font-bold flex items-center gap-1.5 text-red-400">
+                                <AlertTriangle size={14} /> Esta acción es irreversible:
+                            </div>
+                            <ul className="list-disc list-inside text-[11px] text-slate-300 space-y-0.5 ml-1">
+                                <li>Se borrarán todos los jugadores inscriptos y parejas.</li>
+                                <li>Se eliminarán los partidos, zonas, marcadores y llaves.</li>
+                                <li>Se desvincularán los turnos o reservas asociadas.</li>
+                            </ul>
+                        </div>
+
+                        <div className="flex gap-3 justify-end pt-2">
+                            <button
+                                onClick={() => setDeletingTournament(null)}
+                                disabled={isDeleting}
+                                className="px-4 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 font-semibold text-sm transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleConfirmDelete}
+                                disabled={isDeleting}
+                                className="px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg shadow-red-600/20 transition-all disabled:opacity-50"
+                            >
+                                {isDeleting ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                {isDeleting ? 'Eliminando...' : 'Sí, Eliminar Torneo'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

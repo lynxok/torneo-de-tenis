@@ -686,8 +686,49 @@ export const api = {
             return data;
         },
         async delete(id: string) {
+            // 1. Desvincular torneos que tengan a este como edición previa
+            try {
+                await supabase.from('tournaments').update({ previous_edition_id: null }).eq('previous_edition_id', id);
+            } catch (e) {
+                console.warn("Unlink previous_edition_id warning:", e);
+            }
+
+            // 2. Desvincular reservas de canchas vinculadas a partidos de este torneo
+            try {
+                const { data: matchRows } = await supabase.from('matches').select('id').eq('tournament_id', id);
+                if (matchRows && matchRows.length > 0) {
+                    const matchIds = matchRows.map(m => m.id);
+                    await supabase.from('bookings').update({ match_id: null }).in('match_id', matchIds);
+                }
+            } catch (e) {
+                console.warn("Unlink match bookings warning:", e);
+            }
+
+            // 3. Eliminar equipos de dobles
+            try {
+                await supabase.from('doubles_teams').delete().eq('tournament_id', id);
+            } catch (e) {
+                console.warn("Delete doubles teams warning:", e);
+            }
+
+            // 4. Eliminar partidos
+            try {
+                await supabase.from('matches').delete().eq('tournament_id', id);
+            } catch (e) {
+                console.warn("Delete matches warning:", e);
+            }
+
+            // 5. Eliminar inscriptos
+            try {
+                await supabase.from('tournament_players').delete().eq('tournament_id', id);
+            } catch (e) {
+                console.warn("Delete tournament players warning:", e);
+            }
+
+            // 6. Eliminar el registro del torneo
             const { error } = await supabase.from('tournaments').delete().eq('id', id);
             if (error) throw error;
+            return { success: true };
         },
         async reactivate(oldTournament: Tournament) {
             const newStartDate = new Date();

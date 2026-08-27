@@ -1,9 +1,10 @@
 import React, { useRef, useState, useMemo } from 'react';
 import { UserProfile, PlayerStatsSummary } from '../types';
 import { soundEffects } from '../services/soundEffects';
-import { X, Download, Share2, Trophy, Award, Flame, Zap, Shield, Sparkles, Star, Crown, Medal } from 'lucide-react';
+import { X, Download, Share2, Trophy, Award, Flame, Zap, Shield, Sparkles, Star, Crown, Medal, Loader2 } from 'lucide-react';
 import { formatPlayerName } from '../utils/formatters';
 import { calculatePlayerAchievements, getTopUnlockedAchievements } from '../utils/achievements';
+import { useToast } from './ui/Toast';
 
 interface PlayerCardModalProps {
   isOpen: boolean;
@@ -20,7 +21,9 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
   stats,
   rank = 1
 }) => {
+  const { addToast } = useToast();
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSharing, setIsSharing] = useState(false);
   const cardRef = useRef<HTMLDivElement>(null);
 
   const topBadges = useMemo(() => {
@@ -40,84 +43,127 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
   // ATP Rating Tier (Gold, Platinum, Diamond based on category & rank)
   const isTopTier = user.category === '1ra' || user.category === '2da' || rank <= 5;
 
+  const renderCardToCanvas = async (): Promise<HTMLCanvasElement> => {
+    const element = cardRef.current;
+    if (!element) throw new Error("No se pudo obtener el elemento de la tarjeta");
+
+    const canvas = document.createElement('canvas');
+    const rect = element.getBoundingClientRect();
+    const scale = 2; // High resolution
+
+    canvas.width = rect.width * scale;
+    canvas.height = rect.height * scale;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error("No se pudo iniciar el contexto Canvas");
+
+    ctx.scale(scale, scale);
+
+    // Draw background
+    const bgGrad = ctx.createLinearGradient(0, 0, rect.width, rect.height);
+    bgGrad.addColorStop(0, '#1a1005');
+    bgGrad.addColorStop(0.5, '#0d0a04');
+    bgGrad.addColorStop(1, '#050402');
+    ctx.fillStyle = bgGrad;
+    ctx.fillRect(0, 0, rect.width, rect.height);
+
+    const data = new XMLSerializer().serializeToString(element);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${data}</div></foreignObject></svg>`;
+
+    const img = new Image();
+    const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const URLObj = window.URL || window.webkitURL || window;
+    const blobURL = URLObj.createObjectURL(svgBlob);
+
+    await new Promise((resolve) => {
+      img.onload = () => {
+        ctx.drawImage(img, 0, 0);
+        URLObj.revokeObjectURL(blobURL);
+        resolve(null);
+      };
+      img.onerror = () => {
+        URLObj.revokeObjectURL(blobURL);
+        resolve(null);
+      };
+      img.src = blobURL;
+    });
+
+    return canvas;
+  };
+
   const handleDownloadPng = async () => {
     soundEffects.playTennisHit();
     setIsGenerating(true);
     try {
-      const element = cardRef.current;
-      if (!element) return;
-
-      const canvas = document.createElement('canvas');
-      const rect = element.getBoundingClientRect();
-      const scale = 2; // High resolution
-
-      canvas.width = rect.width * scale;
-      canvas.height = rect.height * scale;
-      const ctx = canvas.getContext('2d');
-
-      if (ctx) {
-        ctx.scale(scale, scale);
-
-        // Draw background
-        const bgGrad = ctx.createLinearGradient(0, 0, rect.width, rect.height);
-        bgGrad.addColorStop(0, '#1a1005');
-        bgGrad.addColorStop(0.5, '#0d0a04');
-        bgGrad.addColorStop(1, '#050402');
-        ctx.fillStyle = bgGrad;
-        ctx.fillRect(0, 0, rect.width, rect.height);
-
-        const data = new XMLSerializer().serializeToString(element);
-        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${rect.width}" height="${rect.height}"><foreignObject width="100%" height="100%"><div xmlns="http://www.w3.org/1999/xhtml">${data}</div></foreignObject></svg>`;
-        
-        const img = new Image();
-        const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-        const URLObj = window.URL || window.webkitURL || window;
-        const blobURL = URLObj.createObjectURL(svgBlob);
-
-        img.onload = () => {
-          ctx.drawImage(img, 0, 0);
-          URLObj.revokeObjectURL(blobURL);
-
-          const link = document.createElement('a');
-          link.download = `PlayerCard-${formattedName.replace(/\s+/g, '_')}.png`;
-          link.href = canvas.toDataURL('image/png', 1.0);
-          link.click();
-          setIsGenerating(false);
-          soundEffects.playBookingSuccess();
-        };
-
-        img.onerror = () => {
-          const link = document.createElement('a');
-          link.download = `PlayerCard-${formattedName.replace(/\s+/g, '_')}.png`;
-          link.href = canvas.toDataURL('image/png', 1.0);
-          link.click();
-          setIsGenerating(false);
-        };
-
-        img.src = blobURL;
-      }
-    } catch (e) {
+      const canvas = await renderCardToCanvas();
+      const link = document.createElement('a');
+      link.download = `PlayerCard-${formattedName.replace(/\s+/g, '_')}.png`;
+      link.href = canvas.toDataURL('image/png', 1.0);
+      link.click();
+      soundEffects.playBookingSuccess();
+    } catch (e: any) {
       console.error('Error exporting player card:', e);
+      addToast('Error al descargar la tarjeta: ' + (e.message || 'Intente nuevamente'), 'error');
+    } finally {
       setIsGenerating(false);
     }
   };
 
-  const handleShareWhatsApp = () => {
+  const handleShareWhatsApp = async () => {
     soundEffects.playScoreBeep();
-    const club = user.institution || 'Smash Tenis';
-    let text = `🎾 *SMASH PLAYER CARD* 🎾\n`;
-    text += `👤 *Jugador:* ${formattedName}\n`;
-    text += `🏅 *Categoría:* ${user.category || '4ta'} | 📍 *Club:* ${club}\n`;
-    text += `📊 *Efectividad:* ${winRate}% Victorias (${matchesWon} PG)\n`;
-    text += `🔥 *Mejor Racha:* ${bestStreak} partidos invicto\n`;
-    text += `🏆 *Ranking:* #${rank} Oficial\n`;
-    if (topBadges.length > 0) {
-      text += `🎖️ *Medallas:* ${topBadges.map(b => b.title).join(' • ')}\n`;
-    }
-    text += `\n📲 Consultá el perfil completo en: https://smashtenis.lnx.com.ar`;
+    setIsSharing(true);
 
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    try {
+      const canvas = await renderCardToCanvas();
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png', 1.0));
+      if (!blob) throw new Error('No se pudo generar la imagen de la tarjeta');
+
+      const fileName = `PlayerCard-${formattedName.replace(/\s+/g, '_')}.png`;
+      const file = new File([blob], fileName, { type: 'image/png' });
+
+      // 1. If Web Share API supports file sharing (Mobile & modern OS)
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `Smash Player Card - ${formattedName}`
+        });
+        soundEffects.playBookingSuccess();
+      } else {
+        // 2. Desktop Web fallback: copy image directly to clipboard & download file, then open WhatsApp
+        let copied = false;
+        try {
+          if (navigator.clipboard && window.ClipboardItem) {
+            const item = new ClipboardItem({ 'image/png': blob });
+            await navigator.clipboard.write([item]);
+            copied = true;
+          }
+        } catch (clipErr) {
+          console.warn('Clipboard write failed:', clipErr);
+        }
+
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = fileName;
+        link.href = url;
+        link.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10000);
+
+        window.open('https://web.whatsapp.com', '_blank');
+
+        soundEffects.playBookingSuccess();
+        if (copied) {
+          addToast('¡Tarjeta copiada al portapapeles y descargada! Pegala en el chat de WhatsApp (Ctrl+V).', 'success');
+        } else {
+          addToast('¡Tarjeta descargada! Podés adjuntarla en tu chat de WhatsApp.', 'info');
+        }
+      }
+    } catch (err: any) {
+      if (err?.name !== 'AbortError') {
+        console.error('Error sharing player card to WhatsApp:', err);
+        addToast('Error al compartir la tarjeta: ' + (err.message || 'Intente nuevamente'), 'error');
+      }
+    } finally {
+      setIsSharing(false);
+    }
   };
 
   return (
@@ -254,10 +300,20 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
             </button>
             <button
               onClick={handleShareWhatsApp}
-              className="flex items-center justify-center gap-2 py-3 px-3 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl hover:bg-emerald-600/30 active:scale-[0.98] transition-all text-xs"
+              disabled={isSharing || isGenerating}
+              className="flex items-center justify-center gap-2 py-3 px-3 bg-emerald-600/20 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl hover:bg-emerald-600/30 active:scale-[0.98] transition-all text-xs disabled:opacity-50"
             >
-              <Share2 size={16} />
-              WhatsApp
+              {isSharing ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  Preparando...
+                </>
+              ) : (
+                <>
+                  <Share2 size={16} />
+                  WhatsApp
+                </>
+              )}
             </button>
           </div>
 
