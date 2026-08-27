@@ -85,6 +85,8 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error("No se pudo iniciar el renderizado Canvas");
 
+    const isSquare = height === width;
+
     // 1. Background Gradient
     const bg = ctx.createLinearGradient(0, 0, 0, height);
     if (themeStyle === 'clay') {
@@ -109,14 +111,14 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     ctx.strokeRect(4, 4, width - 8, height - 8);
 
     // 2. Preload Logo as local Image or stylized fallback
-    const padX = 60;
-    let curY = 80;
+    const padX = isSquare ? 50 : 60;
+    let curY = isSquare ? 45 : 80;
 
     let logoLoaded = false;
     try {
       const logoImg = new Image();
       logoImg.crossOrigin = "anonymous";
-      await new Promise((res, rej) => {
+      await new Promise((res) => {
         logoImg.onload = () => { logoLoaded = true; res(null); };
         logoImg.onerror = () => res(null);
         logoImg.src = "/Smash.png";
@@ -131,19 +133,19 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
         ctx.restore();
 
         // Header logo
-        const lHeight = 70;
+        const lHeight = isSquare ? 52 : 70;
         const lWidth = (logoImg.width / logoImg.height) * lHeight;
         ctx.drawImage(logoImg, padX, curY, lWidth, lHeight);
 
         // "OFICIAL" badge
         ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
         ctx.beginPath();
-        ctx.roundRect(padX + lWidth + 18, curY + 15, 110, 38, 19);
+        ctx.roundRect(padX + lWidth + (isSquare ? 12 : 18), curY + (isSquare ? 10 : 15), isSquare ? 90 : 110, isSquare ? 32 : 38, isSquare ? 16 : 19);
         ctx.fill();
         ctx.fillStyle = '#94a3b8';
-        ctx.font = 'bold 16px sans-serif';
+        ctx.font = isSquare ? 'bold 14px sans-serif' : 'bold 16px sans-serif';
         ctx.textAlign = 'center';
-        ctx.fillText('OFICIAL', padX + lWidth + 73, curY + 40);
+        ctx.fillText('OFICIAL', padX + lWidth + (isSquare ? 57 : 73), curY + (isSquare ? 32 : 40));
       }
     } catch (e) {
       console.warn("Logo fallback:", e);
@@ -151,26 +153,27 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
     if (!logoLoaded) {
       ctx.fillStyle = '#e15b34';
-      ctx.font = '900 42px sans-serif';
+      ctx.font = isSquare ? '900 36px sans-serif' : '900 42px sans-serif';
       ctx.textAlign = 'left';
-      ctx.fillText('SMASH TENIS', padX, curY + 50);
+      ctx.fillText('SMASH TENIS', padX, curY + (isSquare ? 40 : 50));
     }
 
     // Tier Badge
-    const tierWidth = 190;
+    const tierWidth = isSquare ? 165 : 190;
+    const tierHeight = isSquare ? 42 : 48;
     ctx.fillStyle = themeStyle === 'clay' ? 'rgba(249, 115, 22, 0.2)' : themeStyle === 'grass' ? 'rgba(16, 185, 129, 0.2)' : 'rgba(225, 91, 52, 0.2)';
     ctx.strokeStyle = themeStyle === 'clay' ? '#f97316' : themeStyle === 'grass' ? '#10b981' : '#e15b34';
     ctx.lineWidth = 3;
     ctx.beginPath();
-    ctx.roundRect(width - padX - tierWidth, curY + 10, tierWidth, 48, 24);
+    ctx.roundRect(width - padX - tierWidth, curY + (isSquare ? 5 : 10), tierWidth, tierHeight, tierHeight / 2);
     ctx.fill();
     ctx.stroke();
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 22px sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(tier.label, width - padX - (tierWidth / 2), curY + 42);
+    ctx.fillText(tier.label, width - padX - (tierWidth / 2), curY + (isSquare ? 32 : 42));
 
-    curY += 100;
+    curY += isSquare ? 75 : 100;
 
     // Header Divider
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
@@ -180,78 +183,79 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     ctx.lineTo(width - padX, curY);
     ctx.stroke();
 
-    curY += 45;
+    curY += isSquare ? 35 : 45;
 
     // Tournament Name
     ctx.fillStyle = '#ffffff';
-    ctx.font = '900 44px sans-serif';
+    ctx.font = isSquare ? '900 36px sans-serif' : '900 44px sans-serif';
     ctx.textAlign = 'left';
     ctx.fillText(tournament.name.toUpperCase(), padX, curY);
 
-    curY += 36;
+    curY += isSquare ? 28 : 36;
 
     // Subtitle (Club & Category)
     ctx.fillStyle = '#94a3b8';
-    ctx.font = '600 24px sans-serif';
+    ctx.font = isSquare ? '600 20px sans-serif' : '600 24px sans-serif';
     const clubText = `📍 ${tournament.institutions?.name || 'Club'} • ${tournament.category} ${tournament.gender || 'Caballeros'}`;
     ctx.fillText(clubText, padX, curY);
 
-    curY += 55;
+    curY += isSquare ? 40 : 55;
 
     // 4. Main Body Content
     if (graphicType === 'champion') {
-      const centerY = curY + 300;
+      const centerY = curY + (isSquare ? 210 : 300);
+      const circleRadius = isSquare ? 70 : 90;
       ctx.fillStyle = 'rgba(245, 158, 11, 0.18)';
       ctx.strokeStyle = '#f59e0b';
       ctx.lineWidth = 6;
       ctx.beginPath();
-      ctx.arc(width / 2, centerY - 100, 90, 0, Math.PI * 2);
+      ctx.arc(width / 2, centerY - (isSquare ? 75 : 100), circleRadius, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
-      ctx.font = '90px sans-serif';
+      ctx.font = isSquare ? '70px sans-serif' : '90px sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText('🏆', width / 2, centerY - 65);
+      ctx.fillText('🏆', width / 2, centerY - (isSquare ? 50 : 65));
 
       ctx.fillStyle = '#fbbf24';
-      ctx.font = '900 24px sans-serif';
-      ctx.fillText('CAMPEÓN DEL TORNEO', width / 2, centerY + 30);
+      ctx.font = isSquare ? '900 20px sans-serif' : '900 24px sans-serif';
+      ctx.fillText('CAMPEÓN DEL TORNEO', width / 2, centerY + (isSquare ? 20 : 30));
 
       ctx.fillStyle = '#ffffff';
-      ctx.font = '900 52px sans-serif';
+      ctx.font = isSquare ? '900 42px sans-serif' : '900 52px sans-serif';
       const cName = championName || tournament.champion_name || 'Por Definir';
-      ctx.fillText(cName, width / 2, centerY + 100);
+      ctx.fillText(cName, width / 2, centerY + (isSquare ? 75 : 100));
 
       ctx.fillStyle = 'rgba(253, 230, 138, 0.8)';
-      ctx.font = 'bold 28px sans-serif';
-      ctx.fillText(`+${tier.pointsWinner} Pts para el Ranking Oficial`, width / 2, centerY + 155);
+      ctx.font = isSquare ? 'bold 22px sans-serif' : 'bold 28px sans-serif';
+      ctx.fillText(`+${tier.pointsWinner} Pts para el Ranking Oficial`, width / 2, centerY + (isSquare ? 120 : 155));
     } 
     else if (graphicType === 'standings') {
       ctx.fillStyle = themeStyle === 'clay' ? '#fb923c' : themeStyle === 'grass' ? '#34d399' : '#f97316';
-      ctx.font = '900 22px sans-serif';
+      ctx.font = isSquare ? '900 20px sans-serif' : '900 22px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('📊 TABLA DE POSICIONES', padX, curY);
 
       ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 20px sans-serif';
       ctx.textAlign = 'right';
       const subLabel = selectedZoneIndex === 'all' ? `TODAS LAS ZONAS (${zones.length})` : zones[selectedZoneIndex]?.groupName || '';
       ctx.fillText(subLabel, width - padX, curY);
 
-      curY += 30;
+      curY += isSquare ? 24 : 30;
 
       const renderZones = displayedZones;
       const isMultiCol = renderZones.length > 2;
 
       if (isMultiCol) {
-        const colW = (width - padX * 2 - 30) / 2;
-        const cardH = 260;
+        const colW = (width - padX * 2 - (isSquare ? 20 : 30)) / 2;
+        const cardH = isSquare ? 215 : 260;
 
         renderZones.forEach((z, i) => {
           const col = i % 2;
           const row = Math.floor(i / 2);
-          const zX = padX + col * (colW + 30);
-          const zY = curY + row * (cardH + 20);
+          const zX = padX + col * (colW + (isSquare ? 20 : 30));
+          const zY = curY + row * (cardH + (isSquare ? 14 : 20));
 
           ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
@@ -262,29 +266,31 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
           ctx.stroke();
 
           ctx.fillStyle = '#fdba74';
-          ctx.font = '900 22px sans-serif';
+          ctx.font = isSquare ? '900 20px sans-serif' : '900 22px sans-serif';
           ctx.textAlign = 'left';
-          ctx.fillText(z.groupName?.toUpperCase() || `ZONA ${i + 1}`, zX + 20, zY + 38);
+          ctx.fillText(z.groupName?.toUpperCase() || `ZONA ${i + 1}`, zX + 18, zY + (isSquare ? 32 : 38));
 
           (z.players || []).slice(0, 4).forEach((p, pIdx) => {
-            const rowY = zY + 80 + pIdx * 46;
+            const rowY = zY + (isSquare ? 68 : 80) + pIdx * (isSquare ? 38 : 46);
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 20px sans-serif';
+            ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 20px sans-serif';
             ctx.textAlign = 'left';
             const pName = `${pIdx + 1}. ${p.playerName || 'Jugador'}`;
-            ctx.fillText(pName, zX + 20, rowY);
+            ctx.fillText(pName, zX + 18, rowY);
 
             ctx.fillStyle = '#94a3b8';
-            ctx.font = 'bold 18px sans-serif';
+            ctx.font = isSquare ? 'bold 16px sans-serif' : 'bold 18px sans-serif';
             ctx.textAlign = 'right';
             const stats = `${p.matchesWon || 0}G - ${p.matchesLost || 0}P`;
-            ctx.fillText(stats, zX + colW - 20, rowY);
+            ctx.fillText(stats, zX + colW - 18, rowY);
           });
         });
       } else {
         const cardW = width - padX * 2;
         renderZones.forEach((z, i) => {
-          const cardH = 80 + (z.players?.length || 3) * 55;
+          const cardH = isSquare
+            ? (65 + (z.players?.length || 3) * 44)
+            : (80 + (z.players?.length || 3) * 55);
           const zY = curY;
 
           ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
@@ -296,59 +302,59 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
           ctx.stroke();
 
           ctx.fillStyle = '#fdba74';
-          ctx.font = '900 26px sans-serif';
+          ctx.font = isSquare ? '900 22px sans-serif' : '900 26px sans-serif';
           ctx.textAlign = 'left';
-          ctx.fillText(z.groupName?.toUpperCase() || `ZONA ${i + 1}`, padX + 25, zY + 45);
+          ctx.fillText(z.groupName?.toUpperCase() || `ZONA ${i + 1}`, padX + 25, zY + (isSquare ? 36 : 45));
 
           (z.players || []).forEach((p, pIdx) => {
-            const rowY = zY + 100 + pIdx * 55;
+            const rowY = zY + (isSquare ? 80 : 100) + pIdx * (isSquare ? 44 : 55);
             ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 24px sans-serif';
+            ctx.font = isSquare ? 'bold 20px sans-serif' : 'bold 24px sans-serif';
             ctx.textAlign = 'left';
             ctx.fillText(`${pIdx + 1}. ${p.playerName || 'Jugador'}`, padX + 25, rowY);
 
             ctx.fillStyle = '#38bdf8';
-            ctx.font = 'bold 22px sans-serif';
+            ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 22px sans-serif';
             ctx.textAlign = 'right';
             ctx.fillText(`${p.matchesWon || 0}G - ${p.matchesLost || 0}P (${p.points || 0} pts)`, padX + cardW - 25, rowY);
           });
 
-          curY += cardH + 25;
+          curY += cardH + (isSquare ? 16 : 25);
         });
       }
     }
     else if (graphicType === 'playoffs') {
       ctx.fillStyle = '#f97316';
-      ctx.font = '900 22px sans-serif';
+      ctx.font = isSquare ? '900 20px sans-serif' : '900 22px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('🏆 CUADRO DE PLAYOFFS', padX, curY);
 
       ctx.fillStyle = '#64748b';
-      ctx.font = 'bold 20px sans-serif';
+      ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 20px sans-serif';
       ctx.textAlign = 'right';
       const subLabel = selectedRoundIndex === 'all' ? `LLAVES (${playoffRounds.length} RONDAS)` : playoffRounds[selectedRoundIndex]?.name || '';
       ctx.fillText(subLabel, width - padX, curY);
 
-      curY += 30;
+      curY += isSquare ? 24 : 30;
 
       const renderRounds = displayedRounds;
       renderRounds.forEach((r) => {
         ctx.fillStyle = '#fdba74';
-        ctx.font = '900 22px sans-serif';
+        ctx.font = isSquare ? '900 18px sans-serif' : '900 22px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`🏆 ${r.name.toUpperCase()}`, padX, curY + 25);
-        curY += 40;
+        ctx.fillText(`🏆 ${r.name.toUpperCase()}`, padX, curY + (isSquare ? 18 : 25));
+        curY += isSquare ? 30 : 40;
 
         const mCount = (r.matches || []).length;
         const isMulti = mCount > 2;
-        const cardW = isMulti ? (width - padX * 2 - 30) / 2 : width - padX * 2;
-        const cardH = 140;
+        const cardW = isMulti ? (width - padX * 2 - (isSquare ? 20 : 30)) / 2 : width - padX * 2;
+        const cardH = isSquare ? 115 : 140;
 
         (r.matches || []).forEach((m, mIdx) => {
           const col = isMulti ? mIdx % 2 : 0;
           const row = isMulti ? Math.floor(mIdx / 2) : mIdx;
-          const mX = padX + col * (cardW + 30);
-          const mY = curY + row * (cardH + 16);
+          const mX = padX + col * (cardW + (isSquare ? 20 : 30));
+          const mY = curY + row * (cardH + (isSquare ? 12 : 16));
 
           const isP1Win = m.winner_id && m.winner_id === m.player1_id;
           const isP2Win = m.winner_id && m.winner_id === m.player2_id;
@@ -358,86 +364,92 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
           ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
           ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.roundRect(mX, mY, cardW, cardH, 16);
+          ctx.roundRect(mX, mY, cardW, cardH, 14);
           ctx.fill();
           ctx.stroke();
 
           // Player 1
           ctx.fillStyle = isP1Win ? '#f97316' : '#ffffff';
-          ctx.font = isP1Win ? '900 20px sans-serif' : 'bold 20px sans-serif';
+          ctx.font = isP1Win 
+            ? (isSquare ? '900 17px sans-serif' : '900 20px sans-serif')
+            : (isSquare ? 'bold 17px sans-serif' : 'bold 20px sans-serif');
           ctx.textAlign = 'left';
-          ctx.fillText((isP1Win ? '▶ ' : '') + (m.player1_name || 'Por Definir'), mX + 16, mY + 36);
+          ctx.fillText((isP1Win ? '▶ ' : '') + (m.player1_name || 'Por Definir'), mX + 14, mY + (isSquare ? 28 : 36));
 
           if (isP1Win && sc) {
             ctx.fillStyle = '#f97316';
-            ctx.font = 'bold 16px sans-serif';
+            ctx.font = isSquare ? 'bold 14px sans-serif' : 'bold 16px sans-serif';
             ctx.textAlign = 'right';
-            ctx.fillText('GANADOR', mX + cardW - 16, mY + 36);
+            ctx.fillText('GANADOR', mX + cardW - 14, mY + (isSquare ? 28 : 36));
           }
 
           // Player 2
           ctx.fillStyle = isP2Win ? '#f97316' : '#ffffff';
-          ctx.font = isP2Win ? '900 20px sans-serif' : 'bold 20px sans-serif';
+          ctx.font = isP2Win 
+            ? (isSquare ? '900 17px sans-serif' : '900 20px sans-serif')
+            : (isSquare ? 'bold 17px sans-serif' : 'bold 20px sans-serif');
           ctx.textAlign = 'left';
-          ctx.fillText((isP2Win ? '▶ ' : '') + (m.player2_name || 'Por Definir'), mX + 16, mY + 76);
+          ctx.fillText((isP2Win ? '▶ ' : '') + (m.player2_name || 'Por Definir'), mX + 14, mY + (isSquare ? 60 : 76));
 
           if (isP2Win && sc) {
             ctx.fillStyle = '#f97316';
-            ctx.font = 'bold 16px sans-serif';
+            ctx.font = isSquare ? 'bold 14px sans-serif' : 'bold 16px sans-serif';
             ctx.textAlign = 'right';
-            ctx.fillText('GANADOR', mX + cardW - 16, mY + 76);
+            ctx.fillText('GANADOR', mX + cardW - 14, mY + (isSquare ? 60 : 76));
           }
 
           // Score footer
           if (m.is_played && sc) {
             ctx.fillStyle = '#fde047';
-            ctx.font = 'bold 18px sans-serif';
+            ctx.font = isSquare ? 'bold 15px sans-serif' : 'bold 18px sans-serif';
             ctx.textAlign = 'right';
-            ctx.fillText(`Marcador: ${sc}`, mX + cardW - 16, mY + 118);
+            ctx.fillText(`Marcador: ${sc}`, mX + cardW - 14, mY + (isSquare ? 96 : 118));
           } else if (m.scheduled_at) {
             ctx.fillStyle = '#94a3b8';
-            ctx.font = 'bold 18px sans-serif';
+            ctx.font = isSquare ? 'bold 15px sans-serif' : 'bold 18px sans-serif';
             ctx.textAlign = 'right';
-            ctx.fillText(`📅 ${m.scheduled_at.slice(11, 16)} hs`, mX + cardW - 16, mY + 118);
+            ctx.fillText(`📅 ${m.scheduled_at.slice(11, 16)} hs`, mX + cardW - 14, mY + (isSquare ? 96 : 118));
           }
         });
 
-        curY += Math.ceil(mCount / (isMulti ? 2 : 1)) * (cardH + 16) + 20;
+        curY += Math.ceil(mCount / (isMulti ? 2 : 1)) * (cardH + (isSquare ? 12 : 16)) + (isSquare ? 14 : 20);
       });
     }
     else if (graphicType === 'order_of_play') {
       ctx.fillStyle = '#f97316';
-      ctx.font = '900 22px sans-serif';
+      ctx.font = isSquare ? '900 20px sans-serif' : '900 22px sans-serif';
       ctx.textAlign = 'left';
       ctx.fillText('📅 ORDEN DE JUEGO OFICIAL', padX, curY);
-      curY += 40;
+      curY += isSquare ? 30 : 40;
 
       const cardW = width - padX * 2;
-      (matches || []).slice(0, 6).forEach((m, idx) => {
-        const mY = curY + idx * 80;
+      const maxMatches = isSquare ? 5 : 6;
+      const cardH = isSquare ? 54 : 66;
+      (matches || []).slice(0, maxMatches).forEach((m, idx) => {
+        const mY = curY + idx * (cardH + (isSquare ? 10 : 14));
         ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
         ctx.lineWidth = 2;
         ctx.beginPath();
-        ctx.roundRect(padX, mY, cardW, 66, 14);
+        ctx.roundRect(padX, mY, cardW, cardH, 14);
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = 'bold 22px sans-serif';
+        ctx.font = isSquare ? 'bold 19px sans-serif' : 'bold 22px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`${m.player1_name || 'Jugador 1'}  vs  ${m.player2_name || 'Jugador 2'}`, padX + 20, mY + 42);
+        ctx.fillText(`${m.player1_name || 'Jugador 1'}  vs  ${m.player2_name || 'Jugador 2'}`, padX + 20, mY + (isSquare ? 34 : 42));
 
         ctx.fillStyle = '#38bdf8';
-        ctx.font = 'bold 20px sans-serif';
+        ctx.font = isSquare ? 'bold 17px sans-serif' : 'bold 20px sans-serif';
         ctx.textAlign = 'right';
         const timeStr = m.scheduled_at ? `${m.scheduled_at.slice(11, 16)} hs` : 'A confirmar';
-        ctx.fillText(timeStr, padX + cardW - 20, mY + 42);
+        ctx.fillText(timeStr, padX + cardW - 20, mY + (isSquare ? 34 : 42));
       });
     }
 
     // 5. Footer
-    const footY = height - 70;
+    const footY = height - (isSquare ? 55 : 70);
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -446,14 +458,14 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     ctx.stroke();
 
     ctx.fillStyle = '#94a3b8';
-    ctx.font = 'bold 22px sans-serif';
+    ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 22px sans-serif';
     ctx.textAlign = 'left';
-    ctx.fillText('smashtenis.lnx.com.ar', padX, footY + 40);
+    ctx.fillText('smashtenis.lnx.com.ar', padX, footY + (isSquare ? 32 : 40));
 
     ctx.fillStyle = '#f97316';
-    ctx.font = '900 24px sans-serif';
+    ctx.font = isSquare ? '900 20px sans-serif' : '900 24px sans-serif';
     ctx.textAlign = 'right';
-    ctx.fillText('#SmashTenis', width - padX, footY + 40);
+    ctx.fillText('#SmashTenis', width - padX, footY + (isSquare ? 32 : 40));
 
     return canvas;
   };
@@ -835,77 +847,77 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
             <div 
               ref={previewRef}
               className={`w-full max-w-[340px] ${
-                aspectRatio === 'story' ? 'aspect-[9/16]' : 'aspect-square'
-              } rounded-2xl bg-gradient-to-b ${getThemeBg()} border p-4 sm:p-5 flex flex-col justify-between shadow-2xl relative overflow-hidden text-white select-none transition-all duration-300`}
+                aspectRatio === 'square' ? 'aspect-square p-2.5 sm:p-3' : 'aspect-[9/16] p-4 sm:p-5'
+              } rounded-2xl bg-gradient-to-b ${getThemeBg()} border flex flex-col justify-between shadow-2xl relative overflow-hidden text-white select-none transition-all duration-300`}
             >
               {/* Subtle Watermark BG Logo */}
-              <div className="absolute -right-6 -bottom-6 w-36 h-36 opacity-15 pointer-events-none">
+              <div className={`absolute -right-6 -bottom-6 ${aspectRatio === 'square' ? 'w-28 h-28' : 'w-36 h-36'} opacity-15 pointer-events-none`}>
                 <img src="/Smash.png" alt="" className="w-full h-full object-contain filter grayscale brightness-200" crossOrigin="anonymous" />
               </div>
 
               {/* Graphic Header with Official Smash Logo */}
-              <div className="space-y-1.5 shrink-0">
-                <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-                  <div className="flex items-center gap-2">
+              <div className={`${aspectRatio === 'square' ? 'space-y-1' : 'space-y-1.5'} shrink-0`}>
+                <div className={`flex items-center justify-between border-b border-white/10 ${aspectRatio === 'square' ? 'pb-1.5' : 'pb-2.5'}`}>
+                  <div className="flex items-center gap-1.5">
                     <img 
                       src="/Smash.png" 
                       alt="Smash Tenis" 
-                      className="h-7 w-auto object-contain drop-shadow-[0_0_8px_rgba(255,107,0,0.5)]" 
+                      className={`${aspectRatio === 'square' ? 'h-5' : 'h-7'} w-auto object-contain drop-shadow-[0_0_8px_rgba(255,107,0,0.5)]`} 
                       crossOrigin="anonymous" 
                     />
-                    <span className="text-[9px] uppercase font-black tracking-widest text-slate-400 bg-white/10 px-2 py-0.5 rounded-full border border-white/10">OFICIAL</span>
+                    <span className={`${aspectRatio === 'square' ? 'text-[8px] px-1.5 py-0.2' : 'text-[9px] px-2 py-0.5'} uppercase font-black tracking-widest text-slate-400 bg-white/10 rounded-full border border-white/10`}>OFICIAL</span>
                   </div>
-                  <span className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${getAccentColor()}`}>
+                  <span className={`${aspectRatio === 'square' ? 'text-[9px] px-2 py-0.5' : 'text-[10px] px-2.5 py-0.5'} font-black uppercase rounded-full border ${getAccentColor()}`}>
                     {tier.label}
                   </span>
                 </div>
 
                 <div className="pt-0.5">
-                  <h3 className="text-sm sm:text-base font-extrabold text-white leading-tight uppercase line-clamp-2">
+                  <h3 className={`${aspectRatio === 'square' ? 'text-xs sm:text-sm font-extrabold' : 'text-sm sm:text-base font-extrabold'} text-white leading-tight uppercase line-clamp-1`}>
                     {tournament.name}
                   </h3>
-                  <p className="text-[10px] text-muted flex items-center gap-1 mt-0.5">
+                  <p className={`${aspectRatio === 'square' ? 'text-[8.5px]' : 'text-[10px]'} text-muted flex items-center gap-1 mt-0.5 truncate`}>
                     📍 {tournament.institutions?.name || 'Club'} • {tournament.category} {tournament.gender || 'Caballeros'}
                   </p>
                 </div>
               </div>
 
               {/* Graphic Content Body */}
-              <div className="my-auto py-2 w-full overflow-hidden">
+              <div className={`my-auto ${aspectRatio === 'square' ? 'py-1' : 'py-2'} w-full`}>
                 {graphicType === 'champion' && (
-                  <div className="text-center space-y-3 py-4">
-                    <div className="w-16 h-16 mx-auto rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20 animate-bounce">
-                      <Trophy size={32} className="text-amber-400" />
+                  <div className={`text-center ${aspectRatio === 'square' ? 'space-y-1.5 py-1' : 'space-y-3 py-4'}`}>
+                    <div className={`${aspectRatio === 'square' ? 'w-12 h-12' : 'w-16 h-16'} mx-auto rounded-full bg-amber-500/20 border-2 border-amber-400 flex items-center justify-center shadow-lg shadow-amber-500/20 animate-bounce`}>
+                      <Trophy size={aspectRatio === 'square' ? 24 : 32} className="text-amber-400" />
                     </div>
                     <div>
-                      <div className="text-[10px] font-black tracking-widest text-amber-400 uppercase">CAMPEÓN DEL TORNEO</div>
-                      <div className="text-lg sm:text-xl font-black text-white mt-1">
+                      <div className={`${aspectRatio === 'square' ? 'text-[9px]' : 'text-[10px]'} font-black tracking-widest text-amber-400 uppercase`}>CAMPEÓN DEL TORNEO</div>
+                      <div className={`${aspectRatio === 'square' ? 'text-base sm:text-lg' : 'text-lg sm:text-xl'} font-black text-white mt-0.5`}>
                         {championName || tournament.champion_name || 'Por Definir'}
                       </div>
-                      <div className="text-xs text-amber-200/70 mt-0.5">+{tier.pointsWinner} Pts para el Ranking</div>
+                      <div className={`${aspectRatio === 'square' ? 'text-[10px]' : 'text-xs'} text-amber-200/70 mt-0.5`}>+{tier.pointsWinner} Pts para el Ranking</div>
                     </div>
                   </div>
                 )}
 
                 {graphicType === 'playoffs' && (
-                  <div className="space-y-1.5 text-xs">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center justify-between mb-1">
-                      <span className="flex items-center gap-1"><Trophy size={12} /> Cuadro de Playoffs</span>
-                      <span className="text-[9px] text-muted">
+                  <div className="space-y-1 text-xs">
+                    <div className="text-[9px] font-bold text-primary uppercase tracking-wider flex items-center justify-between mb-0.5">
+                      <span className="flex items-center gap-1"><Trophy size={11} /> Cuadro de Playoffs</span>
+                      <span className="text-[8px] text-muted">
                         {selectedRoundIndex === 'all' ? `Todas las Rondas (${playoffRounds.length})` : playoffRounds[selectedRoundIndex]?.name}
                       </span>
                     </div>
                     {(!displayedRounds || displayedRounds.length === 0) ? (
-                      <div className="text-center py-6 text-muted text-xs italic">Fase final en preparación</div>
+                      <div className="text-center py-4 text-muted text-xs italic">Fase final en preparación</div>
                     ) : (
-                      <div className="space-y-2 max-h-[250px] overflow-hidden">
+                      <div className={`space-y-1 ${aspectRatio === 'square' ? 'max-h-[190px]' : 'max-h-[300px]'} overflow-hidden`}>
                         {displayedRounds.map((r, rIdx) => (
-                          <div key={rIdx} className="space-y-1">
-                            <div className="font-black text-[9px] text-orange-300 uppercase tracking-wider px-1">
+                          <div key={rIdx} className="space-y-0.5">
+                            <div className="font-black text-[8.5px] text-orange-300 uppercase tracking-wider px-1">
                               🏆 {r.name}
                             </div>
-                            <div className={`gap-1.5 ${
-                              (r.matches || []).length > 2 ? 'grid grid-cols-2' : 'space-y-1'
+                            <div className={`gap-1 ${
+                              (r.matches || []).length > 2 ? 'grid grid-cols-2' : 'space-y-0.5'
                             }`}>
                               {(r.matches || []).map((m, mIdx) => {
                                 const isP1Winner = m.winner_id && m.winner_id === m.player1_id;
@@ -913,38 +925,38 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                                 const scoreText = formatShortScore(m.score);
 
                                 return (
-                                  <div key={mIdx} className="bg-white/5 border border-white/10 rounded-lg p-1.5 text-[9px]">
+                                  <div key={mIdx} className="bg-white/5 border border-white/10 rounded-md p-1 text-[8.5px]">
                                     {/* Player 1 */}
-                                    <div className={`flex justify-between items-center py-0.5 ${
+                                    <div className={`flex justify-between items-center py-0.2 ${
                                       isP1Winner ? 'font-bold text-primary' : 'text-white'
                                     }`}>
-                                      <span className="truncate max-w-[100px] flex items-center gap-1">
-                                        {isP1Winner && <span className="text-primary text-[8px]">▶</span>}
+                                      <span className="truncate max-w-[85px] flex items-center gap-0.5">
+                                        {isP1Winner && <span className="text-primary text-[7px]">▶</span>}
                                         {m.player1_name || 'Por Definir'}
                                       </span>
                                       {scoreText && m.is_played && isP1Winner && (
-                                        <span className="text-[8px] bg-primary/20 text-primary px-1 rounded font-bold">GANADOR</span>
+                                        <span className="text-[7px] bg-primary/20 text-primary px-0.5 rounded font-bold">GANADOR</span>
                                       )}
                                     </div>
                                     {/* Player 2 */}
-                                    <div className={`flex justify-between items-center py-0.5 border-t border-white/5 ${
+                                    <div className={`flex justify-between items-center py-0.2 border-t border-white/5 ${
                                       isP2Winner ? 'font-bold text-primary' : 'text-white'
                                     }`}>
-                                      <span className="truncate max-w-[100px] flex items-center gap-1">
-                                        {isP2Winner && <span className="text-primary text-[8px]">▶</span>}
+                                      <span className="truncate max-w-[85px] flex items-center gap-0.5">
+                                        {isP2Winner && <span className="text-primary text-[7px]">▶</span>}
                                         {m.player2_name || 'Por Definir'}
                                       </span>
                                       {scoreText && m.is_played && isP2Winner && (
-                                        <span className="text-[8px] bg-primary/20 text-primary px-1 rounded font-bold">GANADOR</span>
+                                        <span className="text-[7px] bg-primary/20 text-primary px-0.5 rounded font-bold">GANADOR</span>
                                       )}
                                     </div>
                                     {/* Score / Status Footer */}
                                     {m.is_played && scoreText ? (
-                                      <div className="text-right text-[8px] font-black text-amber-300/90 pt-0.5">
+                                      <div className="text-right text-[7.5px] font-black text-amber-300/90 pt-0.2">
                                         Marcador: {scoreText}
                                       </div>
                                     ) : m.scheduled_at ? (
-                                      <div className="text-right text-[8px] text-muted pt-0.5">
+                                      <div className="text-right text-[7.5px] text-muted pt-0.2">
                                         📅 {m.scheduled_at.slice(11, 16)} hs
                                       </div>
                                     ) : null}
@@ -960,18 +972,18 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 )}
 
                 {graphicType === 'standings' && (
-                  <div className="space-y-1.5 text-xs">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center justify-between mb-1">
-                      <span className="flex items-center gap-1"><Grid size={12} /> Tabla de Posiciones</span>
-                      <span className="text-[9px] text-muted">
+                  <div className="space-y-1 text-xs">
+                    <div className="text-[9px] font-bold text-primary uppercase tracking-wider flex items-center justify-between mb-0.5">
+                      <span className="flex items-center gap-1"><Grid size={11} /> Tabla de Posiciones</span>
+                      <span className="text-[8px] text-muted">
                         {selectedZoneIndex === 'all' ? `Todas las Zonas (${zones.length})` : zones[selectedZoneIndex]?.groupName}
                       </span>
                     </div>
                     {(!displayedZones || displayedZones.length === 0) ? (
-                      <div className="text-center py-6 text-muted text-xs italic">Zonas aún no generadas</div>
+                      <div className="text-center py-4 text-muted text-xs italic">Zonas aún no generadas</div>
                     ) : (
-                      <div className={`gap-1.5 max-h-[250px] overflow-hidden ${
-                        displayedZones.length > 2 ? 'grid grid-cols-2' : 'space-y-1.5'
+                      <div className={`gap-1 ${
+                        displayedZones.length > 2 ? 'grid grid-cols-2' : 'space-y-1'
                       }`}>
                         {displayedZones.map((z, i) => {
                           const zoneTitle = z.groupName || (z as any).name || `Zona ${z.groupNumber || (i + 1)}`;
@@ -979,20 +991,20 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                           const isCompact = displayedZones.length > 2;
 
                           return (
-                            <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-1.5">
-                              <div className="font-black text-[9px] sm:text-[10px] text-orange-300 uppercase mb-0.5 truncate">
+                            <div key={i} className={`bg-white/5 border border-white/10 rounded-lg ${aspectRatio === 'square' ? 'p-1' : 'p-1.5'}`}>
+                              <div className={`font-black ${aspectRatio === 'square' ? 'text-[8.5px]' : 'text-[9px] sm:text-[10px]'} text-orange-300 uppercase mb-0.5 truncate leading-tight`}>
                                 {zoneTitle}
                               </div>
-                              {zonePlayers.map((st: any, idx: number) => {
+                              {zonePlayers.slice(0, 4).map((st: any, idx: number) => {
                                 const playerName = st.playerName || st.name || 'Jugador';
                                 const won = st.matchesWon ?? st.won ?? 0;
                                 const lost = st.matchesLost ?? st.lost ?? 0;
                                 return (
-                                  <div key={idx} className="flex justify-between items-center text-[9px] py-0.5 border-b border-white/5 last:border-0">
-                                    <span className="font-bold text-white truncate max-w-[90px] sm:max-w-[110px]">
+                                  <div key={idx} className={`flex justify-between items-center ${aspectRatio === 'square' ? 'text-[8px] py-0.2' : 'text-[9px] py-0.5'} border-b border-white/5 last:border-0 leading-tight`}>
+                                    <span className="font-bold text-white truncate max-w-[80px] sm:max-w-[100px]">
                                       {idx + 1}. {playerName}
                                     </span>
-                                    <span className="text-muted font-bold text-[8px] sm:text-[9px] shrink-0 ml-1">
+                                    <span className="text-muted font-bold text-[7.5px] sm:text-[8.5px] shrink-0 ml-1">
                                       {won}G-{lost}P {isCompact ? '' : `(${st.points ?? 0}p)`}
                                     </span>
                                   </div>
@@ -1007,17 +1019,17 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                 )}
 
                 {graphicType === 'order_of_play' && (
-                  <div className="space-y-1.5 text-xs">
-                    <div className="text-[10px] font-bold text-primary uppercase tracking-wider flex items-center gap-1 mb-1">
-                      <Calendar size={12} /> Orden de Juego Oficial
+                  <div className="space-y-1 text-xs">
+                    <div className="text-[9px] font-bold text-primary uppercase tracking-wider flex items-center gap-1 mb-0.5">
+                      <Calendar size={11} /> Orden de Juego Oficial
                     </div>
                     {(!matches || matches.length === 0) ? (
-                      <div className="text-center py-6 text-muted text-xs italic">Sin partidos programados hoy</div>
+                      <div className="text-center py-4 text-muted text-xs italic">Sin partidos programados hoy</div>
                     ) : (
-                      <div className="space-y-1 max-h-[220px] overflow-hidden">
-                        {matches.slice(0, 5).map((m, i) => (
-                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-1.5 flex justify-between items-center text-[9px]">
-                            <span className="font-bold text-white truncate max-w-[170px]">
+                      <div className="space-y-1">
+                        {matches.slice(0, aspectRatio === 'square' ? 4 : 5).map((m, i) => (
+                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-1 sm:p-1.5 flex justify-between items-center text-[8.5px]">
+                            <span className="font-bold text-white truncate max-w-[160px]">
                               {m.player1_name || 'Jugador 1'} vs {m.player2_name || 'Jugador 2'}
                             </span>
                             <span className="text-primary font-bold shrink-0">{m.scheduled_at ? m.scheduled_at.slice(11, 16) : 'A conf.'}</span>
@@ -1030,9 +1042,9 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
               </div>
 
               {/* Graphic Footer */}
-              <div className="border-t border-white/10 pt-2 flex items-center justify-between text-[9px] text-muted shrink-0">
+              <div className={`border-t border-white/10 ${aspectRatio === 'square' ? 'pt-1.5 text-[8px]' : 'pt-2 text-[9px]'} flex items-center justify-between text-muted shrink-0`}>
                 <div className="flex items-center gap-1.5 font-bold text-slate-300">
-                  <img src="/Smash.png" alt="" className="h-3 w-auto object-contain opacity-80" crossOrigin="anonymous" />
+                  <img src="/Smash.png" alt="" className={`${aspectRatio === 'square' ? 'h-2.5' : 'h-3'} w-auto object-contain opacity-80`} crossOrigin="anonymous" />
                   <span>smashtenis.lnx.com.ar</span>
                 </div>
                 <span className="font-bold text-primary">#SmashTenis</span>
