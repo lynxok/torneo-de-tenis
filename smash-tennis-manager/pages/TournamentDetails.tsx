@@ -11,6 +11,7 @@ import {
     Printer, Image as ImageIcon
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
+import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 import { formatPlayerName, formatMatchScore } from '../utils/formatters';
 import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
@@ -158,9 +159,19 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
     const [matches, setMatches] = useState<Match[]>([]);
 
+    // Masters Eligibility: top-N players per category only
+    const [allProfilesForMasters, setAllProfilesForMasters] = useState<UserProfile[]>([]);
+
     useEffect(() => {
         loadTournament();
     }, [tournamentId]);
+
+    // Load all player profiles when tournament is Masters (for top-N eligibility check)
+    useEffect(() => {
+        if (tournament?.tier_applied === 'masters' && allProfilesForMasters.length === 0) {
+            api.auth.getAllProfiles().then(profiles => setAllProfilesForMasters(profiles)).catch(() => {});
+        }
+    }, [tournament?.tier_applied]);
 
     // Check club court bookings in real-time when schedule date changes
     useEffect(() => {
@@ -214,8 +225,38 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const isUserMember = api.memberships.isMemberOf(user, tournament?.institution_id);
     const effectivePrice = tournament?.registration_price || 0;
 
+    /**
+     * Checks if a user qualifies for a Masters tournament (top-N per category).
+     * Default top-N is 20 but can be overridden.
+     */
+    const getUserMasterEligibility = (targetUser: UserProfile, topN: number = 20) => {
+        if (allProfilesForMasters.length === 0) {
+            // Profiles not loaded yet — allow optimistically (server will re-validate if needed)
+            return { eligible: true, rank: 0, topN };
+        }
+        const ranked = computeRankings(allProfilesForMasters);
+        const userCat = normalizeCategoryKey(targetUser.category);
+        const found = ranked.find(p => p.id === targetUser.id);
+        const categoryRank = found?.category_rank ?? 9999;
+        return { eligible: categoryRank <= topN, rank: categoryRank, topN };
+    };
+
     const handleEnrollClick = async () => {
         if (!tournament) return;
+
+        // ── Masters Eligibility Check ──────────────────────────────────────────
+        if (tournament.tier_applied === 'masters') {
+            const mastersTopN = 20; // top N per category allowed in Masters
+            const mastersEligibility = getUserMasterEligibility(user, mastersTopN);
+            if (!mastersEligibility.eligible) {
+                alert(
+                    `👑 El Torneo Master Final es exclusivo para los Top ${mastersEligibility.topN} jugadores de cada categoría.\n\n` +
+                    `Tu posición actual en la categoría ${normalizeCategoryKey(user.category)}: #${mastersEligibility.rank}.\n\n` +
+                    `Seguí compitiendo para llegar al top ${mastersEligibility.topN} y clasificarte el próximo año.`
+                );
+                return;
+            }
+        }
 
         // Check Gender Eligibility
         const tGender = (tournament.gender || 'Caballeros').toLowerCase();
@@ -1550,6 +1591,50 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </div>
                 </div>
             </div>
+
+            {/* ── Masters Eligibility Banner ────────────────────────────────────── */}
+            {tournament.tier_applied === 'masters' && (() => {
+                const MASTERS_TOP_N = 20;
+                const masterElig = getUserMasterEligibility(user, MASTERS_TOP_N);
+                const isAdmin = user.role === 'admin' || user.role === 'superadmin' || user.role === 'coordinator';
+                return (
+                    <div className="bg-gradient-to-r from-emerald-900/40 via-teal-900/30 to-emerald-900/40 border border-emerald-500/30 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center gap-4 shadow-lg">
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                            <div className="w-12 h-12 rounded-xl bg-emerald-500/20 border border-emerald-500/30 flex items-center justify-center text-2xl shadow">
+                                👑
+                            </div>
+                            <div>
+                                <div className="text-xs font-black uppercase tracking-widest text-emerald-400">Torneo Master Final</div>
+                                <div className="text-white font-bold text-sm">Acceso exclusivo por ranking</div>
+                            </div>
+                        </div>
+                        <div className="flex-1 text-xs text-slate-300 leading-relaxed">
+                            Este torneo está reservado para los <span className="text-emerald-300 font-bold">Top {MASTERS_TOP_N} jugadores</span> de cada categoría según el ranking oficial del circuito.
+                            Es el cierre de temporada más prestigioso del año.
+                        </div>
+                        {!isAdmin && (
+                            allProfilesForMasters.length === 0 ? (
+                                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/10 border border-white/10 text-xs text-muted flex-shrink-0">
+                                    <Loader2 size={13} className="animate-spin" /> Verificando ranking...
+                                </div>
+                            ) : masterElig.eligible ? (
+                                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex-shrink-0 shadow">
+                                    <CheckCircle2 size={14} /> Clasificado · #{masterElig.rank} en {normalizeCategoryKey(user.category)}
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-500/15 border border-red-500/30 text-red-300 font-bold text-xs flex-shrink-0">
+                                    <AlertTriangle size={14} /> No clasificado · #{masterElig.rank} en {normalizeCategoryKey(user.category)}
+                                </div>
+                            )
+                        )}
+                        {isAdmin && (
+                            <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-300 font-bold text-xs flex-shrink-0">
+                                <Shield size={14} /> Admin · Puedes inscribir manualmente
+                            </div>
+                        )}
+                    </div>
+                );
+            })()}
 
             {/* Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -3029,6 +3114,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     const isAlreadyIn = players.some(pl => pl.player_id === p.id);
                                                     const isFemale = (p.gender || 'masculino').toLowerCase().includes('fem') || p.gender === 'F';
 
+                                                    // Masters eligibility badge (admin can still force-enroll)
+                                                    const showMastersBadge = tournament?.tier_applied === 'masters' && allProfilesForMasters.length > 0;
+                                                    const playerMasterElig = showMastersBadge ? getUserMasterEligibility(p, 20) : null;
+
                                                     return (
                                                         <button
                                                             key={p.id}
@@ -3049,6 +3138,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                     <span className={`text-[9px] px-1.5 py-0.2 rounded font-bold ${isFemale ? 'bg-pink-500/20 text-pink-400 border border-pink-500/30' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'}`}>
                                                                         {isFemale ? 'Damas' : 'Caballeros'}
                                                                     </span>
+                                                                    {playerMasterElig && (
+                                                                        <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold border ${playerMasterElig.eligible ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' : 'bg-red-500/15 text-red-400 border-red-500/25'}`} title={playerMasterElig.eligible ? `Top ${playerMasterElig.topN} — Clasificado` : `Posición #${playerMasterElig.rank} — No clasificado para Masters`}>
+                                                                            👑 #{playerMasterElig.rank}
+                                                                        </span>
+                                                                    )}
                                                                 </div>
                                                                 <div className="text-[10px] text-muted truncate">
                                                                     {p.category ? `${p.category} Cat.` : 'Sin Cat.'} {p.institution ? `• ${p.institution}` : ''}

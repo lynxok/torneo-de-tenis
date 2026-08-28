@@ -27,8 +27,8 @@ export const PWAInstallPrompt: React.FC = () => {
 
         if (isStandaloneMode) return;
 
-        // Check dismissed in session
-        const dismissed = sessionStorage.getItem('pwa_banner_dismissed');
+        // Check dismissed permanently (persists across sessions)
+        const dismissed = localStorage.getItem('pwa_banner_dismissed');
 
         // Android / Desktop beforeinstallprompt
         const handleBeforeInstall = (e: any) => {
@@ -88,7 +88,7 @@ export const PWAInstallPrompt: React.FC = () => {
 
     const handleDismissBanner = () => {
         setShowBanner(false);
-        sessionStorage.setItem('pwa_banner_dismissed', 'true');
+        localStorage.setItem('pwa_banner_dismissed', 'true');
     };
 
     if (isStandalone) return null;

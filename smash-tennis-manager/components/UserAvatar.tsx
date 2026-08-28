@@ -76,7 +76,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
     <>
       <div
         onClick={handleClick}
-        className={`relative inline-flex shrink-0 select-none ${
+        className={`relative inline-flex shrink-0 select-none items-center justify-center ${sizeClasses} ${roundedClasses} ${
           clickable ? 'cursor-pointer group/avatar' : ''
         } ${className}`}
         title={clickable ? `Click para ver foto de ${resolvedName}` : undefined}
@@ -85,7 +85,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
           <img
             src={resolvedImage!}
             alt={resolvedName}
-            className={`${sizeClasses} ${roundedClasses} object-cover border transition-all duration-200 ${
+            className={`w-full h-full rounded-[inherit] object-cover border transition-all duration-200 ${
               isCurrentUser
                 ? 'border-primary ring-2 ring-primary/40'
                 : 'border-white/10 group-hover/avatar:border-primary/50 group-hover/avatar:scale-105'
@@ -93,7 +93,7 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
           />
         ) : (
           <div
-            className={`${sizeClasses} ${roundedClasses} flex items-center justify-center font-bold border transition-all duration-200 ${
+            className={`w-full h-full rounded-[inherit] flex items-center justify-center font-bold border transition-all duration-200 ${
               isCurrentUser
                 ? 'bg-primary text-dark border-primary'
                 : 'bg-gradient-to-br from-slate-700 to-slate-600 text-white border-white/10 group-hover/avatar:border-primary/40 group-hover/avatar:scale-105'
@@ -106,8 +106,8 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
         {/* Small verified badge if verified */}
         {resolvedVerified && size !== 'xs' && (
           <div
-            className={`absolute -bottom-0.5 -right-0.5 bg-green-500 border-2 border-slate-900 rounded-full ${
-              size === 'sm' ? 'w-2.5 h-2.5' : size === 'md' ? 'w-3 h-3' : 'w-3.5 h-3.5'
+            className={`absolute -bottom-0.5 -right-0.5 bg-green-500 border-2 border-slate-900 rounded-full z-10 ${
+              size === 'sm' ? 'w-2.5 h-2.5' : size === 'md' ? 'w-3 h-3' : size === 'lg' ? 'w-3.5 h-3.5' : 'w-4 h-4'
             }`}
             title="Verificado Oficial"
           />
