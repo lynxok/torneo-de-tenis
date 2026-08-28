@@ -29,7 +29,7 @@ export const canEditTournament = (t: Tournament, u?: UserProfile): boolean => {
     return false;
 };
 
-export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) => {
+export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, initialState }) => {
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [loading, setLoading] = useState(true);
     const [warningTournament, setWarningTournament] = useState<Tournament | null>(null);
