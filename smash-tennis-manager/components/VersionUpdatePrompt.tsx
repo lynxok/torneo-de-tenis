@@ -74,14 +74,14 @@ export const VersionUpdatePrompt: React.FC = () => {
   const handleApplyUpdate = async () => {
     setIsUpdating(true);
     try {
-      // 1. Ask active service workers to skip waiting
+      // 1. Unregister active service workers to force fresh bundle download
       if ('serviceWorker' in navigator) {
         const regs = await navigator.serviceWorker.getRegistrations();
         for (const reg of regs) {
           if (reg.waiting) {
             reg.waiting.postMessage({ type: 'SKIP_WAITING' });
           }
-          await reg.update().catch(() => {});
+          await reg.unregister().catch(() => {});
         }
       }
 
@@ -91,8 +91,8 @@ export const VersionUpdatePrompt: React.FC = () => {
         await Promise.all(cacheKeys.map(key => caches.delete(key)));
       }
 
-      // 3. Force clean reload with cache-busting timestamp
-      window.location.href = window.location.origin + window.location.pathname + '?_t=' + Date.now();
+      // 3. Force clean hard reload with cache-busting query
+      window.location.replace(window.location.origin + window.location.pathname + '?_v=' + Date.now());
     } catch (err) {
       console.error("Error applying update:", err);
       window.location.reload();
