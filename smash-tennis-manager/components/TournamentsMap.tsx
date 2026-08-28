@@ -102,6 +102,7 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
     // Map & Geolocation State
     const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
+    const [currentZoom, setCurrentZoom] = useState<number>(12);
     const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
     const [isLocating, setIsLocating] = useState(false);
     const [gpsStatusMessage, setGpsStatusMessage] = useState<string | null>(null);
@@ -333,9 +334,14 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         markersLayerRef.current = markersClusterGroup;
         userLayerRef.current = userLayer;
 
+        map.on('zoomend', () => {
+            setCurrentZoom(map.getZoom());
+        });
+
         // Invalidate size shortly after mount for perfect rendering
         const timer = setTimeout(() => {
             map.invalidateSize();
+            setCurrentZoom(map.getZoom());
         }, 250);
 
         return () => {
@@ -431,6 +437,8 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
         const venueGroups = Array.from(venueMap.values());
 
+        const isZoomedOut = currentZoom < 10;
+
         venueGroups.forEach((group) => {
             const isSingle = group.tournaments.length === 1;
             const isSelected = group.tournaments.some((t) => t.id === selectedTournamentId);
@@ -439,7 +447,19 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             let pinHtml = '';
             let popupHtml = '';
 
-            if (isSingle) {
+            if (isZoomedOut) {
+                // Adaptive Zoomed-out glowing neon bubble with tournament count
+                pinHtml = `
+                    <div class="smash-bubble-pin ${isSelected ? 'is-selected ring-4 ring-primary ring-offset-2 ring-offset-slate-900 scale-110' : ''} ${group.hasOpenRegistration ? 'is-open' : 'is-disputing'}">
+                        ${group.hasOpenRegistration ? '<div class="smash-bubble-halo"></div>' : ''}
+                        <div class="smash-bubble-core">
+                            <span class="text-xs">🎾</span>
+                            <span class="text-sm font-black">${group.tournaments.length}</span>
+                        </div>
+                        <div class="smash-bubble-tag">${group.clubName}</div>
+                    </div>
+                `;
+            } else if (isSingle) {
                 const t = group.tournaments[0];
                 const tierBadge = t.tier.label;
 
@@ -464,7 +484,39 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                         <div class="pin-arrow"></div>
                     </div>
                 `;
+            } else {
+                // Multi-tournament Pin in the same club
+                pinHtml = `
+                    <div class="smash-map-pin ${isSelected ? 'is-selected' : ''} ${group.hasOpenRegistration ? 'is-open' : ''}">
+                        ${group.hasOpenRegistration ? '<div class="pin-halo-pulse"></div>' : ''}
+                        <div class="pin-card ${isSelected ? 'ring-4 ring-primary ring-offset-2 ring-offset-slate-900 scale-110' : ''}">
+                            <div class="pin-multi-badge">
+                                <span>🏆 ${group.tournaments.length} TORNEOS</span>
+                            </div>
+                            <div class="pin-content">
+                                <span class="pin-title">${group.clubName}</span>
+                                <span class="pin-club">${group.cityName || 'Sede oficial'}</span>
+                                <div class="mt-1.5 space-y-1 border-t border-white/10 pt-1.5">
+                                    ${group.tournaments.slice(0, 2).map((t) => `
+                                        <div class="pin-multi-item">
+                                            <span class="truncate font-bold">🎾 ${t.name} <span class="opacity-70 text-[8px]">(${t.category})</span></span>
+                                            <span class="pin-multi-date">📅 ${t.shortDate}</span>
+                                        </div>
+                                    `).join('')}
+                                    ${group.tournaments.length > 2 ? `<div class="text-[8.5px] text-sky-400 font-bold">+${group.tournaments.length - 2} más</div>` : ''}
+                                </div>
+                            </div>
+                            ${group.hasOpenRegistration 
+                                ? '<div class="pin-open-badge">● INSCRIPCIÓN ABIERTA</div>' 
+                                : '<div class="pin-disputing-badge">⚡ DISPUTANDO</div>'}
+                        </div>
+                        <div class="pin-arrow"></div>
+                    </div>
+                `;
+            }
 
+            if (isSingle) {
+                const t = group.tournaments[0];
                 popupHtml = `
                     <div class="p-4 bg-slate-900 text-white rounded-3xl max-w-[285px] border border-white/15 shadow-2xl">
                         <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-white/10">
@@ -506,35 +558,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                     </div>
                 `;
             } else {
-                // Multi-tournament Pin in the same club
-                pinHtml = `
-                    <div class="smash-map-pin ${isSelected ? 'is-selected' : ''} ${group.hasOpenRegistration ? 'is-open' : ''}">
-                        ${group.hasOpenRegistration ? '<div class="pin-halo-pulse"></div>' : ''}
-                        <div class="pin-card ${isSelected ? 'ring-4 ring-primary ring-offset-2 ring-offset-slate-900 scale-110' : ''}">
-                            <div class="pin-multi-badge">
-                                <span>🏆 ${group.tournaments.length} TORNEOS</span>
-                            </div>
-                            <div class="pin-content">
-                                <span class="pin-title">${group.clubName}</span>
-                                <span class="pin-club">${group.cityName || 'Sede oficial'}</span>
-                                <div class="mt-1.5 space-y-1 border-t border-white/10 pt-1.5">
-                                    ${group.tournaments.slice(0, 2).map((t) => `
-                                        <div class="pin-multi-item">
-                                            <span class="truncate font-bold">🎾 ${t.name} <span class="opacity-70 text-[8px]">(${t.category})</span></span>
-                                            <span class="pin-multi-date">📅 ${t.shortDate}</span>
-                                        </div>
-                                    `).join('')}
-                                    ${group.tournaments.length > 2 ? `<div class="text-[8.5px] text-sky-400 font-bold">+${group.tournaments.length - 2} más</div>` : ''}
-                                </div>
-                            </div>
-                            ${group.hasOpenRegistration 
-                                ? '<div class="pin-open-badge">● INSCRIPCIÓN ABIERTA</div>' 
-                                : '<div class="pin-disputing-badge">⚡ DISPUTANDO</div>'}
-                        </div>
-                        <div class="pin-arrow"></div>
-                    </div>
-                `;
-
                 popupHtml = `
                     <div class="p-4 bg-slate-900 text-white rounded-3xl max-w-[315px] border border-white/15 shadow-2xl">
                         <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10">
@@ -592,10 +615,10 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
             const customIcon = L.divIcon({
                 html: pinHtml,
-                className: 'custom-tournament-leaflet-pin',
-                iconSize: isSelected ? [190, 95] : [160, 85],
-                iconAnchor: isSelected ? [95, 95] : [80, 85],
-                popupAnchor: [0, -85],
+                className: isZoomedOut ? 'custom-bubble-leaflet-pin' : 'custom-tournament-leaflet-pin',
+                iconSize: isZoomedOut ? [44, 44] : isSelected ? [190, 95] : [160, 85],
+                iconAnchor: isZoomedOut ? [22, 22] : isSelected ? [95, 95] : [80, 85],
+                popupAnchor: isZoomedOut ? [0, -26] : [0, -85],
             });
 
             const marker = L.marker([group.coords.lat, group.coords.lng], {
@@ -612,11 +635,21 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             marker.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
                 setSelectedTournamentId(group.tournaments[0].id);
-                marker.openPopup();
-                map.flyTo([group.coords.lat, group.coords.lng], Math.max(map.getZoom(), 13), {
-                    duration: 0.8,
-                    easeLinearity: 0.25,
-                });
+                if (map.getZoom() < 10) {
+                    map.flyTo([group.coords.lat, group.coords.lng], 13, {
+                        duration: 0.8,
+                        easeLinearity: 0.25,
+                    });
+                    setTimeout(() => {
+                        marker.openPopup();
+                    }, 650);
+                } else {
+                    marker.openPopup();
+                    map.flyTo([group.coords.lat, group.coords.lng], Math.max(map.getZoom(), 13), {
+                        duration: 0.8,
+                        easeLinearity: 0.25,
+                    });
+                }
             });
 
             markersGroup.addLayer(marker);
@@ -632,7 +665,7 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         if (bounds.isValid()) {
             map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
         }
-    }, [processedTournaments, selectedTournamentId, userLocation]);
+    }, [processedTournaments, selectedTournamentId, userLocation, currentZoom]);
 
     // Focus Map when selectedTournamentId changes
     useEffect(() => {
