@@ -694,3 +694,61 @@ export interface PlayerAchievement {
     badgeColor?: string;
     rewardDescription?: string;
 }
+
+// ==========================================
+// COACH / PROFESSOR SUITE TYPES
+// ==========================================
+
+export interface CoachStudentPack {
+    studentId: string;
+    totalClasses: number;
+    usedClasses: number;
+    price: number;
+    paymentStatus: 'paid' | 'pending';
+    notes?: string;
+    updatedAt?: string;
+}
+
+export interface CoachStudentGoal {
+    studentId: string;
+    technicalGoals: string;
+    strengths?: string;
+    areasToImprove?: string;
+    commitmentLevel?: number; // 1 to 5
+    updatedAt?: string;
+}
+
+export interface CoachGroup {
+    id: string;
+    name: string;
+    description?: string;
+    category?: string;
+    scheduleDays: string[];
+    scheduleTime: string;
+    courtName?: string;
+    studentIds: string[];
+    maxStudents?: number;
+    color?: string;
+    createdAt?: string;
+}
+
+export interface CoachAttendanceRecord {
+    id: string;
+    date: string;
+    groupId?: string;
+    groupName?: string;
+    presentStudentIds: string[];
+    topic: string;
+    notes?: string;
+}
+
+export interface CoachDrill {
+    id: string;
+    title: string;
+    level: 'Iniciación' | 'Intermedio' | 'Avanzado' | 'Todos';
+    category: 'Fondo de Cancha' | 'Volea y Red' | 'Servicio y Devolución' | 'Dobles' | 'Táctico y Presión';
+    description: string;
+    durationMin: number;
+    playersNeeded: string;
+    objective: string;
+}
