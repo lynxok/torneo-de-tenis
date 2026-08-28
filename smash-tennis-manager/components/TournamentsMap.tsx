@@ -62,8 +62,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
     const tileLayerRef = useRef<L.TileLayer | null>(null);
     const markersLayerRef = useRef<L.LayerGroup | null>(null);
     const userLayerRef = useRef<L.LayerGroup | null>(null);
-    const carouselRef = useRef<HTMLDivElement>(null);
-    const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
     // Filter & Search State
     const [searchQuery, setSearchQuery] = useState('');
@@ -78,7 +76,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
     const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
     const [isLocating, setIsLocating] = useState(false);
     const [gpsStatusMessage, setGpsStatusMessage] = useState<string | null>(null);
-    const [isCarouselCollapsed, setIsCarouselCollapsed] = useState(false);
     const [showFiltersModal, setShowFiltersModal] = useState(false);
 
     // Initial Geolocation Auto-Detection on Mount
@@ -439,6 +436,7 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             marker.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
                 setSelectedTournamentId(t.id);
+                marker.openPopup();
                 map.flyTo([t.coords.lat, t.coords.lng], Math.max(map.getZoom(), 13), {
                     duration: 0.8,
                     easeLinearity: 0.25,
@@ -469,16 +467,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         if (target) {
             map.flyTo([target.coords.lat, target.coords.lng], Math.max(map.getZoom(), 13), {
                 duration: 0.9,
-            });
-        }
-
-        // Scroll carousel card into view
-        const cardEl = cardRefs.current.get(selectedTournamentId);
-        if (cardEl && carouselRef.current) {
-            cardEl.scrollIntoView({
-                behavior: 'smooth',
-                block: 'nearest',
-                inline: 'center',
             });
         }
     }, [selectedTournamentId, processedTournaments]);
@@ -725,141 +713,17 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                 </div>
             )}
 
-            {/* BOTTOM CAROUSEL / DRAWER */}
-            <div className="absolute bottom-4 left-4 right-4 z-[500] flex flex-col gap-2">
-                {/* Header of Drawer */}
-                <div className="flex items-center justify-between px-2">
-                    <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-xl px-3 py-1 rounded-full border border-white/10 text-xs font-bold text-white shadow-xl">
-                        <Trophy size={14} className="text-amber-400" />
-                        <span>{processedTournaments.length} torneos encontrados</span>
-                    </div>
-
-                    <button
-                        onClick={() => setIsCarouselCollapsed(!isCarouselCollapsed)}
-                        className="bg-slate-900/90 backdrop-blur-xl p-1.5 rounded-full border border-white/10 text-slate-300 hover:text-white shadow-xl transition-all"
-                        title={isCarouselCollapsed ? 'Expandir tarjetas' : 'Minimizar'}
-                    >
-                        {isCarouselCollapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
+            {/* MINIMAL BOTTOM FLOATING COUNTER */}
+            <div className="absolute bottom-4 left-4 z-[500] pointer-events-none">
+                <div className="flex items-center gap-2 bg-slate-900/90 backdrop-blur-xl px-4 py-2 rounded-2xl border border-white/15 text-xs font-bold text-white shadow-2xl pointer-events-auto">
+                    <Trophy size={15} className="text-primary" />
+                    <span>
+                        {processedTournaments.length}{' '}
+                        {processedTournaments.length === 1 ? 'torneo disponible' : 'torneos disponibles'}
+                    </span>
                 </div>
-
-                {/* Horizontal Snap Carousel */}
-                {!isCarouselCollapsed && (
-                    <div
-                        ref={carouselRef}
-                        className="flex items-center gap-3 overflow-x-auto py-1 px-1 custom-scrollbar snap-x snap-mandatory"
-                    >
-                        {processedTournaments.length === 0 ? (
-                            <div className="w-full bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-2xl p-6 text-center text-slate-400 text-xs shadow-2xl">
-                                No hay torneos que coincidan con los filtros seleccionados.
-                            </div>
-                        ) : (
-                            processedTournaments.map((t) => {
-                                const isSelected = t.id === selectedTournamentId;
-                                const clubName = t.institutions?.name || 'Club de Tenis';
-                                const cityName = t.institutions?.city || '';
-                                const distanceStr = formatDistance(t.distanceKm);
-
-                                return (
-                                    <div
-                                        key={t.id}
-                                        ref={(el) => {
-                                            if (el) cardRefs.current.set(t.id, el);
-                                            else cardRefs.current.delete(t.id);
-                                        }}
-                                        onClick={() => setSelectedTournamentId(t.id)}
-                                        className={`min-w-[280px] max-w-[320px] sm:min-w-[320px] bg-slate-900/95 backdrop-blur-2xl rounded-3xl p-4 border transition-all cursor-pointer snap-center shadow-2xl relative flex flex-col justify-between ${
-                                            isSelected
-                                                ? 'border-primary ring-2 ring-primary/50 scale-[1.02] shadow-primary/20'
-                                                : 'border-white/10 hover:border-white/20'
-                                        }`}
-                                    >
-                                        {/* Top Badges */}
-                                        <div className="flex items-center justify-between gap-2 mb-2">
-                                            <span
-                                                className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider shadow-sm"
-                                                style={{
-                                                    backgroundColor: t.tier.badgeColor,
-                                                    color: t.tier.textColor,
-                                                }}
-                                            >
-                                                {t.tier.label}
-                                            </span>
-
-                                            {t.isOpen ? (
-                                                <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
-                                                    Inscripción Abierta
-                                                </span>
-                                            ) : (
-                                                <span className="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">
-                                                    Inscripción Cerrada
-                                                </span>
-                                            )}
-                                        </div>
-
-                                        {/* Title & Venue */}
-                                        <div className="mb-3">
-                                            <h3 className="text-sm font-extrabold text-white line-clamp-1 group-hover:text-primary transition-colors">
-                                                {t.name}
-                                            </h3>
-                                            <div className="flex items-center gap-1.5 text-xs text-slate-400 mt-1">
-                                                <MapPin size={13} className="text-primary shrink-0" />
-                                                <span className="truncate">
-                                                    {clubName}
-                                                    {cityName ? ` • ${cityName}` : ''}
-                                                </span>
-                                            </div>
-                                        </div>
-
-                                        {/* Distance & Info Grid */}
-                                        <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold text-slate-300 bg-white/5 p-2 rounded-2xl mb-3 border border-white/5">
-                                            <div className="flex items-center gap-1 text-slate-300">
-                                                <Calendar size={13} className="text-slate-400" />
-                                                <span>{formatDate(t.start_date)}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1 justify-end text-slate-300">
-                                                <span>Cat: <b className="text-white">{t.category}</b></span>
-                                            </div>
-                                            {distanceStr && (
-                                                <div className="col-span-2 flex items-center gap-1 text-sky-400 font-bold border-t border-white/5 pt-1.5 mt-0.5">
-                                                    <Navigation size={12} className="rotate-45" />
-                                                    <span>A {distanceStr} de tu ubicación</span>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Action Buttons */}
-                                        <div className="flex items-center gap-2 pt-1">
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    onSelectTournament(t);
-                                                }}
-                                                className="flex-1 bg-gradient-to-r from-primary to-primary-hover hover:opacity-95 text-white font-bold text-xs py-2 px-3 rounded-2xl shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5 transition-all"
-                                            >
-                                                <span>{t.isOpen ? '🎾 Inscribirme' : 'Ver Detalles'}</span>
-                                                <ChevronRight size={14} />
-                                            </button>
-
-                                            <button
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    openDirections(t.coords, clubName);
-                                                }}
-                                                className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-2xl border border-white/10 transition-all"
-                                                title="Cómo llegar con Google Maps / Apple Maps"
-                                            >
-                                                <Navigation size={15} />
-                                            </button>
-                                        </div>
-                                    </div>
-                                );
-                            })
-                        )}
-                    </div>
-                )}
             </div>
         </div>
     );
 };
+
