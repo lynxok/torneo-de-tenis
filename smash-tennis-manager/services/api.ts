@@ -1122,7 +1122,7 @@ export const api = {
         }
     },
     players: {
-        async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number, partnerId?: string, partnerName?: string) {
+        async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number, partnerId?: string, partnerName?: string, availabilityNotes?: string) {
             let finalName = formatPlayerName(playerName);
             let finalCat = category;
             let finalPartnerName = partnerName ? formatPlayerName(partnerName) : undefined;
@@ -1145,7 +1145,7 @@ export const api = {
 
             const teamName = finalPartnerName ? `${finalName} / ${finalPartnerName}` : finalName;
 
-            const { error } = await supabase.from('tournament_players').insert({
+            const insertPayload: any = {
                 tournament_id: tournamentId,
                 player_id: playerId,
                 player_name: teamName,
@@ -1154,8 +1154,25 @@ export const api = {
                 payment_status: 'pending',
                 fee_amount: fee || 0,
                 paid: false
-            });
-            if (error) throw error;
+            };
+
+            if (availabilityNotes) {
+                insertPayload.availability_notes = availabilityNotes;
+            }
+
+            try {
+                const { error } = await supabase.from('tournament_players').insert(insertPayload);
+                if (error) throw error;
+            } catch (err: any) {
+                // If column availability_notes doesn't exist in DB schema yet, fallback to insert without it
+                if (err.message && err.message.includes('availability_notes')) {
+                    delete insertPayload.availability_notes;
+                    const { error: retryError } = await supabase.from('tournament_players').insert(insertPayload);
+                    if (retryError) throw retryError;
+                } else {
+                    throw err;
+                }
+            }
         },
         async manualEnroll(tournamentId: string, params: {
             playerId?: string;
@@ -1165,6 +1182,7 @@ export const api = {
             paymentStatus?: 'pending' | 'paid';
             partnerId?: string;
             partnerName?: string;
+            availabilityNotes?: string;
         }) {
             let finalName = formatPlayerName(params.playerName);
             let finalCat = params.category;
@@ -1203,13 +1221,31 @@ export const api = {
             if (params.playerId) {
                 insertData.player_id = params.playerId;
             }
-            const { data, error } = await supabase
-                .from('tournament_players')
-                .insert(insertData)
-                .select()
-                .single();
-            if (error) throw error;
-            return data;
+            if (params.availabilityNotes) {
+                insertData.availability_notes = params.availabilityNotes;
+            }
+
+            try {
+                const { data, error } = await supabase
+                    .from('tournament_players')
+                    .insert(insertData)
+                    .select()
+                    .single();
+                if (error) throw error;
+                return data;
+            } catch (err: any) {
+                if (err.message && err.message.includes('availability_notes')) {
+                    delete insertData.availability_notes;
+                    const { data, error: retryError } = await supabase
+                        .from('tournament_players')
+                        .insert(insertData)
+                        .select()
+                        .single();
+                    if (retryError) throw retryError;
+                    return data;
+                }
+                throw err;
+            }
         },
         async unenroll(enrollmentId: string) {
             const { error } = await supabase
@@ -1226,6 +1262,19 @@ export const api = {
                 .eq('id', enrollmentId);
             if (error) throw error;
             return true;
+        },
+        async updateAvailability(enrollmentId: string, availabilityNotes: string) {
+            try {
+                const { error } = await supabase
+                    .from('tournament_players')
+                    .update({ availability_notes: availabilityNotes })
+                    .eq('id', enrollmentId);
+                if (error) throw error;
+                return true;
+            } catch (e) {
+                console.warn("Could not update availability_notes in DB:", e);
+                return false;
+            }
         },
         async replacePlayer(tournamentId: string, oldPlayer: { id: string; player_id?: string; player_name?: string; name?: string }, newParams: {
             playerId?: string;

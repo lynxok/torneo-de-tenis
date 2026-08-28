@@ -8,12 +8,13 @@ import {
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
-    Printer, Image as ImageIcon
+    Printer, Image as ImageIcon, Download
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 import { formatPlayerName, formatMatchScore } from '../utils/formatters';
+import { exportTournamentPlayersToCSV } from '../utils/exportHelper';
 import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { ShareGraphicModal } from '../components/ShareGraphicModal';
@@ -86,9 +87,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [guestPartnerName, setGuestPartnerName] = useState('');
     const [manualFee, setManualFee] = useState<number>(0);
     const [manualPaymentStatus, setManualPaymentStatus] = useState<'pending' | 'paid'>('paid');
+    const [manualAvailabilityNotes, setManualAvailabilityNotes] = useState('');
     const [submittingEnroll, setSubmittingEnroll] = useState(false);
     const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
     const [filterByGender, setFilterByGender] = useState(true);
+
+    // Player Self-Enrollment Modal State (Availability preferences)
+    const [showPlayerEnrollModal, setShowPlayerEnrollModal] = useState(false);
+    const [playerAvailabilityNotes, setPlayerAvailabilityNotes] = useState('');
 
     const matchTournamentGender = (userGender?: string, targetGender?: string) => {
         if (!filterByGender) return true;
@@ -287,17 +293,27 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             return;
         }
 
-        let confirmMsg = `¿Confirmas tu inscripción a ${tournament.name} por $${effectivePrice}?`;
-        if (eligibility.isChallenger) {
-            confirmMsg = `🎾 Estás por inscribirte en una categoría superior a tu nivel (${user.category || '4ta'}).\n\n¿Deseas confirmar tu inscripción como Desafío/Challenger por $${effectivePrice}?`;
-        }
+        setPlayerAvailabilityNotes('');
+        setShowPlayerEnrollModal(true);
+    };
 
-        if (!confirm(confirmMsg)) return;
-
+    const handleConfirmPlayerEnroll = async () => {
+        if (!tournament) return;
         setIsEnrolling(true);
         try {
-            await api.players.enroll(tournament.id, user.id, user.name + ' ' + (user.lastname || ''), user.category || 'Open', effectivePrice);
+            await api.players.enroll(
+                tournament.id, 
+                user.id, 
+                user.name + ' ' + (user.lastname || ''), 
+                user.category || 'Open', 
+                effectivePrice,
+                undefined,
+                undefined,
+                playerAvailabilityNotes.trim() || undefined
+            );
+            soundEffects.playBookingSuccess();
             addToast("¡Inscripción exitosa! Buena suerte en el torneo.", 'success');
+            setShowPlayerEnrollModal(false);
             loadTournament();
         } catch (e: any) {
             addToast("Error al inscribirse: " + e.message, 'error');
@@ -887,6 +903,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         setGuestCategory(tournament?.category || '4ta');
         setManualFee(tournament?.registration_price || 0);
         setManualPaymentStatus('paid');
+        setManualAvailabilityNotes('');
 
         if (allProfiles.length === 0) {
             setLoadingProfiles(true);
@@ -958,7 +975,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 fee: manualFee,
                 paymentStatus: manualPaymentStatus,
                 partnerId,
-                partnerName
+                partnerName,
+                availabilityNotes: manualAvailabilityNotes.trim() || undefined
             });
 
             addToast(`¡${pName} ${partnerName ? `y ${partnerName}` : ''} fueron inscriptos correctamente!`, 'success');
@@ -2913,19 +2931,35 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 {/* Right: Players List */}
                 <div className="space-y-6">
                     <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
                             <h3 className="font-bold text-white flex items-center gap-2 text-base">
                                 <Users size={18} className="text-primary" /> Inscritos ({players.length})
                             </h3>
-                            {isClubAdmin && (
+                            <div className="flex items-center gap-2">
                                 <button
-                                    onClick={openManualEnrollModal}
-                                    className="p-1.5 px-2.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
-                                    title="Inscribir jugador manualmente"
+                                    onClick={() => {
+                                        if (!tournament) return;
+                                        const profileMap: Record<string, any> = {};
+                                        allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
+                                        exportTournamentPlayersToCSV(tournament, players, profileMap);
+                                        soundEffects.playScoreBeep();
+                                        addToast("¡Listado de inscriptos descargado en CSV!", "success");
+                                    }}
+                                    className="p-1.5 px-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                                    title="Descargar lista de inscriptos en Excel / CSV con datos de contacto y disponibilidad"
                                 >
-                                    <UserPlus size={13} /> + Inscribir
+                                    <Download size={13} className="text-emerald-400" /> Exportar CSV
                                 </button>
-                            )}
+                                {isClubAdmin && (
+                                    <button
+                                        onClick={openManualEnrollModal}
+                                        className="p-1.5 px-2.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+                                        title="Inscribir jugador manualmente"
+                                    >
+                                        <UserPlus size={13} /> + Inscribir
+                                    </button>
+                                )}
+                            </div>
                         </div>
 
                         <div className="space-y-2 max-h-[460px] overflow-y-auto custom-scrollbar">
@@ -2935,6 +2969,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 players.map((p, i) => {
                                     const pDisplayName = formatPlayerName(p.name || p.player_name);
                                     const isPaid = p.payment_status === 'paid';
+                                    const pAvailability = p.availability_notes || p.time_restrictions;
 
                                     return (
                                         <div key={p.id || i} className="flex items-center justify-between gap-2 p-2.5 bg-sidebar/50 border border-white/5 rounded-xl hover:border-white/20 transition-all">
@@ -2944,11 +2979,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                 </div>
                                                 <div className="min-w-0 flex-1">
                                                     <div className="text-xs font-bold text-white truncate">{pDisplayName}</div>
-                                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                                         <span className="text-[10px] text-muted">{p.category ? `${p.category} Cat.` : 'Sin Cat.'}</span>
                                                         {p.fee_amount ? (
                                                             <span className="text-[10px] text-slate-400 font-mono">${p.fee_amount}</span>
                                                         ) : null}
+                                                        {pAvailability && (
+                                                            <span 
+                                                                className="text-[9px] text-amber-300 font-medium bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex items-center gap-1 max-w-[170px]"
+                                                                title={`Disponibilidad: ${pAvailability}`}
+                                                            >
+                                                                <Clock size={9} className="text-amber-400 shrink-0" />
+                                                                <span className="truncate">{pAvailability}</span>
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -3230,6 +3274,23 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         <option value="pending">Pendiente de Pago</option>
                                     </select>
                                 </div>
+                            </div>
+
+                            {/* Availability / Time Restrictions */}
+                            <div>
+                                <label className="text-xs text-muted font-bold uppercase block mb-1.5 flex items-center gap-1.5">
+                                    <Clock size={13} className="text-amber-400" /> Disponibilidad / Restricciones Horarias (Opcional)
+                                </label>
+                                <input
+                                    type="text"
+                                    placeholder="Ej: Viernes desde 19hs, Sábado todo el día, Domingo no puede"
+                                    value={manualAvailabilityNotes}
+                                    onChange={e => setManualAvailabilityNotes(e.target.value)}
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:border-primary outline-none"
+                                />
+                                <span className="text-[10px] text-slate-500 mt-1 block">
+                                    Esta nota se mostrará al organizar los partidos en el calendario oficial.
+                                </span>
                             </div>
 
                             {/* Actions */}
@@ -4296,6 +4357,46 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </div>
                             </div>
 
+                            {/* Player Availability Restrictions Highlight Banner */}
+                            {(() => {
+                                const p1Obj = players.find(p => p.player_id === selectedMatchForSchedule.player1_id || p.id === selectedMatchForSchedule.player1_id || (p.name && selectedMatchForSchedule.player1_name && p.name.toLowerCase().includes(selectedMatchForSchedule.player1_name.toLowerCase())));
+                                const p2Obj = players.find(p => p.player_id === selectedMatchForSchedule.player2_id || p.id === selectedMatchForSchedule.player2_id || (p.name && selectedMatchForSchedule.player2_name && p.name.toLowerCase().includes(selectedMatchForSchedule.player2_name.toLowerCase())));
+                                const p1Avail = p1Obj?.availability_notes || p1Obj?.time_restrictions;
+                                const p2Avail = p2Obj?.availability_notes || p2Obj?.time_restrictions;
+                                const p1Name = selectedMatchForSchedule.team1_name || formatPlayerName(selectedMatchForSchedule.player1_name) || 'Jugador 1';
+                                const p2Name = selectedMatchForSchedule.team2_name || formatPlayerName(selectedMatchForSchedule.player2_name) || 'Jugador 2';
+
+                                return (
+                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 space-y-2">
+                                        <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
+                                            <Clock size={13} className="text-amber-400" /> Disponibilidad de Horarios Declarada
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                            <div className="p-2 bg-black/40 rounded-xl border border-white/5 space-y-0.5">
+                                                <div className="text-[10px] text-muted font-bold truncate">{p1Name}:</div>
+                                                <div className="text-xs font-medium">
+                                                    {p1Avail ? (
+                                                        <span className="text-amber-200">{p1Avail}</span>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic text-[11px]">✓ Sin restricciones</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="p-2 bg-black/40 rounded-xl border border-white/5 space-y-0.5">
+                                                <div className="text-[10px] text-muted font-bold truncate">{p2Name}:</div>
+                                                <div className="text-xs font-medium">
+                                                    {p2Avail ? (
+                                                        <span className="text-amber-200">{p2Avail}</span>
+                                                    ) : (
+                                                        <span className="text-slate-400 italic text-[11px]">✓ Sin restricciones</span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+
                             {/* Date Field & Quick Buttons */}
                             <div className="space-y-1.5">
                                 <div className="flex justify-between items-center">
@@ -4869,6 +4970,113 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* PLAYER ENROLLMENT CONFIRMATION & AVAILABILITY MODAL */}
+            {showPlayerEnrollModal && tournament && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-3xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh]">
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-primary/20 text-primary">
+                                    <Trophy size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Inscripción al Torneo</h3>
+                                    <p className="text-xs text-muted">{tournament.name}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowPlayerEnrollModal(false)} className="text-muted hover:text-white p-1">
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
+                            <div className="p-3.5 bg-slate-900/90 border border-white/10 rounded-2xl flex items-center justify-between">
+                                <div>
+                                    <span className="text-xs text-muted block">Arancel oficial de inscripción</span>
+                                    <span className="text-lg font-black text-white">${effectivePrice}</span>
+                                </div>
+                                <span className="text-xs px-2.5 py-1 rounded-lg bg-primary/20 text-primary font-bold border border-primary/30">
+                                    {user.category || tournament.category} • {tournament.gender || 'Caballeros'}
+                                </span>
+                            </div>
+
+                            {/* Availability / Schedule Restrictions Section */}
+                            <div className="space-y-2">
+                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                    <Clock size={14} className="text-amber-400" /> Tu Disponibilidad Horaria (Opcional)
+                                </label>
+                                <p className="text-xs text-muted">
+                                    Selecciona o escribe tus preferencias de horario para que la organización las tenga en cuenta:
+                                </p>
+
+                                {/* Quick Selection Chips */}
+                                <div className="flex flex-wrap gap-1.5 pt-1">
+                                    {[
+                                        'Viernes desde 19hs',
+                                        'Sábado mañana',
+                                        'Sábado tarde',
+                                        'Domingo todo el día',
+                                        'Sin restricciones'
+                                    ].map(chip => (
+                                        <button
+                                            key={chip}
+                                            type="button"
+                                            onClick={() => {
+                                                if (playerAvailabilityNotes.includes(chip)) {
+                                                    setPlayerAvailabilityNotes(prev => prev.replace(chip, '').replace(/^,\s*|,\s*$/g, '').trim());
+                                                } else {
+                                                    setPlayerAvailabilityNotes(prev => prev ? `${prev}, ${chip}` : chip);
+                                                }
+                                            }}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
+                                                playerAvailabilityNotes.includes(chip)
+                                                    ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-sm'
+                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                            }`}
+                                        >
+                                            {chip}
+                                        </button>
+                                    ))}
+                                </div>
+
+                                {/* Custom Text Area / Input */}
+                                <textarea
+                                    rows={2}
+                                    value={playerAvailabilityNotes}
+                                    onChange={e => setPlayerAvailabilityNotes(e.target.value)}
+                                    placeholder="Ej: Sábado no puedo de 13 a 16 hs, resto del fin de semana disponible..."
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:border-primary outline-none resize-none"
+                                />
+                            </div>
+
+                            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-start gap-2.5 text-xs text-blue-200">
+                                <Info size={16} className="text-blue-400 shrink-0 mt-0.5" />
+                                <span>Tu disponibilidad será visible para los organizadores en la mesa de control al programar tus partidos.</span>
+                            </div>
+                        </div>
+
+                        <div className="p-5 border-t border-white/10 bg-white/5 flex justify-end gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setShowPlayerEnrollModal(false)}
+                                disabled={isEnrolling}
+                                className="px-4 py-2.5 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleConfirmPlayerEnroll}
+                                disabled={isEnrolling}
+                                className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
+                            >
+                                {isEnrolling ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Confirmar Inscripción
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

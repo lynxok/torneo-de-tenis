@@ -9,6 +9,7 @@ import {
     Wallet, Trophy, User, Crown, Activity, Filter, CheckCircle2, XCircle, Plus, X, Save, Loader2, Smartphone, Building, Clock,
     Flame, CalendarDays, Grid, BarChart3, Layers, Sparkles
 } from 'lucide-react';
+import { exportTransactionsToCSV } from '../utils/exportHelper';
 
 interface ReportsProps {
     user: UserProfile;
@@ -86,7 +87,15 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
     };
 
     const handleExport = () => {
-        alert("Generando reporte PDF... (Simulación)");
+        if (!transactions || transactions.length === 0) {
+            alert("No hay transacciones registradas para exportar en este período.");
+            return;
+        }
+        const currentInst = user.role === 'superadmin' && selectedInstId !== 'all'
+            ? institutions.find(i => i.id === selectedInstId)?.name || 'Institución'
+            : user.institution || 'Smash_Tenis';
+
+        exportTransactionsToCSV(currentInst, filteredTransactions, stats);
     };
 
     // ACCESS CONTROL: Players and Professors cannot see this page
@@ -190,8 +199,12 @@ export const Reports: React.FC<ReportsProps> = ({ user }) => {
                             </button>
                         ))}
                     </div>
-                    <button onClick={handleExport} className="bg-primary hover:bg-primary-hover text-white px-3 py-2 rounded-xl transition-colors shadow-lg shadow-primary/20">
-                        <Download size={20} />
+                    <button 
+                        onClick={handleExport} 
+                        className="bg-primary hover:bg-primary-hover text-white px-3.5 py-2 rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center gap-1.5 text-xs font-bold"
+                        title="Descargar Arqueo de Caja y Movimientos en CSV / Excel"
+                    >
+                        <Download size={15} /> Exportar CSV
                     </button>
                 </div>
             </div>

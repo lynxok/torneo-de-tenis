@@ -13,7 +13,8 @@ import {
   Sliders,
   Smartphone,
   Wallet,
-  Globe
+  Globe,
+  GraduationCap
 } from 'lucide-react';
 import { UserRole } from '../types';
 import packageInfo from '../package.json';
@@ -133,6 +134,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Canchas</p>
           <NavButton view="bookings" icon={Calendar} label="Reservas" id="nav-bookings" />
         </div>
+
+        {(role === 'professor' || role === 'admin' || role === 'superadmin') && (
+          <div className="pt-2 pb-1">
+            <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Entrenamiento</p>
+            <NavButton view="coach-dashboard" icon={GraduationCap} label="Clases & Alumnos" id="nav-coach" />
+          </div>
+        )}
 
         {(role === 'admin' || role === 'superadmin' || role === 'professor') && (
           <div className="pt-3 mt-2 border-t border-white/10">

@@ -303,8 +303,9 @@ export interface TournamentPlayer {
   members?: string[]; // For doubles
   partner_id?: string; // For doubles
   partner_name?: string; // For doubles
-  team_name?: string; // For doubles (e.g. "Pérez / Gómez")
   is_doubles_pair?: boolean;
+  availability_notes?: string;
+  time_restrictions?: string;
 }
 
 export interface Match {

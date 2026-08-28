@@ -11,7 +11,7 @@ import { ToastProvider } from './components/ui/Toast';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { VersionUpdatePrompt } from './components/VersionUpdatePrompt';
 import { soundEffects } from './services/soundEffects';
-import { Menu, ShieldAlert, User, Shield, Loader2 } from 'lucide-react';
+import { Menu, ShieldAlert, User, Shield, Loader2, GraduationCap } from 'lucide-react';
 
 // Resilient Code-Splitting with auto-retry on new version deployments
 function lazyRetry<T extends React.ComponentType<any>>(
@@ -51,6 +51,7 @@ const AdminInstitutions = lazyRetry(() => import('./pages/AdminInstitutions').th
 const AdminSettings = lazyRetry(() => import('./pages/AdminSettings').then(m => ({ default: m.AdminSettings })), 'AdminSettings');
 const PricingAndCommissions = lazyRetry(() => import('./pages/PricingAndCommissions').then(m => ({ default: m.PricingAndCommissions })), 'PricingAndCommissions');
 const LandingPage = lazyRetry(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage');
+const CoachDashboard = lazyRetry(() => import('./pages/CoachDashboard').then(m => ({ default: m.CoachDashboard })), 'CoachDashboard');
 
 export const VALID_VIEWS = [
   'dashboard',
@@ -62,6 +63,8 @@ export const VALID_VIEWS = [
   'bookings',
   'messages',
   'reports',
+  'coach-dashboard',
+  'classes',
   'pricing-commissions',
   'admin-users',
   'admin-institutions',
@@ -397,6 +400,19 @@ const AppContent = () => {
             </button>
 
             <button
+              onClick={() => { setSimulatedRole('professor'); setHasSelectedRole(true); }}
+              className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10 transition-all group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+                <GraduationCap size={20} />
+              </div>
+              <div className="text-left">
+                <div className="font-bold text-white group-hover:text-emerald-400 transition-colors">Profesor / Entrenador</div>
+                <div className="text-xs text-muted">Gestión de alumnos, clases y avales técnicos.</div>
+              </div>
+            </button>
+
+            <button
               onClick={() => { setSimulatedRole('player'); setHasSelectedRole(true); }}
               className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all group"
             >
@@ -512,6 +528,9 @@ const AppContent = () => {
                 />
               )}
               {activeView === 'reports' && <Reports user={effectiveUser} />}
+              {(activeView === 'coach-dashboard' || activeView === 'classes') && (
+                <CoachDashboard user={effectiveUser} onNavigate={handleNavigate} />
+              )}
               {activeView === 'pricing-commissions' && (
                 <PricingAndCommissions user={effectiveUser} onNavigate={handleNavigate} />
               )}
