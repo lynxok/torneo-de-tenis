@@ -1,47 +1,45 @@
 -- ==============================================================================
--- 🎾 SMASH TENNIS - MIGRACIÓN: CORRECCIÓN DE APROBACIÓN DE USUARIOS POR ORGANIZADORES
--- Fecha: 2026-08-28
+-- 🎾 SMASH TENNIS - MIGRACIÓN DEFINITIVA: APROBACIÓN DE USUARIOS POR ORGANIZADORES
 -- ==============================================================================
 
--- 1. ELIMINAR TRIGGER PREVIO
+-- PASO 1: Eliminar trigger previo
 DROP TRIGGER IF EXISTS trg_protect_profile_fields ON public.profiles;
 
--- 2. CREAR FUNCIÓN TRIGGER DE PROTECCIÓN CON DELIMITADOR $func$
+-- PASO 2: Función de protección limpia y robusta
 CREATE OR REPLACE FUNCTION public.protect_profile_fields()
 RETURNS TRIGGER 
 LANGUAGE plpgsql 
 SECURITY DEFINER 
-AS $func$
+AS $$
 DECLARE
-    v_caller_role TEXT;
-    v_caller_inst UUID;
+    current_user_role TEXT;
 BEGIN
-    -- A. Si auth.uid() es NULL (llamadas con service_role / backend / scripts), permitir
+    -- Permitir si es llamada de sistema / service_role
     IF auth.uid() IS NULL THEN
         NEW.updated_at := NOW();
         RETURN NEW;
     END IF;
 
-    -- B. Obtener rol e institución del usuario que ejecuta la acción
-    SELECT role, institution_id INTO v_caller_role, v_caller_inst
+    -- Obtener rol del usuario autenticado
+    SELECT role INTO current_user_role
     FROM public.profiles 
     WHERE id = auth.uid();
 
-    -- C. Si es SuperAdmin, permitir todo
-    IF v_caller_role = 'superadmin' THEN
+    -- Si es SuperAdmin, permitir todo
+    IF current_user_role = 'superadmin' THEN
         NEW.updated_at := NOW();
         RETURN NEW;
     END IF;
 
-    -- D. Si es Organizador (admin, coordinator, professor):
-    -- Puede aprobar usuarios, modificar estados y categorías de su club
-    IF v_caller_role IN ('admin', 'coordinator', 'professor') THEN
-        -- No puede auto-ascenderse a superadmin
+    -- Si es Organizador (admin, coordinator, professor):
+    -- Puede aprobar usuarios, modificar estados y categorías
+    IF current_user_role IN ('admin', 'coordinator', 'professor') THEN
+        -- No permitir ascender a superadmin
         IF NEW.role = 'superadmin' AND (OLD.role IS DISTINCT FROM 'superadmin') THEN
             NEW.role := OLD.role;
         END IF;
 
-        -- No puede alterar contadores de victorias manualmente
+        -- No permitir modificar victorias manualmente
         IF NEW.matches_won IS DISTINCT FROM OLD.matches_won THEN
             NEW.matches_won := OLD.matches_won;
         END IF;
@@ -53,7 +51,7 @@ BEGIN
         RETURN NEW;
     END IF;
 
-    -- E. Si es un jugador común: revertir cambios en campos protegidos
+    -- Si es jugador regular: revertir cambios en campos protegidos
     IF NEW.role IS DISTINCT FROM OLD.role THEN
         NEW.role := OLD.role;
     END IF;
@@ -70,15 +68,15 @@ BEGIN
     NEW.updated_at := NOW();
     RETURN NEW;
 END;
-$func$;
+$$;
 
--- 3. RE-VINCULAR EL TRIGGER A LA TABLA PROFILES
+-- PASO 3: Vincular el trigger a la tabla profiles
 CREATE TRIGGER trg_protect_profile_fields
     BEFORE UPDATE ON public.profiles
     FOR EACH ROW
     EXECUTE FUNCTION public.protect_profile_fields();
 
--- 4. ACTUALIZAR POLÍTICAS RLS PARA PERMITIR QUE ADMINS DE CLUB EDITEN PERFILES
+-- PASO 4: Políticas RLS para perfiles
 DROP POLICY IF EXISTS "Profiles updatable by user or superadmin" ON public.profiles;
 DROP POLICY IF EXISTS "Profiles updatable by user or admin" ON public.profiles;
 
@@ -100,18 +98,18 @@ WITH CHECK (
     )
 );
 
--- 5. FUNCIÓN RPC DE APROBACIÓN DIRECTA (SECURITY DEFINER)
+-- PASO 5: RPC de Aprobación Directa
 CREATE OR REPLACE FUNCTION public.admin_approve_user(target_user_id UUID, assigned_category TEXT DEFAULT '4ta')
 RETURNS JSONB 
 LANGUAGE plpgsql 
 SECURITY DEFINER 
-AS $rpc$
+AS $$
 DECLARE
-    v_caller_role TEXT;
+    op_role TEXT;
 BEGIN
     IF auth.uid() IS NOT NULL THEN
-        SELECT role INTO v_caller_role FROM public.profiles WHERE id = auth.uid();
-        IF v_caller_role NOT IN ('superadmin', 'admin', 'coordinator', 'professor') THEN
+        SELECT role INTO op_role FROM public.profiles WHERE id = auth.uid();
+        IF op_role NOT IN ('superadmin', 'admin', 'coordinator', 'professor') THEN
             RAISE EXCEPTION 'No tienes permisos de organizador para aprobar usuarios.';
         END IF;
     END IF;
@@ -126,9 +124,9 @@ BEGIN
 
     RETURN jsonb_build_object('success', true, 'user_id', target_user_id);
 END;
-$rpc$;
+$$;
 
--- 6. APROBAR INMEDIATAMENTE LAS SOLICITUDES PENDIENTES DEL CLUB TENIS PARQUE ESPAÑA
+-- PASO 6: Aprobación inmediata de las 12 jugadoras de Tenis Parque España
 UPDATE public.profiles
 SET 
     is_approved = TRUE,
