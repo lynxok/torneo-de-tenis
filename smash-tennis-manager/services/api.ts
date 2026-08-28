@@ -256,6 +256,12 @@ export const api = {
                 'city',
                 'province',
                 'country',
+                'birth_date',
+                'show_whatsapp',
+                'is_member',
+                'member_number',
+                'member_status',
+                'memberships',
                 'updated_at'
             ];
 
@@ -266,13 +272,28 @@ export const api = {
                 }
             }
 
-            // Also synchronize birth_date & gender to Auth user_metadata
+            // Optional RPC fallback for approvals
+            if (updates.is_approved === true) {
+                try {
+                    await supabase.rpc('admin_approve_user', {
+                        target_user_id: id,
+                        assigned_category: updates.category || '4ta'
+                    });
+                } catch (rpcErr) {
+                    // Fallback to standard update
+                }
+            }
+
+            // Also synchronize birth_date & gender to Auth user_metadata ONLY if updating self
             try {
-                const metaUpdates: any = {};
-                if (updates.birth_date !== undefined) metaUpdates.birth_date = updates.birth_date;
-                if (updates.gender !== undefined) metaUpdates.gender = updates.gender;
-                if (Object.keys(metaUpdates).length > 0) {
-                    await supabase.auth.updateUser({ data: metaUpdates });
+                const { data: authData } = await supabase.auth.getUser();
+                if (authData?.user?.id === id) {
+                    const metaUpdates: any = {};
+                    if (updates.birth_date !== undefined) metaUpdates.birth_date = updates.birth_date;
+                    if (updates.gender !== undefined) metaUpdates.gender = updates.gender;
+                    if (Object.keys(metaUpdates).length > 0) {
+                        await supabase.auth.updateUser({ data: metaUpdates });
+                    }
                 }
             } catch (metaErr) {
                 console.warn("User metadata sync notice:", metaErr);

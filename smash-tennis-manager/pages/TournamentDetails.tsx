@@ -17,6 +17,7 @@ import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRoun
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { ShareGraphicModal } from '../components/ShareGraphicModal';
 import { soundEffects } from '../services/soundEffects';
+import { canEditTournament } from './Tournaments';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -30,6 +31,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('groups');
     const { addToast } = useToast();
+
+    // Edit Tournament State (Organizador & Superadmin)
+    const [showEditTournamentModal, setShowEditTournamentModal] = useState(false);
+    const [editTournamentForm, setEditTournamentForm] = useState<Partial<Tournament>>({
+        name: '',
+        start_date: '',
+        type: 'singles',
+        gender: 'Caballeros',
+        category: '4ta',
+        registration_price: 0,
+        registration_closed: false,
+        status: 'draft'
+    });
+    const [isUpdatingTournament, setIsUpdatingTournament] = useState(false);
 
     // Social Media Graphics Generator State
     const [showGraphicModal, setShowGraphicModal] = useState(false);
@@ -1338,6 +1353,54 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
+    const handleOpenEditTournament = () => {
+        if (!tournament) return;
+        setEditTournamentForm({
+            name: tournament.name || '',
+            start_date: tournament.start_date ? tournament.start_date.split('T')[0] : '',
+            type: tournament.type || 'singles',
+            gender: tournament.gender || 'Caballeros',
+            category: tournament.category || '4ta',
+            registration_price: tournament.registration_price || 0,
+            registration_closed: !!tournament.registration_closed,
+            status: tournament.status || 'draft'
+        });
+        setShowEditTournamentModal(true);
+    };
+
+    const handleSaveEditTournament = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!tournament) return;
+        if (!editTournamentForm.start_date) {
+            addToast("Por favor ingresa una fecha de inicio", 'error');
+            return;
+        }
+
+        setIsUpdatingTournament(true);
+        try {
+            const updates: Partial<Tournament> = {
+                name: editTournamentForm.name?.trim(),
+                start_date: editTournamentForm.start_date,
+                type: editTournamentForm.type,
+                gender: editTournamentForm.gender,
+                category: editTournamentForm.category,
+                registration_price: Number(editTournamentForm.registration_price) || 0,
+                registration_closed: editTournamentForm.registration_closed,
+                status: editTournamentForm.status
+            };
+
+            await api.tournaments.update(tournament.id, updates);
+            setTournament(prev => prev ? ({ ...prev, ...updates }) : null);
+            addToast("¡Torneo y fecha de inicio actualizados exitosamente!", 'success');
+            setShowEditTournamentModal(false);
+        } catch (err: any) {
+            console.error("Error al actualizar torneo:", err);
+            addToast(err?.message ? `Error al actualizar torneo: ${err.message}` : "Error al actualizar torneo", 'error');
+        } finally {
+            setIsUpdatingTournament(false);
+        }
+    };
+
     const tierInfo = getTournamentTier(players.length);
     const finances = calculateTournamentFinances(players.length, effectivePrice, undefined, isCommissionWaived);
 
@@ -1378,7 +1441,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             </div>
                             <h1 className="text-3xl md:text-4xl font-black text-white mb-2 tracking-tight">{tournament.name}</h1>
                             <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300">
-                                <span className="flex items-center gap-1"><Calendar size={14} className="text-primary" /> {new Date(tournament.start_date).toLocaleDateString()}</span>
+                                <span className="flex items-center gap-1"><Calendar size={14} className="text-primary" /> {new Date(tournament.start_date + 'T00:00:00').toLocaleDateString()}</span>
                                 <span className="flex items-center gap-1"><MapPin size={14} className="text-primary" /> {tournament.institutions?.name}</span>
                                 <span className="flex items-center gap-1"><Users size={14} className="text-primary" /> {players.length} Inscritos</span>
                             </div>
@@ -1386,6 +1449,19 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                         {/* Action and Share Buttons */}
                         <div className="flex flex-wrap items-center gap-2">
+                            {canEditTournament(tournament, user) && (
+                                <button
+                                    onClick={() => {
+                                        soundEffects.playScoreBeep();
+                                        handleOpenEditTournament();
+                                    }}
+                                    className="px-4 py-3 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 font-bold rounded-xl transition-all border border-amber-500/30 flex items-center gap-2 text-sm shadow-md"
+                                    title="Editar fecha de inicio y datos del torneo"
+                                >
+                                    <Calendar size={16} className="text-amber-400" /> Editar Fechas / Torneo
+                                </button>
+                            )}
+
                             <button
                                 onClick={() => {
                                     soundEffects.playTennisHit();
@@ -4574,6 +4650,133 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     matches={matches}
                     currentUser={user}
                 />
+            )}
+
+            {/* EDIT TOURNAMENT MODAL (Organizador & Superadmin) */}
+            {showEditTournamentModal && tournament && (
+                <div id="edit-tournament-detail-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-lg p-0 shadow-2xl relative flex flex-col max-h-[90vh]">
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                                    <Calendar size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white">Editar Torneo y Fechas</h3>
+                                    <p className="text-xs text-muted">{tournament.institutions?.name || 'Torneo de tu institución'}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setShowEditTournamentModal(false)} className="text-muted hover:text-white p-1"><X size={20} /></button>
+                        </div>
+                        <form onSubmit={handleSaveEditTournament} className="p-6 space-y-4 overflow-y-auto">
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted uppercase font-bold">Nombre del Torneo</label>
+                                <input 
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                    value={editTournamentForm.name || ''} 
+                                    onChange={e => setEditTournamentForm({ ...editTournamentForm, name: e.target.value })} 
+                                    required 
+                                />
+                            </div>
+
+                            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5">
+                                <label className="text-xs text-amber-300 uppercase font-bold flex items-center gap-1.5">
+                                    <Calendar size={14} /> Fecha de Inicio Oficial *
+                                </label>
+                                <input 
+                                    type="date" 
+                                    className="w-full bg-slate-900 border border-amber-500/40 rounded-xl p-3 text-white font-bold focus:outline-none focus:border-amber-400" 
+                                    value={editTournamentForm.start_date || ''} 
+                                    onChange={e => setEditTournamentForm({ ...editTournamentForm, start_date: e.target.value })} 
+                                    required 
+                                />
+                                <p className="text-[11px] text-amber-200/70">Esta fecha define el inicio del cuadro y la visualización en el calendario oficial.</p>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Modalidad</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editTournamentForm.type || 'singles'} 
+                                        onChange={e => setEditTournamentForm({ ...editTournamentForm, type: e.target.value as any })}
+                                    >
+                                        <option value="singles">Singles</option>
+                                        <option value="doubles">Dobles</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Rama</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editTournamentForm.gender || 'Caballeros'} 
+                                        onChange={e => setEditTournamentForm({ ...editTournamentForm, gender: e.target.value as any })}
+                                    >
+                                        <option value="Caballeros">Caballeros</option>
+                                        <option value="Damas">Damas</option>
+                                        <option value="Mixto">Mixto</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Categoría</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editTournamentForm.category || '4ta'} 
+                                        onChange={e => setEditTournamentForm({ ...editTournamentForm, category: e.target.value })}
+                                    >
+                                        {getCategoriesForInstitution(tournament?.institutions).map(c => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Precio Inscripción ($)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editTournamentForm.registration_price ?? 0} 
+                                        onChange={e => setEditTournamentForm({ ...editTournamentForm, registration_price: parseFloat(e.target.value) || 0 })} 
+                                        required 
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Inscripción</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editTournamentForm.registration_closed ? 'closed' : 'open'} 
+                                        onChange={e => setEditTournamentForm({ ...editTournamentForm, registration_closed: e.target.value === 'closed' })}
+                                    >
+                                        <option value="open">🟢 Abierta</option>
+                                        <option value="closed">🔴 Cerrada</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 justify-end pt-4 border-t border-white/10">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setShowEditTournamentModal(false)} 
+                                    disabled={isUpdatingTournament}
+                                    className="px-4 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 font-semibold text-sm transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    disabled={isUpdatingTournament}
+                                    className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
+                                >
+                                    {isUpdatingTournament ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
+                                    {isUpdatingTournament ? 'Guardando...' : 'Guardar Cambios'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
 
             {/* PRINTABLE CONTROL SHEET (A4 - Only visible during print) */}

@@ -3,7 +3,7 @@ import { Tournament, UserProfile, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2 } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2 } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier } from '../utils/tournamentTiers';
 
@@ -20,6 +20,14 @@ export const canDeleteTournament = (t: Tournament, u: UserProfile): boolean => {
     return false;
 };
 
+export const canEditTournament = (t: Tournament, u?: UserProfile): boolean => {
+    if (!u || !t) return false;
+    if (u.role === 'superadmin') return true;
+    if (t.created_by && t.created_by === u.id) return true;
+    if ((u.role === 'admin' || u.role === 'professor' || u.role === 'coordinator') && u.institution_id && t.institution_id === u.institution_id) return true;
+    return false;
+};
+
 export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) => {
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
     const [loading, setLoading] = useState(true);
@@ -27,6 +35,18 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
     const [deletingTournament, setDeletingTournament] = useState<Tournament | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false); // For admins
+    const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
+    const [editFormData, setEditFormData] = useState<Partial<Tournament>>({
+        name: '',
+        start_date: '',
+        type: 'singles',
+        gender: 'Caballeros',
+        category: '4ta',
+        registration_price: 0,
+        registration_closed: false,
+        status: 'draft'
+    });
+    const [isUpdating, setIsUpdating] = useState(false);
     const [currentInstitution, setCurrentInstitution] = useState<Institution | null>(null);
 
     // Create Modal State
@@ -145,6 +165,54 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
             addToast(err?.message ? `Error al eliminar torneo: ${err.message}` : "Error al eliminar torneo", 'error');
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const handleOpenEdit = (t: Tournament, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setEditingTournament(t);
+        setEditFormData({
+            name: t.name || '',
+            start_date: t.start_date ? t.start_date.split('T')[0] : '',
+            type: t.type || 'singles',
+            gender: t.gender || 'Caballeros',
+            category: t.category || '4ta',
+            registration_price: t.registration_price || 0,
+            registration_closed: !!t.registration_closed,
+            status: t.status || 'draft'
+        });
+    };
+
+    const handleSaveEdit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingTournament) return;
+        if (!editFormData.start_date) {
+            addToast("Por favor selecciona una fecha de inicio", 'error');
+            return;
+        }
+
+        setIsUpdating(true);
+        try {
+            const updates: Partial<Tournament> = {
+                name: editFormData.name?.trim(),
+                start_date: editFormData.start_date,
+                type: editFormData.type,
+                gender: editFormData.gender,
+                category: editFormData.category,
+                registration_price: Number(editFormData.registration_price) || 0,
+                registration_closed: editFormData.registration_closed,
+                status: editFormData.status
+            };
+
+            await api.tournaments.update(editingTournament.id, updates);
+            addToast("¡Torneo y fecha de inicio actualizados exitosamente!", 'success');
+            setEditingTournament(null);
+            await loadTournaments();
+        } catch (err: any) {
+            console.error("Error al actualizar torneo:", err);
+            addToast(err?.message ? `Error al actualizar torneo: ${err.message}` : "Error al actualizar torneo", 'error');
+        } finally {
+            setIsUpdating(false);
         }
     };
 
@@ -325,6 +393,15 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                                             >
                                                                 <MessageCircle size={14} />
                                                             </button>
+                                                            {canEditTournament(t, user) && (
+                                                                <button
+                                                                    onClick={(e) => handleOpenEdit(t, e)}
+                                                                    className="p-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/25 text-amber-400 border border-amber-500/20 transition-colors"
+                                                                    title="Editar fecha de inicio y datos del torneo"
+                                                                >
+                                                                    <Edit2 size={14} />
+                                                                </button>
+                                                            )}
                                                             {canDeleteTournament(t, user) && (
                                                                 <button
                                                                     onClick={(e) => {
@@ -555,6 +632,135 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                 {isDeleting ? 'Eliminando...' : 'Sí, Eliminar Torneo'}
                             </button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Tournament Modal */}
+            {editingTournament && (
+                <div id="edit-tournament-modal" className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-lg p-0 shadow-2xl relative flex flex-col max-h-[90vh]">
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 bg-amber-500/20 text-amber-400 rounded-lg">
+                                    <Calendar size={18} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white">Editar Torneo y Fechas</h3>
+                                    <p className="text-xs text-muted">{editingTournament.institutions?.name || 'Torneo propio'}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => setEditingTournament(null)} className="text-muted hover:text-white p-1"><X size={20} /></button>
+                        </div>
+                        <form onSubmit={handleSaveEdit} className="p-6 space-y-4 overflow-y-auto">
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted uppercase font-bold">Nombre del Torneo</label>
+                                <input 
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                    value={editFormData.name || ''} 
+                                    onChange={e => setEditFormData({ ...editFormData, name: e.target.value })} 
+                                    required 
+                                />
+                            </div>
+
+                            <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl space-y-1.5">
+                                <label className="text-xs text-amber-300 uppercase font-bold flex items-center gap-1.5">
+                                    <Calendar size={14} /> Fecha de Inicio Oficial *
+                                </label>
+                                <input 
+                                    type="date" 
+                                    className="w-full bg-slate-900 border border-amber-500/40 rounded-xl p-3 text-white font-bold focus:outline-none focus:border-amber-400" 
+                                    value={editFormData.start_date || ''} 
+                                    onChange={e => setEditFormData({ ...editFormData, start_date: e.target.value })} 
+                                    required 
+                                />
+                                <p className="text-[11px] text-amber-200/70">Esta fecha define el inicio del cuadro y la agrupación en el calendario general.</p>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Modalidad</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editFormData.type || 'singles'} 
+                                        onChange={e => setEditFormData({ ...editFormData, type: e.target.value as any })}
+                                    >
+                                        <option value="singles">Singles</option>
+                                        <option value="doubles">Dobles</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Rama</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editFormData.gender || 'Caballeros'} 
+                                        onChange={e => setEditFormData({ ...editFormData, gender: e.target.value as any })}
+                                    >
+                                        <option value="Caballeros">Caballeros</option>
+                                        <option value="Damas">Damas</option>
+                                        <option value="Mixto">Mixto</option>
+                                    </select>
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Categoría</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editFormData.category || '4ta'} 
+                                        onChange={e => setEditFormData({ ...editFormData, category: e.target.value })}
+                                    >
+                                        {getCategoriesForInstitution(
+                                            user.role === 'superadmin' && editingTournament.institution_id 
+                                                ? institutions.find(i => i.id === editingTournament.institution_id) 
+                                                : currentInstitution
+                                        ).map(c => <option key={c} value={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Precio Inscripción ($)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editFormData.registration_price ?? 0} 
+                                        onChange={e => setEditFormData({ ...editFormData, registration_price: parseFloat(e.target.value) || 0 })} 
+                                        required 
+                                    />
+                                </div>
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Inscripción</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
+                                        value={editFormData.registration_closed ? 'closed' : 'open'} 
+                                        onChange={e => setEditFormData({ ...editFormData, registration_closed: e.target.value === 'closed' })}
+                                    >
+                                        <option value="open">🟢 Abierta</option>
+                                        <option value="closed">🔴 Cerrada</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div className="flex gap-3 justify-end pt-4 border-t border-white/10">
+                                <button 
+                                    type="button" 
+                                    onClick={() => setEditingTournament(null)} 
+                                    disabled={isUpdating}
+                                    className="px-4 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 font-semibold text-sm transition-all"
+                                >
+                                    Cancelar
+                                </button>
+                                <button 
+                                    type="submit" 
+                                    disabled={isUpdating}
+                                    className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white rounded-xl font-bold text-sm flex items-center gap-2 shadow-lg shadow-primary/20 transition-all disabled:opacity-50"
+                                >
+                                    {isUpdating ? <Loader2 size={16} className="animate-spin" /> : <Calendar size={16} />}
+                                    {isUpdating ? 'Guardando...' : 'Guardar Cambios'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

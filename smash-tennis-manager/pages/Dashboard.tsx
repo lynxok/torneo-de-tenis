@@ -150,9 +150,13 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
     };
 
     const handleQuickApprove = async (userToApprove: UserProfile) => {
-        if (!confirm(`¿Aprobar ingreso de ${userToApprove.name}?`)) return;
+        const displayName = [userToApprove.name, userToApprove.lastname].filter(Boolean).join(' ') || 'este usuario';
+        if (!confirm(`¿Aprobar ingreso y habilitar a ${displayName}?`)) return;
         try {
-            await api.auth.updateProfile(userToApprove.id, { is_approved: true });
+            await api.auth.updateProfile(userToApprove.id, { 
+                is_approved: true,
+                member_status: 'active'
+            });
             const updatedList = pendingUsersList.filter(u => u.id !== userToApprove.id);
             setPendingUsersList(updatedList);
             setStats(prev => ({ ...prev, pendingUsers: updatedList.length }));

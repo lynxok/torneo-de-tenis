@@ -180,7 +180,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         const action = currentStatus ? 'desactivar' : 'aprobar';
         if (!confirm(`¿Estás seguro de ${action} a este usuario?`)) return;
         try {
-            await api.auth.updateProfile(userId, { is_approved: !currentStatus });
+            await api.auth.updateProfile(userId, { 
+                is_approved: !currentStatus,
+                member_status: !currentStatus ? 'active' : 'inactive'
+            });
             loadUsers();
         } catch (e) {
             alert('Error al actualizar estado');
