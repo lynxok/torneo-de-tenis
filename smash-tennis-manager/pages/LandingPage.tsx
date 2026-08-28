@@ -11,11 +11,19 @@ import {
 interface LandingPageProps {
     onOpenAuth: (mode?: 'login' | 'register', role?: 'player' | 'admin') => void;
     onExploreAsGuest?: () => void;
+    user?: any;
+    onNavigateDashboard?: () => void;
+    onLogout?: () => void;
 }
 
 type UserRoleType = 'player' | 'organizer' | 'coach';
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ 
+    onOpenAuth, 
+    user, 
+    onNavigateDashboard, 
+    onLogout 
+}) => {
     // Active Role: 'player' | 'organizer' | 'coach'
     const [activeRole, setActiveRole] = useState<UserRoleType>('player');
 
@@ -198,18 +206,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
                     {/* Auth CTAs */}
                     <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => onOpenAuth('login')}
-                            className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
-                        >
-                            Ingresar
-                        </button>
-                        <button
-                            onClick={() => onOpenAuth('register', activeRole === 'organizer' ? 'admin' : 'player')}
-                            className="px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 bg-[#ccff00] hover:bg-[#b8e600] rounded-xl shadow-md shadow-[#ccff00]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                        >
-                            {activeRole === 'organizer' ? 'Crear Club Gratis' : 'Registrarme Gratis'}
-                        </button>
+                        {user ? (
+                            <>
+                                <button
+                                    onClick={onNavigateDashboard}
+                                    className="px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 bg-[#ccff00] hover:bg-[#b8e600] rounded-xl shadow-md shadow-[#ccff00]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
+                                >
+                                    <Trophy size={14} />
+                                    <span>Ir a mi Panel</span>
+                                </button>
+                                <button
+                                    onClick={onLogout}
+                                    className="px-3 py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                                >
+                                    Cerrar Sesión
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => onOpenAuth('login')}
+                                    className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+                                >
+                                    Ingresar
+                                </button>
+                                <button
+                                    onClick={() => onOpenAuth('register', activeRole === 'organizer' ? 'admin' : 'player')}
+                                    className="px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 bg-[#ccff00] hover:bg-[#b8e600] rounded-xl shadow-md shadow-[#ccff00]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                                >
+                                    {activeRole === 'organizer' ? 'Crear Club Gratis' : 'Registrarme Gratis'}
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
             </header>

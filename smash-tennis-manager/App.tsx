@@ -74,7 +74,16 @@ export const VALID_VIEWS = [
 const AppContent = () => {
   const [session, setSession] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
-  const [activeView, setActiveView] = useState('dashboard');
+  const [activeView, setActiveView] = useState<string>(() => {
+    try {
+      const pathname = typeof window !== 'undefined' ? window.location.pathname.toLowerCase() : '';
+      const params = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+      if (pathname.includes('/inicio') || pathname.endsWith('/inicio') || params.get('view') === 'inicio' || params.get('view') === 'landing') {
+        return 'landing';
+      }
+    } catch (e) {}
+    return 'dashboard';
+  });
   const [navData, setNavData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -136,10 +145,19 @@ const AppContent = () => {
 
   const checkUnauthUrlRedirects = () => {
     const params = new URLSearchParams(window.location.search);
+    const pathname = window.location.pathname.toLowerCase();
     const modeParam = params.get('mode');
     const roleParam = params.get('role');
     const clubParam = params.get('club') || params.get('c');
     const viewParam = params.get('view');
+
+    const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
+
+    if (isExplicitInicio) {
+      setUnauthView('landing');
+      setActiveView('landing');
+      return;
+    }
 
     if (modeParam === 'login' || modeParam === 'register' || clubParam || viewParam === 'auth' || viewParam === 'login' || viewParam === 'register') {
       setUnauthView('auth');
@@ -148,6 +166,7 @@ const AppContent = () => {
       if (roleParam === 'admin' || roleParam === 'player') setAuthRole(roleParam as any);
     } else {
       setUnauthView('landing');
+      setActiveView('landing');
     }
   };
 
@@ -215,10 +234,12 @@ const AppContent = () => {
     await api.auth.signOut();
     setSession(null);
     setUserProfile(null);
-    setActiveView('dashboard');
+    setActiveView('landing');
+    setUnauthView('landing');
     setSimulatedRole(null);
     setHasSelectedRole(false);
     setUnreadCount(0);
+    window.history.pushState({}, '', '/inicio');
   };
 
   const handleNavigate = (view: string, data?: any) => {
@@ -243,20 +264,21 @@ const AppContent = () => {
 
   const activeTutorialDef = TUTORIALS.find(t => t.id === activeTutorialId);
 
-  const handleDebugLogin = () => {
+  const handleSimulateRole = (role: UserRole) => {
+    setSimulatedRole(role);
+    setHasSelectedRole(true);
+  };
+
+  const handleDevSuperAdminBypass = () => {
     const debugProfile: UserProfile = {
-      id: 'admin-parque-espana',
-      email: 'organizador@parqueespana.com',
-      name: 'Organizador',
-      lastname: 'Parque España',
-      role: 'admin',
-      institution_id: 'inst-parque-espana',
-      institution: 'Tenis Parque España - Diamante, E.R.',
+      id: 'debug-superadmin-001',
+      name: 'SuperAdmin',
+      lastname: 'Developer',
+      email: 'dev@smashtennis.local',
+      role: 'superadmin',
       is_approved: true,
-      matches_won: 48,
-      tournaments_won: 12,
-      category: 'Organizador / Admin',
-      profile_picture_url: '/parque-espana-logo.png'
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
     };
     setSession({
       access_token: 'debug-token-mock',
@@ -274,9 +296,35 @@ const AppContent = () => {
       }
     });
     setUserProfile(debugProfile);
-    // Badge update handled by useEffect
     setLoading(false);
   };
+
+  // STANDALONE LANDING PAGE VIEW (FULL-SCREEN FOR BOTH AUTH & UNAUTH USERS AT /inicio)
+  if (activeView === 'landing' || activeView === 'inicio') {
+    return (
+      <Suspense fallback={<div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando Smash Tenis...</div>}>
+        <LandingPage
+          user={effectiveUser}
+          onOpenAuth={(mode = 'login', role = 'player') => {
+            if (effectiveUser) {
+              setActiveView('dashboard');
+              window.history.pushState({}, '', '/');
+            } else {
+              setAuthMode(mode);
+              setAuthRole(role);
+              setUnauthView('auth');
+              setActiveView('auth');
+            }
+          }}
+          onNavigateDashboard={() => {
+            setActiveView('dashboard');
+            window.history.pushState({}, '', '/');
+          }}
+          onLogout={handleLogout}
+        />
+      </Suspense>
+    );
+  }
 
   if (loading) return <div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando aplicación...</div>;
 
@@ -300,7 +348,10 @@ const AppContent = () => {
         initialMode={authMode}
         initialRole={authRole}
         onLoginSuccess={() => { }}
-        onBackToLanding={() => setUnauthView('landing')}
+        onBackToLanding={() => {
+          setUnauthView('landing');
+          setActiveView('landing');
+        }}
       />
     );
   }

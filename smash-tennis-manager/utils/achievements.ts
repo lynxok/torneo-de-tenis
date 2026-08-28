@@ -1,4 +1,4 @@
-﻿import { UserProfile, PlayerStatsSummary, PlayerAchievement, AchievementTier } from '../types';
+import { UserProfile, PlayerStatsSummary, PlayerAchievement, AchievementTier } from '../types';
 import { getUserRankInfo } from './ranking';
 
 export function calculatePlayerAchievements(
@@ -198,6 +198,24 @@ export function calculatePlayerAchievements(
             },
             badgeColor: 'from-blue-500 to-indigo-600',
             rewardDescription: 'Tarifa preferencial de socio'
+        },
+
+        // 11. Foto Oficial del Circuito
+        {
+            id: 'profile_photo',
+            title: 'Foto Oficial',
+            description: 'Subió su foto de perfil oficial para el circuito y la tarjeta coleccionable.',
+            category: 'community',
+            tier: 'bronze',
+            icon: 'Camera',
+            unlocked: Boolean(user.profile_picture_url && user.profile_picture_url.trim().length > 0),
+            progress: {
+                current: (user.profile_picture_url && user.profile_picture_url.trim().length > 0) ? 1 : 0,
+                max: 1,
+                label: (user.profile_picture_url && user.profile_picture_url.trim().length > 0) ? '¡Foto activa!' : '0/1 foto cargada'
+            },
+            badgeColor: 'from-sky-600 to-blue-800',
+            rewardDescription: '+50 pts de bonus en el Ranking'
         }
     ];
 

@@ -7,6 +7,7 @@ export interface PlayerPointsDetails {
         tournaments: { count: number; points: number };
         wins: { count: number; points: number };
         participation: { count: number; points: number };
+        profilePhoto: { count: number; points: number };
     };
 }
 
@@ -14,19 +15,22 @@ export function calculatePointsDetails(player: UserProfile): PlayerPointsDetails
     const wins = player.matches_won || 0;
     const tourneys = player.tournaments_won || 0;
     const estimatedLosses = Math.floor(wins * 0.5);
+    const hasPhoto = Boolean(player.profile_picture_url && player.profile_picture_url.trim().length > 0);
 
     const pointsFromTournaments = tourneys * 1000;
     const pointsFromWins = wins * 100;
     const pointsFromParticipation = estimatedLosses * 20;
+    const pointsFromProfilePhoto = hasPhoto ? 50 : 0;
 
-    const total = pointsFromTournaments + pointsFromWins + pointsFromParticipation;
+    const total = pointsFromTournaments + pointsFromWins + pointsFromParticipation + pointsFromProfilePhoto;
 
     return {
         total,
         breakdown: {
             tournaments: { count: tourneys, points: pointsFromTournaments },
             wins: { count: wins, points: pointsFromWins },
-            participation: { count: estimatedLosses, points: pointsFromParticipation }
+            participation: { count: estimatedLosses, points: pointsFromParticipation },
+            profilePhoto: { count: hasPhoto ? 1 : 0, points: pointsFromProfilePhoto }
         }
     };
 }
