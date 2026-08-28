@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ExternalLink, Download, User as UserIcon, Building, Award, CheckCircle2 } from 'lucide-react';
+import { X, Building, Award, CheckCircle2 } from 'lucide-react';
 import { formatPlayerName } from '../utils/formatters';
 
 export interface AvatarPreviewModalProps {
@@ -30,23 +30,6 @@ export const AvatarPreviewModal: React.FC<AvatarPreviewModalProps> = ({
   const formattedName = formatPlayerName(name, lastname);
   const hasImage = Boolean(imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0);
 
-  const handleDownload = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!imageUrl) return;
-    const link = document.createElement('a');
-    link.href = imageUrl;
-    link.download = `Foto-${formattedName.replace(/\s+/g, '_')}.jpg`;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    link.click();
-  };
-
-  const handleOpenOriginal = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (!imageUrl) return;
-    window.open(imageUrl, '_blank', 'noopener,noreferrer');
-  };
-
   return (
     <div
       className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200"
@@ -56,17 +39,8 @@ export const AvatarPreviewModal: React.FC<AvatarPreviewModalProps> = ({
         className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col relative"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Top Floating Controls */}
-        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-          {hasImage && (
-            <button
-              onClick={handleOpenOriginal}
-              className="p-2.5 bg-black/50 hover:bg-black/80 rounded-full text-white/80 hover:text-white transition-all backdrop-blur-sm"
-              title="Abrir imagen original"
-            >
-              <ExternalLink size={18} />
-            </button>
-          )}
+        {/* Top Floating Close Button */}
+        <div className="absolute top-4 right-4 z-20">
           <button
             onClick={onClose}
             className="p-2.5 bg-black/50 hover:bg-black/80 rounded-full text-white/80 hover:text-white transition-all backdrop-blur-sm"
@@ -76,8 +50,11 @@ export const AvatarPreviewModal: React.FC<AvatarPreviewModalProps> = ({
           </button>
         </div>
 
-        {/* Image Preview Container */}
-        <div className="relative w-full aspect-square bg-slate-950 flex items-center justify-center overflow-hidden group">
+        {/* Image Preview Container (Protected from Drag/Right Click) */}
+        <div 
+          className="relative w-full aspect-square bg-slate-950 flex items-center justify-center overflow-hidden select-none"
+          onContextMenu={(e) => e.preventDefault()}
+        >
           {/* Subtle Ambient Glow */}
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent z-10 pointer-events-none" />
 
@@ -85,7 +62,8 @@ export const AvatarPreviewModal: React.FC<AvatarPreviewModalProps> = ({
             <img
               src={imageUrl!}
               alt={formattedName}
-              className="w-full h-full object-cover select-none transition-transform duration-300 group-hover:scale-105"
+              draggable={false}
+              className="w-full h-full object-cover select-none pointer-events-none transition-transform duration-300"
             />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-white select-none">
@@ -131,20 +109,10 @@ export const AvatarPreviewModal: React.FC<AvatarPreviewModalProps> = ({
           </div>
 
           {/* Action Buttons */}
-          <div className="pt-2 flex items-center gap-3 border-t border-white/10">
-            {hasImage && (
-              <button
-                onClick={handleDownload}
-                className="flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 border border-white/10"
-              >
-                <Download size={15} /> Descargar Foto
-              </button>
-            )}
+          <div className="pt-2 flex items-center border-t border-white/10">
             <button
               onClick={onClose}
-              className={`py-2.5 px-5 rounded-xl font-bold text-xs transition-all text-dark bg-primary hover:bg-primary-hover shadow-lg shadow-primary/20 ${
-                hasImage ? '' : 'w-full'
-              }`}
+              className="w-full py-2.5 px-5 rounded-xl font-bold text-xs transition-all text-dark bg-primary hover:bg-primary-hover shadow-lg shadow-primary/20"
             >
               Cerrar
             </button>
