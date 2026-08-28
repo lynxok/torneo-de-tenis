@@ -62,6 +62,8 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
     const tileLayerRef = useRef<L.TileLayer | null>(null);
     const markersLayerRef = useRef<L.LayerGroup | null>(null);
     const userLayerRef = useRef<L.LayerGroup | null>(null);
+    const hasInitialFitRef = useRef(false);
+    const prevSelectedIdRef = useRef<string | null>(null);
 
     // Helper Date Formatters
     const formatShortDate = (dateStr?: string) => {
@@ -270,6 +272,11 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         }
     }, [processedTournaments, selectedTournamentId]);
 
+    // Reset initial bounds fitting when filters change
+    useEffect(() => {
+        hasInitialFitRef.current = false;
+    }, [searchQuery, selectedCategory, selectedTier, maxDistanceKm, onlyOpenRegistration]);
+
     // Initialize Leaflet Map
     useEffect(() => {
         if (!mapContainerRef.current || mapInstanceRef.current) return;
@@ -279,6 +286,8 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         const map = L.map(mapContainerRef.current, {
             center: defaultCenter,
             zoom: 11,
+            minZoom: 2,
+            maxZoom: 18,
             zoomControl: false,
             attributionControl: false,
         });
@@ -287,7 +296,8 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         const tileLayer = L.tileLayer(
             'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
             {
-                maxZoom: 16,
+                minZoom: 2,
+                maxZoom: 18,
                 attribution: '&copy; Esri &copy; OpenStreetMap',
             }
         ).addTo(map);
@@ -296,7 +306,8 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         L.tileLayer(
             'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
             {
-                maxZoom: 16,
+                minZoom: 2,
+                maxZoom: 18,
                 attribution: '',
             }
         ).addTo(map);
@@ -661,16 +672,19 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             bounds.extend([userLocation.lat, userLocation.lng]);
         }
 
-        // Initially fit bounds if not manually zooming
-        if (bounds.isValid()) {
+        // Only fit bounds on first load or when user applies filters, never on zoom in/out
+        if (!hasInitialFitRef.current && bounds.isValid()) {
             map.fitBounds(bounds, { padding: [60, 60], maxZoom: 14 });
+            hasInitialFitRef.current = true;
         }
     }, [processedTournaments, selectedTournamentId, userLocation, currentZoom]);
 
-    // Focus Map when selectedTournamentId changes
+    // Focus Map when selectedTournamentId changes externally
     useEffect(() => {
         const map = mapInstanceRef.current;
         if (!map || !selectedTournamentId) return;
+        if (prevSelectedIdRef.current === selectedTournamentId) return;
+        prevSelectedIdRef.current = selectedTournamentId;
 
         const target = processedTournaments.find((t) => t.id === selectedTournamentId);
         if (target) {
@@ -678,7 +692,7 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                 duration: 0.9,
             });
         }
-    }, [selectedTournamentId, processedTournaments]);
+    }, [selectedTournamentId]);
 
     // Global window hooks for popup action clicks
     useEffect(() => {
