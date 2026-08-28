@@ -11,10 +11,20 @@ interface AuthPageProps {
   onLoginSuccess: () => void;
   onDebugLogin?: () => void;
   initialClubId?: string;
+  initialMode?: 'login' | 'register';
+  initialRole?: 'player' | 'admin';
+  onBackToLanding?: () => void;
 }
 
-export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin, initialClubId }) => {
-  const [isLogin, setIsLogin] = useState(false);
+export const AuthPage: React.FC<AuthPageProps> = ({ 
+  onLoginSuccess, 
+  onDebugLogin, 
+  initialClubId,
+  initialMode,
+  initialRole = 'player',
+  onBackToLanding 
+}) => {
+  const [isLogin, setIsLogin] = useState(initialMode ? initialMode === 'login' : false);
   const [loading, setLoading] = useState(false);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const { addToast } = useToast();
@@ -29,14 +39,19 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
     birth_date: '',
     category: '',
     institution_id: initialClubId || '',
-    role: 'player'
+    role: initialRole
   });
 
   useEffect(() => {
     // Check URL parameters for club or mode
     const params = new URLSearchParams(window.location.search);
     const clubParam = params.get('club') || initialClubId;
-    const modeParam = params.get('mode');
+    const modeParam = params.get('mode') || initialMode;
+    const roleParam = params.get('role') || initialRole;
+
+    if (roleParam === 'admin' || roleParam === 'player') {
+      setFormData(prev => ({ ...prev, role: roleParam }));
+    }
 
     if (clubParam) {
       setFormData(prev => ({ ...prev, institution_id: clubParam }));
@@ -50,7 +65,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
     }
 
     api.institutions.getAll().then(setInstitutions).catch(err => console.error("Error loading clubs", err));
-  }, [initialClubId]);
+  }, [initialClubId, initialMode, initialRole]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,8 +161,16 @@ export const AuthPage: React.FC<AuthPageProps> = ({ onLoginSuccess, onDebugLogin
   };
 
   return (
-    <div className="min-h-screen bg-dark flex items-center justify-center p-4">
-      <div className="w-full max-w-md bg-card border border-white/10 rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden my-8">
+    <div className="min-h-screen bg-dark flex flex-col items-center justify-center p-4">
+      {onBackToLanding && (
+        <button
+          onClick={onBackToLanding}
+          className="mb-4 inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-all"
+        >
+          ← Volver a la página principal / Conocer Smash
+        </button>
+      )}
+      <div className="w-full max-w-md bg-card border border-white/10 rounded-3xl p-8 shadow-2xl shadow-black/50 relative overflow-hidden my-4">
 
         <div className="flex flex-col items-center mb-6">
           <img

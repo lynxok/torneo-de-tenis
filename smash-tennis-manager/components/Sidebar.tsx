@@ -11,7 +11,9 @@ import {
   UserCircle,
   BookOpen,
   Sliders,
-  Smartphone
+  Smartphone,
+  Wallet,
+  Globe
 } from 'lucide-react';
 import { UserRole } from '../types';
 import packageInfo from '../package.json';
@@ -139,6 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <NavButton view="admin-users" icon={Users} label="Usuarios" />
             )}
             <NavButton view="admin-institutions" icon={Settings} label="Instituciones" />
+            <NavButton view="pricing-commissions" icon={Wallet} label="Precios y Comisiones" />
             {role === 'superadmin' && (
               <NavButton view="admin-settings" icon={Sliders} label="Ajustes Globales" />
             )}
@@ -158,6 +161,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <NavButton view="tutorials" icon={BookOpen} label="Tutoriales / Ayuda" />
+          <NavButton view="landing" icon={Globe} label="Ver Landing Page" />
 
           <button
             onClick={onLogout}
@@ -169,10 +173,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Footer Branding */}
-        <div className="pt-6 pb-2 flex flex-col items-center justify-center gap-1.5 opacity-50 hover:opacity-90 transition-opacity">
+        <div className="pt-6 pb-2 flex flex-col items-center justify-center gap-2 opacity-70 hover:opacity-100 transition-opacity">
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-muted">Desarrollado por</span>
-            <img src="/lynx-logo-white.png" alt="Lynx" className="h-5 w-auto" />
+            <img src="/lynx-logo-blanco.png" alt="Lynx" className="h-7 w-auto object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]" />
           </div>
           <span className="text-[10px] font-mono text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
             v{packageInfo.version}

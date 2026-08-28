@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
-import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar, Trophy, Medal, LayoutList, Layers, Trash2 } from 'lucide-react';
+import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar, Trophy, Medal, LayoutList, Layers, Trash2, Gift, Sparkles } from 'lucide-react';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
@@ -67,7 +67,11 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         institution_id: '',
         is_member: false,
         member_number: '',
-        member_status: 'active' as 'active' | 'pending' | 'inactive'
+        member_status: 'active' as 'active' | 'pending' | 'inactive',
+        is_membership_active: false,
+        membership_type: 'none' as 'none' | 'vip_permanent' | 'vip_time_limited',
+        membership_months: 6,
+        free_tournaments_remaining: 0
     });
 
     const isSuperAdmin = user?.role === 'superadmin';
@@ -98,7 +102,11 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             institution_id: u.institution_id || '',
             is_member: !!u.is_member,
             member_number: u.member_number || '',
-            member_status: u.member_status || 'active'
+            member_status: u.member_status || 'active',
+            is_membership_active: Boolean(u.is_membership_active),
+            membership_type: (u.membership_type as any) || 'none',
+            membership_months: 6,
+            free_tournaments_remaining: u.free_tournaments_remaining || 0
         });
         setShowEditModal(true);
     };
@@ -124,6 +132,19 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 member_number: editFormData.member_number,
                 member_status: editFormData.member_status || (editFormData.is_member ? 'active' : 'inactive')
             };
+
+            if (isSuperAdmin) {
+                let expiresAt: string | null = null;
+                if (editFormData.membership_type === 'vip_time_limited') {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() + (Number(editFormData.membership_months) || 6));
+                    expiresAt = d.toISOString();
+                }
+                updates.is_membership_active = editFormData.membership_type !== 'none';
+                updates.membership_type = editFormData.membership_type;
+                updates.membership_expires_at = expiresAt;
+                updates.free_tournaments_remaining = Number(editFormData.free_tournaments_remaining) || 0;
+            }
 
             const updatedProfile = await api.auth.updateProfile(editingUser.id, updates);
 
@@ -486,14 +507,28 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                     </div>
                 </td>
                 <td className="p-3.5">
-                    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
-                        u.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                        u.role === 'superadmin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                        u.role === 'professor' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                        'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    }`}>
-                        <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role}
-                    </span>
+                    <div className="flex flex-col items-start gap-1">
+                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+                            u.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+                            u.role === 'superadmin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+                            u.role === 'professor' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+                            'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+                        }`}>
+                            <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role}
+                        </span>
+
+                        {/* VIP & Free Trial Badges */}
+                        {u.is_membership_active && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                <Sparkles size={10} /> {u.membership_type === 'vip_permanent' ? 'VIP Permanente' : 'VIP Temporal'}
+                            </span>
+                        )}
+                        {(u.free_tournaments_remaining || 0) > 0 && !u.is_membership_active && (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                                <Gift size={10} /> {u.free_tournaments_remaining} {u.free_tournaments_remaining === 1 ? 'Torneo Gratis' : 'Torneos Gratis'}
+                            </span>
+                        )}
+                    </div>
                 </td>
                 <td className="p-3.5 text-xs text-slate-300 hidden md:table-cell">
                     {u.institution || <span className="text-muted italic">Sin asignar</span>}
@@ -1154,6 +1189,63 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                             ))}
                                         </select>
                                     </div>
+                                </div>
+                            )}
+
+                            {/* Superadmin VIP & Free Trial Exemptions */}
+                            {isSuperAdmin && (
+                                <div className="pt-4 border-t border-purple-500/30 space-y-3 bg-purple-950/20 p-4 rounded-2xl border border-purple-500/30">
+                                    <div className="flex items-center gap-2 text-purple-400 font-bold text-sm">
+                                        <Gift size={16} /> Beneficios, Membresía VIP & Torneos Gratis (Super Admin)
+                                    </div>
+                                    
+                                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] text-muted uppercase font-bold">Tipo de Membresía</label>
+                                            <select
+                                                className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-purple-400 outline-none"
+                                                value={editFormData.membership_type}
+                                                onChange={e => setEditFormData({
+                                                    ...editFormData,
+                                                    membership_type: e.target.value as any,
+                                                    is_membership_active: e.target.value !== 'none'
+                                                })}
+                                            >
+                                                <option value="none">Estándar (Sin VIP)</option>
+                                                <option value="vip_permanent">👑 VIP Permanente (0% Comisión)</option>
+                                                <option value="vip_time_limited">⏳ VIP Temporal (X Meses)</option>
+                                            </select>
+                                        </div>
+
+                                        {editFormData.membership_type === 'vip_time_limited' && (
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] text-muted uppercase font-bold">Meses de Bonificación</label>
+                                                <input
+                                                    type="number"
+                                                    min={1}
+                                                    max={36}
+                                                    className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-purple-400 outline-none"
+                                                    value={editFormData.membership_months}
+                                                    onChange={e => setEditFormData({ ...editFormData, membership_months: Number(e.target.value) })}
+                                                />
+                                            </div>
+                                        )}
+
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] text-muted uppercase font-bold">Torneos Gratis Restantes</label>
+                                            <input
+                                                type="number"
+                                                min={0}
+                                                max={20}
+                                                className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-cyan-300 text-xs font-bold focus:border-purple-400 outline-none"
+                                                value={editFormData.free_tournaments_remaining}
+                                                onChange={e => setEditFormData({ ...editFormData, free_tournaments_remaining: Number(e.target.value) })}
+                                            />
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-muted">
+                                        Los organizadores VIP o con torneos gratis tendrán 0% de comisión de app al crear torneos.
+                                    </p>
                                 </div>
                             )}
 

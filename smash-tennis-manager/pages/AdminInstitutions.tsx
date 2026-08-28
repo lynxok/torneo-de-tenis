@@ -6,7 +6,7 @@ import { Card } from '../components/ui/Card';
 import { 
     Building, MapPin, Plus, Lightbulb, Sun, X, Save, 
     Instagram, Globe, Phone, Mail, Car, Wifi, Utensils, Droplets, ShoppingBag, Clock, ShieldCheck,
-    ArrowRightLeft, Layers, Info, Award, Trash2, Power, AlertTriangle
+    ArrowRightLeft, Layers, Info, Award, Trash2, Power, AlertTriangle, Gift, Sparkles
 } from 'lucide-react';
 import { CATEGORY_EQUIVALENCES } from '../utils/categories';
 
@@ -20,6 +20,7 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState<Partial<Institution>>({});
   const [activeTab, setActiveTab] = useState('general');
+  const [membershipMonths, setMembershipMonths] = useState(6);
   const [deletingInst, setDeletingInst] = useState<Institution | null>(null);
   const [confirmName, setConfirmName] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
@@ -63,10 +64,23 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
     }
 
     try {
+        const payload: any = { ...formData };
+        if (user?.role === 'superadmin') {
+            let expiresAt: string | null = null;
+            if (payload.membership_type === 'vip_time_limited') {
+                const d = new Date();
+                d.setMonth(d.getMonth() + (Number(membershipMonths) || 6));
+                expiresAt = d.toISOString();
+            }
+            payload.is_membership_active = payload.membership_type && payload.membership_type !== 'none';
+            payload.membership_expires_at = expiresAt;
+            payload.free_tournaments_remaining = Number(payload.free_tournaments_remaining) || 0;
+        }
+
         if (formData.id) {
-            await api.institutions.update(formData.id, formData);
+            await api.institutions.update(formData.id, payload);
         } else {
-            await api.institutions.create(formData);
+            await api.institutions.create(payload);
         }
         setShowModal(false);
         setFormData({});
@@ -77,7 +91,13 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
   };
 
   const openEdit = (inst: Institution) => {
-      setFormData(inst);
+      setFormData({
+          ...inst,
+          is_membership_active: inst.is_membership_active || false,
+          membership_type: inst.membership_type || 'none',
+          free_tournaments_remaining: inst.free_tournaments_remaining ?? 0
+      });
+      setMembershipMonths(6);
       setActiveTab('general');
       setShowModal(true);
   };
@@ -90,8 +110,12 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
           config_booking_min_duration: 60,
           config_match_duration_3_sets: 90,
           config_match_duration_5_sets: 150,
-          config_max_booking_slots: 4
+          config_max_booking_slots: 4,
+          is_membership_active: false,
+          membership_type: 'none',
+          free_tournaments_remaining: 2
       });
+      setMembershipMonths(6);
       setActiveTab('general');
       setShowModal(true);
   };
@@ -273,17 +297,27 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                              )}
                          </div>
                          <div className="pt-1 pr-24">
-                             <div className="flex items-center gap-2">
-                               <h3 className="font-bold text-white text-xl leading-tight mb-1">{inst.name}</h3>
-                               {isInactive && (
-                                   <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold">
-                                       Inactiva
-                                   </span>
-                               )}
-                             </div>
-                             <div className="flex items-center gap-1.5 text-xs text-muted">
-                                 <MapPin size={12} className="text-primary" /> {inst.city}
-                             </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <h3 className="font-bold text-white text-xl leading-tight mb-1">{inst.name}</h3>
+                                {isInactive && (
+                                    <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold">
+                                        Inactiva
+                                    </span>
+                                )}
+                                {inst.is_membership_active && (
+                                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                        <Sparkles size={10} /> {inst.membership_type === 'vip_permanent' ? 'Club VIP Permanente' : 'Club VIP'}
+                                    </span>
+                                )}
+                                {(inst.free_tournaments_remaining || 0) > 0 && !inst.is_membership_active && (
+                                    <span className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 text-[10px] uppercase tracking-wider px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                                        <Gift size={10} /> {inst.free_tournaments_remaining} {inst.free_tournaments_remaining === 1 ? 'Torneo Gratis' : 'Torneos Gratis'}
+                                    </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-1.5 text-xs text-muted">
+                                  <MapPin size={12} className="text-primary" /> {inst.city}
+                              </div>
                          </div>
                     </div>
 
@@ -351,11 +385,14 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                 </div>
                 
                 {/* Tabs */}
-                <div className="flex border-b border-white/10 px-5 bg-white/5" id="inst-form-tabs">
+                <div className="flex border-b border-white/10 px-5 bg-white/5 overflow-x-auto" id="inst-form-tabs">
                     <TabButton id="general" label="General" active={activeTab === 'general'} onClick={setActiveTab} />
                     <TabButton id="location" label="Ubicación" active={activeTab === 'location'} onClick={setActiveTab} />
                     <TabButton id="facilities" label="Instalaciones & Valores" active={activeTab === 'facilities'} onClick={setActiveTab} />
                     <TabButton id="media" label="Configuración" active={activeTab === 'media'} onClick={setActiveTab} />
+                    {user?.role === 'superadmin' && (
+                        <TabButton id="membership" label="👑 Membresía VIP & Trial" active={activeTab === 'membership'} onClick={setActiveTab} />
+                    )}
                 </div>
 
                 {/* Form Body */}
@@ -655,6 +692,68 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {activeTab === 'membership' && user?.role === 'superadmin' && (
+                        <div className="space-y-6">
+                            <div className="bg-purple-950/30 border border-purple-500/30 p-4 rounded-2xl space-y-2">
+                                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                    <Gift className="text-purple-400" /> Beneficios y Membresía del Club
+                                </h4>
+                                <p className="text-xs text-purple-200/80 leading-relaxed">
+                                    Configurar la membresía a nivel Club/Institución aplica automáticamente el beneficio (0% de comisión o cupo de torneos de bienvenida) a <strong>todos los organizadores y profesores</strong> de esta sede al crear torneos.
+                                </p>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Tipo de Membresía del Club</label>
+                                    <select
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-purple-400 text-sm font-bold"
+                                        value={formData.membership_type || 'none'}
+                                        onChange={e => setFormData({
+                                            ...formData,
+                                            membership_type: e.target.value as any,
+                                            is_membership_active: e.target.value !== 'none'
+                                        })}
+                                    >
+                                        <option value="none">Estándar (Sin VIP - Aplica Matriz de Comisiones)</option>
+                                        <option value="vip_permanent">👑 Club VIP Permanente (0% Comisión Siempre)</option>
+                                        <option value="vip_time_limited">⏳ Club VIP Temporal (0% Comisión por X Meses)</option>
+                                    </select>
+                                </div>
+
+                                {formData.membership_type === 'vip_time_limited' && (
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold">Meses de Bonificación</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={36}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-purple-400 text-sm font-bold"
+                                            value={membershipMonths}
+                                            onChange={e => setMembershipMonths(Number(e.target.value))}
+                                        />
+                                    </div>
+                                )}
+
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Torneos Gratis Restantes (Free Trial del Club)</label>
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={20}
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-cyan-300 font-mono text-sm font-bold focus:outline-none focus:border-purple-400"
+                                        value={formData.free_tournaments_remaining ?? 0}
+                                        onChange={e => setFormData({
+                                            ...formData,
+                                            free_tournaments_remaining: Number(e.target.value)
+                                        })}
+                                    />
+                                    <p className="text-[10px] text-muted">Cupos de prueba gratuitos compartidos por los organizadores de esta sede.</p>
+                                </div>
+                            </div>
                         </div>
                     )}
 

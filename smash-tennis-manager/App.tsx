@@ -49,6 +49,8 @@ const Reports = lazyRetry(() => import('./pages/Reports').then(m => ({ default: 
 const AdminUsers = lazyRetry(() => import('./pages/AdminUsers').then(m => ({ default: m.AdminUsers })), 'AdminUsers');
 const AdminInstitutions = lazyRetry(() => import('./pages/AdminInstitutions').then(m => ({ default: m.AdminInstitutions })), 'AdminInstitutions');
 const AdminSettings = lazyRetry(() => import('./pages/AdminSettings').then(m => ({ default: m.AdminSettings })), 'AdminSettings');
+const PricingAndCommissions = lazyRetry(() => import('./pages/PricingAndCommissions').then(m => ({ default: m.PricingAndCommissions })), 'PricingAndCommissions');
+const LandingPage = lazyRetry(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage');
 
 export const VALID_VIEWS = [
   'dashboard',
@@ -60,10 +62,13 @@ export const VALID_VIEWS = [
   'bookings',
   'messages',
   'reports',
+  'pricing-commissions',
   'admin-users',
   'admin-institutions',
   'admin-settings',
-  'tutorials'
+  'tutorials',
+  'landing',
+  'inicio'
 ];
 
 const AppContent = () => {
@@ -74,6 +79,11 @@ const AppContent = () => {
   const [loading, setLoading] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0); // New State for Messages
+
+  // Unauthenticated Navigation State (Landing vs Auth form)
+  const [unauthView, setUnauthView] = useState<'landing' | 'auth'>('landing');
+  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
+  const [authRole, setAuthRole] = useState<'player' | 'admin'>('player');
 
   // Super Admin Debug State
   const [simulatedRole, setSimulatedRole] = useState<UserRole | null>(null);
@@ -100,6 +110,7 @@ const AppContent = () => {
         fetchProfile(session.user.id);
         checkUrlRedirects();
       } else {
+        checkUnauthUrlRedirects();
         setLoading(false);
       }
     });
@@ -116,19 +127,50 @@ const AppContent = () => {
         setHasSelectedRole(false);
         setUnreadCount(0);
         fetchingProfileUserIdRef.current = null;
+        checkUnauthUrlRedirects();
       }
     });
 
     return () => subscription.unsubscribe();
   }, []);
 
+  const checkUnauthUrlRedirects = () => {
+    const params = new URLSearchParams(window.location.search);
+    const pathname = window.location.pathname.toLowerCase();
+    const modeParam = params.get('mode');
+    const roleParam = params.get('role');
+    const clubParam = params.get('club') || params.get('c');
+    const viewParam = params.get('view');
+
+    const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
+
+    if (isExplicitInicio) {
+      setUnauthView('landing');
+      return;
+    }
+
+    if (modeParam === 'login' || modeParam === 'register' || clubParam || viewParam === 'auth' || viewParam === 'login' || viewParam === 'register') {
+      setUnauthView('auth');
+      if (modeParam === 'register' || viewParam === 'register') setAuthMode('register');
+      if (modeParam === 'login' || viewParam === 'login') setAuthMode('login');
+      if (roleParam === 'admin' || roleParam === 'player') setAuthRole(roleParam as any);
+    } else {
+      setUnauthView('landing');
+    }
+  };
+
   const checkUrlRedirects = () => {
     const params = new URLSearchParams(window.location.search);
+    const pathname = window.location.pathname.toLowerCase();
     const tournamentId = params.get('tournament') || params.get('t');
     const clubId = params.get('club') || params.get('institution') || params.get('c');
     const viewParam = params.get('view');
 
-    if (tournamentId) {
+    const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
+
+    if (isExplicitInicio) {
+      setActiveView('landing');
+    } else if (tournamentId) {
       setActiveView('tournament-detail');
       setNavData(tournamentId);
     } else if (clubId) {
@@ -247,7 +289,28 @@ const AppContent = () => {
   if (loading) return <div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando aplicación...</div>;
 
   if (!session || !userProfile || !effectiveUser) {
-    return <AuthPage onLoginSuccess={() => { }} />;
+    if (unauthView === 'landing') {
+      return (
+        <Suspense fallback={<div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando Smash Tenis...</div>}>
+          <LandingPage
+            onOpenAuth={(mode = 'login', role = 'player') => {
+              setAuthMode(mode);
+              setAuthRole(role);
+              setUnauthView('auth');
+            }}
+          />
+        </Suspense>
+      );
+    }
+
+    return (
+      <AuthPage
+        initialMode={authMode}
+        initialRole={authRole}
+        onLoginSuccess={() => { }}
+        onBackToLanding={() => setUnauthView('landing')}
+      />
+    );
   }
 
   // INTERCEPTOR: Super Admin Role Selection
@@ -406,6 +469,9 @@ const AppContent = () => {
                 />
               )}
               {activeView === 'reports' && <Reports user={effectiveUser} />}
+              {activeView === 'pricing-commissions' && (
+                <PricingAndCommissions user={effectiveUser} onNavigate={handleNavigate} />
+              )}
               {activeView === 'admin-users' && <AdminUsers user={effectiveUser} />}
               {activeView === 'admin-institutions' && <AdminInstitutions user={effectiveUser} />}
               {activeView === 'admin-settings' && <AdminSettings user={effectiveUser} />}
@@ -415,6 +481,13 @@ const AppContent = () => {
                 <TutorialsPage
                   user={effectiveUser}
                   onStartTutorial={handleStartTutorial}
+                />
+              )}
+
+              {/* Landing Page Preview for logged-in users */}
+              {(activeView === 'landing' || activeView === 'inicio') && (
+                <LandingPage
+                  onOpenAuth={() => {}}
                 />
               )}
 

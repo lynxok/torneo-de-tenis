@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Tournament, UserProfile, Institution } from '../types';
+import { Tournament, UserProfile, Institution, TournamentSaga } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2 } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
-import { getTournamentTier } from '../utils/tournamentTiers';
+import { getTournamentTier, TIER_META, TIER_ORDER, getEffectiveTournamentTier, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
 
 interface TournamentsProps {
     user: UserProfile;
@@ -49,6 +49,12 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
     const [isUpdating, setIsUpdating] = useState(false);
     const [currentInstitution, setCurrentInstitution] = useState<Institution | null>(null);
 
+    // Sagas & Tier State
+    const [sagas, setSagas] = useState<TournamentSaga[]>([]);
+    const [selectedSagaId, setSelectedSagaId] = useState<string>('');
+    const [selectedTierKey, setSelectedTierKey] = useState<'challenger' | '250' | '500' | '1000' | 'masters'>('challenger');
+    const [systemConfig, setSystemConfig] = useState<any>(DEFAULT_TIER_CONFIG);
+
     // Create Modal State
     const [newTournament, setNewTournament] = useState<Partial<Tournament>>({
         name: '',
@@ -68,7 +74,9 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
             api.institutions.getById(user.institution_id).then(inst => {
                 if (inst) setCurrentInstitution(inst);
             }).catch(() => {});
+            api.sagas.getByInstitution(user.institution_id).then(setSagas).catch(() => {});
         }
+        api.settings.getConfig().then(cfg => setSystemConfig({ ...DEFAULT_TIER_CONFIG, ...cfg })).catch(() => {});
     }, [user.institution_id]);
 
     const loadTournaments = async () => {
@@ -83,6 +91,24 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
         }
     };
 
+    // When a saga is selected in create modal, auto-suggest name and evaluate tier
+    const handleSelectSaga = (sagaId: string) => {
+        setSelectedSagaId(sagaId);
+        if (!sagaId) {
+            setSelectedTierKey('challenger');
+            return;
+        }
+        const found = sagas.find(s => s.id === sagaId);
+        if (found) {
+            const nextEdition = (found.total_editions || 0) + 1;
+            setNewTournament(prev => ({
+                ...prev,
+                name: prev.name && !prev.name.includes('Edición') ? prev.name : `${found.name} - Edición ${nextEdition}`
+            }));
+            setSelectedTierKey(found.current_tier || 'challenger');
+        }
+    };
+
     const handleTournamentClick = (t: Tournament) => {
         // Admins and Professors can enter any tournament detail view without category warnings
         if (user.role === 'admin' || user.role === 'superadmin' || user.role === 'professor') {
@@ -93,38 +119,51 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
         // Updated Logic for Multi-Competition
         let isCategoryCompatible = false;
         let isHigherCategory = false;
+        const userRank = getCategoryRank(user.category || '');
 
-        if (t.competitions && t.competitions.length > 0) {
-            // Check against all sub-competitions
-            const userRank = getCategoryRank(user.category || '');
+        const hasCompetitions = t.competitions && t.competitions.length > 0;
 
-            for (const comp of t.competitions) {
-                // Find the lowest rank in this competition (e.g. if 1ra+2da, rank is 2 (2da))
-                const compRanks = comp.allowed_categories.map(getCategoryRank);
-                const minRank = Math.min(...compRanks); // Best category (lowest number)
-                const maxRank = Math.max(...compRanks); // Worst category (highest number)
+        if (hasCompetitions) {
+            const matchingComps = t.competitions!.filter(comp => {
+                if (comp.gender !== 'X' && user.gender) {
+                    const matchGender = (comp.gender === 'M' && (user.gender.toLowerCase() === 'masculino' || user.gender.toLowerCase() === 'm')) ||
+                                        (comp.gender === 'F' && (user.gender.toLowerCase() === 'femenino' || user.gender.toLowerCase() === 'f'));
+                    if (!matchGender) return false;
+                }
+                return true;
+            });
 
-                if (userRank <= maxRank) isCategoryCompatible = true; // User is equal or better than the worst in group
-                if (userRank > minRank) isHigherCategory = true; // User is worse than the best in group (Challenger)
+            if (matchingComps.length === 0) {
+                setWarningTournament(t);
+                return;
+            }
+
+            const canPlayAny = matchingComps.some(comp => {
+                return comp.allowed_categories.some(cat => {
+                    const catRank = getCategoryRank(cat);
+                    return userRank >= catRank;
+                });
+            });
+
+            if (!canPlayAny) {
+                setWarningTournament(t);
+                return;
             }
         } else {
-            // Legacy Check
-            const userRank = getCategoryRank(user.category || '');
-            const tourneyRank = getCategoryRank(t.category);
+            const tournamentRank = getCategoryRank(t.category);
+            isCategoryCompatible = userRank >= tournamentRank;
+            isHigherCategory = userRank < tournamentRank;
 
-            if (user.category === t.category) isCategoryCompatible = true;
-            if (t.category === 'Open') isCategoryCompatible = true;
-
-            // Simple logic for demo:
-            if (userRank === tourneyRank) isCategoryCompatible = true;
-            if (userRank > tourneyRank) isHigherCategory = true;
+            if (isHigherCategory) {
+                setWarningTournament(t);
+                return;
+            }
         }
 
-        // Simplified navigation for now
         onNavigate && onNavigate('tournament-detail', t.id);
     };
 
-    // Admin create function
+    // Admin create function with Saga & Tier evaluation
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
@@ -138,13 +177,33 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                 return;
             }
 
+            const selectedSaga = sagas.find(s => s.id === selectedSagaId);
+            const tierCalc = getEffectiveTournamentTier(
+                12,
+                selectedTierKey,
+                selectedSaga,
+                tournaments,
+                systemConfig,
+                user
+            );
+
             await api.tournaments.create({ 
                 ...newTournament, 
                 institution_id: targetInstitutionId,
-                created_by: user.id
+                created_by: user.id,
+                saga_id: selectedSagaId || null,
+                edition_number: selectedSaga ? (selectedSaga.total_editions || 0) + 1 : 1,
+                tier_applied: selectedTierKey,
+                is_direct_jump: tierCalc.isDirectJump,
+                commission_rate_applied: tierCalc.effectiveFeePct,
+                is_trial_free: tierCalc.isTrialFree,
+                is_disputed: false
             });
+
             addToast("Torneo creado exitosamente", 'success');
             setShowCreateModal(false);
+            setSelectedSagaId('');
+            setSelectedTierKey('challenger');
             loadTournaments();
         } catch (e: any) {
             console.error("Error al crear torneo:", e);
@@ -449,13 +508,19 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                                 <div className="space-y-2 text-sm border-t border-white/5 pt-3 mt-auto">
                                                     {(() => {
                                                         const countsForRanking = t.counts_for_ranking !== false && (!t.rules || t.rules.counts_for_ranking !== false);
-                                                        const tier = getTournamentTier(t.players?.length || 12);
+                                                        const tierMeta = t.tier_applied ? (TIER_META[t.tier_applied] || TIER_META.challenger) : null;
+                                                        const tier = t.tier_applied ? getTierInfoByKey(t.tier_applied, systemConfig) : getTournamentTier(t.players?.length || 12);
+                                                        const badgeColor = tierMeta ? tierMeta.badgeColor : tier.badgeColor;
+                                                        const textColor = tierMeta ? tierMeta.textColor : tier.textColor;
+                                                        const borderColor = tierMeta ? tierMeta.borderColor : tier.borderColor;
+                                                        const label = tierMeta ? tierMeta.label : tier.label;
+
                                                         return (
                                                             <div className="flex justify-between items-center pb-1">
                                                                 <span className="text-muted text-xs">Circuito</span>
                                                                 {countsForRanking ? (
-                                                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${tier.badgeColor} ${tier.textColor} ${tier.borderColor}`}>
-                                                                        {tier.label} • {tier.pointsWinner} pts
+                                                                    <span className={`px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider border ${badgeColor} ${textColor} ${borderColor}`}>
+                                                                        {label} • {tier.pointsWinner} pts
                                                                     </span>
                                                                 ) : (
                                                                     <span className="px-2 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wider bg-slate-800 text-slate-400 border border-white/10" title="Este torneo no suma puntos para el ranking global oficial">
@@ -538,6 +603,110 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                                     </select>
                                 </div>
                             )}
+
+                            {/* Saga Selector */}
+                            <div className="space-y-1">
+                                <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5"><Layers size={14} className="text-primary" /> Saga / Serie del Torneo</span>
+                                    <span className="text-[10px] text-primary font-normal">Opcional para ascender de nivel</span>
+                                </label>
+                                <select
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm"
+                                    value={selectedSagaId}
+                                    onChange={e => handleSelectSaga(e.target.value)}
+                                >
+                                    <option value="">-- Torneo Independiente (Sin Saga) --</option>
+                                    {sagas.map(s => (
+                                        <option key={s.id} value={s.id}>
+                                            {s.name} (Edición {(s.total_editions || 0) + 1} • Nivel: {TIER_META[s.current_tier]?.shortLabel || 'Challenger'})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Tier / Categoria ATP Selector */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                    <span className="flex items-center gap-1.5"><Trophy size={14} className="text-amber-400" /> Categoría ATP del Torneo</span>
+                                </label>
+                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                                    {TIER_ORDER.map(tKey => {
+                                        const meta = TIER_META[tKey];
+                                        const isSelected = selectedTierKey === tKey;
+                                        return (
+                                            <button
+                                                key={tKey}
+                                                type="button"
+                                                onClick={() => setSelectedTierKey(tKey)}
+                                                className={`p-2 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center gap-0.5 ${
+                                                    isSelected 
+                                                        ? `${meta.badgeColor} ${meta.borderColor} ${meta.textColor} ring-2 ring-primary/40 scale-[1.02]`
+                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                                                }`}
+                                            >
+                                                <span className="text-base">{meta.icon}</span>
+                                                <span className="text-[10px] leading-tight">{meta.shortLabel}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Commission & Free Trial Status Banner */}
+                            {(() => {
+                                const selectedSaga = sagas.find(s => s.id === selectedSagaId);
+                                const activeInst = user.role === 'superadmin' && newTournament.institution_id
+                                    ? institutions.find(i => i.id === newTournament.institution_id)
+                                    : currentInstitution;
+
+                                const tierCalc = getEffectiveTournamentTier(
+                                    12,
+                                    selectedTierKey,
+                                    selectedSaga,
+                                    tournaments,
+                                    systemConfig,
+                                    user,
+                                    activeInst
+                                );
+
+                                const trialRemaining = Math.max(
+                                    user.free_tournaments_remaining || 0,
+                                    activeInst?.free_tournaments_remaining || 0
+                                );
+
+                                return (
+                                    <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
+                                        tierCalc.isTrialFree
+                                            ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-200'
+                                            : tierCalc.isVipWaived
+                                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                                                : tierCalc.isDirectJump
+                                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                                                    : 'bg-green-500/10 border-green-500/30 text-green-200'
+                                    }`}>
+                                        {tierCalc.isTrialFree && <Gift size={18} className="text-cyan-400 shrink-0" />}
+                                        {tierCalc.isVipWaived && <Sparkles size={18} className="text-emerald-400 shrink-0" />}
+                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaived && tierCalc.isDirectJump && <Zap size={18} className="text-amber-400 shrink-0" />}
+                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaived && !tierCalc.isDirectJump && <Award size={18} className="text-green-400 shrink-0" />}
+
+                                        <div className="flex-1 leading-tight">
+                                            <div className="font-bold text-[11px] uppercase tracking-wider">
+                                                {tierCalc.isTrialFree 
+                                                    ? `🎉 Torneo de Bienvenida Bonificado (0% Comisión • Te quedan ${trialRemaining} ${trialRemaining === 1 ? 'cupo' : 'cupos'})`
+                                                    : tierCalc.isVipWaived 
+                                                        ? '👑 Membresía VIP Bonificada (0% Comisión)'
+                                                        : tierCalc.isDirectJump 
+                                                            ? `⚡ Salto Directo a ${tierCalc.tierInfo.label} (${tierCalc.effectiveFeePct}% Comisión)`
+                                                            : `✓ Tarifa Bonificada por Mérito / Saga (${tierCalc.effectiveFeePct}% Comisión)`
+                                                }
+                                            </div>
+                                            <div className="text-[10px] text-slate-300 mt-0.5">
+                                                {tierCalc.tierInfo.pointsWinner} puntos al campeón • Convocatoria: {tierCalc.tierInfo.minPlayers}{tierCalc.tierInfo.maxPlayers ? `-${tierCalc.tierInfo.maxPlayers}` : '+'} jugadores
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
 
                             <div className="space-y-1">
                                 <label className="text-xs text-muted uppercase font-bold">Nombre del Torneo</label>

@@ -11,6 +11,31 @@ export interface UserClubMembership {
   joined_date?: string;
 }
 
+export interface PromoCode {
+  id: string;
+  code: string;
+  description?: string;
+  free_tournaments_count: number;
+  max_uses?: number;
+  current_uses: number;
+  is_active: boolean;
+  expires_at?: string;
+  created_by?: string;
+  created_at?: string;
+}
+
+export interface TournamentSaga {
+  id: string;
+  name: string;
+  institution_id?: string;
+  created_by?: string;
+  current_tier: 'challenger' | '250' | '500' | '1000' | 'masters';
+  total_editions: number;
+  last_edition_date?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface UserProfile {
   id: string;
   email: string;
@@ -33,6 +58,14 @@ export interface UserProfile {
   tournaments_won?: number;
   profile_picture_url?: string; // New field for Drive Image
   show_whatsapp?: boolean; // Privacy setting: allow others to contact via WhatsApp
+
+  // Organizer Benefits & Trial
+  promo_code_used?: string;
+  free_tournaments_remaining?: number;
+  free_tournaments_disputed?: number;
+  membership_type?: 'standard' | 'trial' | 'vip_time_limited' | 'vip_permanent';
+  membership_expires_at?: string;
+  is_membership_active?: boolean;
 }
 
 export interface SystemConfig {
@@ -45,25 +78,38 @@ export interface SystemConfig {
     welcome_message?: string; // New: Welcome message for new users
     junior_age_threshold?: number; // Age threshold to classify as junior (default: 16)
 
-    // Smash Tour Tiering (Modelo A: Por Convocatoria)
+    // Smash Tour Tiering (Modelo A: Por Convocatoria y Sagas)
+    tier_challenger_points?: number;
+    tier_challenger_min_players?: number;
+    tier_challenger_max_players?: number;
+    tier_challenger_fee_pct?: number;
+
     tier_250_min_players?: number;
     tier_250_max_players?: number;
     tier_250_points?: number;
-    tier_250_fee_pct?: number;
+    tier_250_fee_pct?: number; // Tarifa bonificada por mérito (ej: 5%)
+    tier_250_direct_fee_pct?: number; // Salto directo (ej: 6%)
 
     tier_500_min_players?: number;
     tier_500_max_players?: number;
     tier_500_points?: number;
-    tier_500_fee_pct?: number;
+    tier_500_fee_pct?: number; // Tarifa bonificada por mérito (ej: 5%)
+    tier_500_direct_fee_pct?: number; // Salto directo (ej: 7%)
 
     tier_1000_min_players?: number;
     tier_1000_max_players?: number;
     tier_1000_points?: number;
-    tier_1000_fee_pct?: number;
+    tier_1000_fee_pct?: number; // Tarifa bonificada por mérito (ej: 5%)
+    tier_1000_direct_fee_pct?: number; // Salto directo (ej: 8%)
 
     tier_masters_min_players?: number;
     tier_masters_points?: number;
-    tier_masters_fee_pct?: number;
+    tier_masters_fee_pct?: number; // Tarifa bonificada por mérito (ej: 5%)
+    tier_masters_direct_fee_pct?: number; // Salto directo (ej: 10%)
+
+    // Progression & Epic Cadence Rules
+    saga_cooldown_days?: number; // Default 180 days
+    disputed_min_matches?: number; // Default 2 matches
 
     // Platform Monetization Settings
     monetization_base_fee_fixed?: number; // Fee fijo por inscripto (opcional)
@@ -72,13 +118,14 @@ export interface SystemConfig {
 }
 
 export interface TournamentTierInfo {
-    tierKey: '250' | '500' | '1000' | 'masters';
+    tierKey: 'challenger' | '250' | '500' | '1000' | 'masters';
     label: string;
     badgeColor: string;
     textColor: string;
     borderColor: string;
     pointsWinner: number;
     feePercentage: number;
+    directFeePercentage?: number;
     minPlayers: number;
     maxPlayers?: number;
 }
@@ -158,6 +205,13 @@ export interface Institution {
   
   category_system?: 'numeric' | 'letters'; // Configuration for category nomenclature
   is_active?: boolean;
+
+  // Club Membership & Free Trial (SaaS Benefits)
+  is_membership_active?: boolean;
+  membership_type?: 'none' | 'vip_permanent' | 'vip_time_limited';
+  membership_expires_at?: string | null;
+  free_tournaments_remaining?: number;
+  free_tournaments_disputed?: number;
 }
 
 // New Interface for Sub-Competitions (Merged Categories)
@@ -210,6 +264,16 @@ export interface Tournament {
 
   // ATP Point Defense Logic
   previous_edition_id?: string; // ID of the tournament from last year
+
+  // Saga & Multi-Edition Tracking
+  saga_id?: string;
+  sagas?: TournamentSaga;
+  edition_number?: number;
+  tier_applied?: 'challenger' | '250' | '500' | '1000' | 'masters';
+  is_direct_jump?: boolean;
+  commission_rate_applied?: number;
+  is_trial_free?: boolean;
+  is_disputed?: boolean;
 }
 
 export interface TournamentGroup {

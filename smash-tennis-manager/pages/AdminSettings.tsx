@@ -1,12 +1,13 @@
 
 import React, { useEffect, useState } from 'react';
-import { UserProfile, SystemConfig } from '../types';
+import { UserProfile, SystemConfig, PromoCode } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
 import { 
     Sliders, Cloud, Lock, Save, Folder, Info, CheckCircle2, AlertTriangle, Key, MessageCircle,
-    Trophy, DollarSign, Percent, Calculator, Sparkles, TrendingUp, Wallet, ArrowRight, ShieldCheck, Layers, Users, Calendar
+    Trophy, DollarSign, Percent, Calculator, Sparkles, TrendingUp, Wallet, ArrowRight, ShieldCheck, Layers, Users, Calendar,
+    Gift, Plus, Trash2, ToggleLeft, ToggleRight, Clock, Award, Zap
 } from 'lucide-react';
 import { DEFAULT_TIER_CONFIG, calculateTournamentFinances } from '../utils/tournamentTiers';
 
@@ -28,6 +29,16 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
     const [saving, setSaving] = useState(false);
     const { addToast } = useToast();
 
+    // Promo Codes Management State
+    const [promoCodes, setPromoCodes] = useState<PromoCode[]>([]);
+    const [newPromoCode, setNewPromoCode] = useState({
+        code: '',
+        free_tournaments_count: 2,
+        max_uses: 10,
+        expires_at: ''
+    });
+    const [creatingCode, setCreatingCode] = useState(false);
+
     // Live Monetization Simulator State
     const [simPlayers, setSimPlayers] = useState<number>(24);
     const [simPrice, setSimPrice] = useState<number>(20000);
@@ -43,7 +54,60 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
             });
             setLoading(false);
         });
+        loadPromoCodes();
     }, [user]);
+
+    const loadPromoCodes = async () => {
+        try {
+            const codes = await api.promoCodes.list();
+            setPromoCodes(codes);
+        } catch (err) {
+            console.error("Error loading promo codes:", err);
+        }
+    };
+
+    const handleCreatePromoCode = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newPromoCode.code.trim()) return;
+        setCreatingCode(true);
+        try {
+            await api.promoCodes.create({
+                code: newPromoCode.code.trim().toUpperCase(),
+                free_tournaments_count: Number(newPromoCode.free_tournaments_count) || 2,
+                max_uses: Number(newPromoCode.max_uses) || 1,
+                expires_at: newPromoCode.expires_at ? new Date(newPromoCode.expires_at).toISOString() : null,
+                created_by: user.id
+            });
+            addToast("Código promocional creado correctamente", 'success');
+            setNewPromoCode({ code: '', free_tournaments_count: 2, max_uses: 10, expires_at: '' });
+            loadPromoCodes();
+        } catch (err: any) {
+            addToast(err?.message || "Error al crear código", 'error');
+        } finally {
+            setCreatingCode(false);
+        }
+    };
+
+    const handleTogglePromoCode = async (id: string, currentActive: boolean) => {
+        try {
+            await api.promoCodes.toggleActive(id, !currentActive);
+            addToast(`Código ${!currentActive ? 'activado' : 'desactivado'}`, 'success');
+            loadPromoCodes();
+        } catch (err: any) {
+            addToast(err?.message || "Error al actualizar código", 'error');
+        }
+    };
+
+    const handleDeletePromoCode = async (id: string) => {
+        if (!confirm("¿Eliminar este código promocional?")) return;
+        try {
+            await api.promoCodes.delete(id);
+            addToast("Código eliminado", 'success');
+            loadPromoCodes();
+        } catch (err: any) {
+            addToast(err?.message || "Error al eliminar código", 'error');
+        }
+    };
 
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -211,7 +275,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                 <Trophy className="text-amber-400" /> Categorías de Torneo (Circuito Smash Tour)
                             </h3>
                             <p className="text-xs text-slate-300 mt-1">
-                                Escala de niveles estilo ATP basada en el <strong>Modelo A (Convocatoria y Métricas Reales)</strong>.
+                                Escala de niveles estilo ATP por mérito y saga.
                             </p>
                         </div>
                         <span className="px-2.5 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1">
@@ -220,6 +284,51 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                     </div>
 
                     <div className="space-y-6">
+                        {/* SMASH CHALLENGER */}
+                        <div className="bg-sidebar/60 border border-slate-500/30 rounded-2xl p-4 space-y-3">
+                            <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                                <div className="flex items-center gap-2">
+                                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-500/20 text-slate-300 border border-slate-500/40">
+                                        🎾 Smash Challenger
+                                    </span>
+                                    <span className="text-xs text-slate-300 font-medium">Nivel Inicial / Torneos de Inauguración</span>
+                                </div>
+                                <span className="text-xs text-muted font-mono">{config.tier_challenger_points ?? 125} pts Campeón</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Mín. Inscriptos</label>
+                                    <input
+                                        type="number"
+                                        min={2}
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
+                                        value={config.tier_challenger_min_players ?? 4}
+                                        onChange={e => setConfig({ ...config, tier_challenger_min_players: Number(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Máx. Inscriptos</label>
+                                    <input
+                                        type="number"
+                                        min={4}
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
+                                        value={config.tier_challenger_max_players ?? 16}
+                                        onChange={e => setConfig({ ...config, tier_challenger_max_players: Number(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Puntos al Campeón</label>
+                                    <input
+                                        type="number"
+                                        min={50}
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-slate-300 text-xs font-bold focus:border-primary outline-none"
+                                        value={config.tier_challenger_points ?? 125}
+                                        onChange={e => setConfig({ ...config, tier_challenger_points: Number(e.target.value) })}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
                         {/* SMASH 250 */}
                         <div className="bg-sidebar/60 border border-cyan-500/30 rounded-2xl p-4 space-y-3">
                             <div className="flex justify-between items-center border-b border-white/10 pb-2">
@@ -238,7 +347,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                         type="number"
                                         min={3}
                                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
-                                        value={config.tier_250_min_players ?? 6}
+                                        value={config.tier_250_min_players ?? 17}
                                         onChange={e => setConfig({ ...config, tier_250_min_players: Number(e.target.value) })}
                                     />
                                 </div>
@@ -248,7 +357,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                         type="number"
                                         min={4}
                                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
-                                        value={config.tier_250_max_players ?? 16}
+                                        value={config.tier_250_max_players ?? 32}
                                         onChange={e => setConfig({ ...config, tier_250_max_players: Number(e.target.value) })}
                                     />
                                 </div>
@@ -283,7 +392,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                         type="number"
                                         min={10}
                                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
-                                        value={config.tier_500_min_players ?? 17}
+                                        value={config.tier_500_min_players ?? 33}
                                         onChange={e => setConfig({ ...config, tier_500_min_players: Number(e.target.value) })}
                                     />
                                 </div>
@@ -293,7 +402,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                         type="number"
                                         min={16}
                                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
-                                        value={config.tier_500_max_players ?? 32}
+                                        value={config.tier_500_max_players ?? 64}
                                         onChange={e => setConfig({ ...config, tier_500_max_players: Number(e.target.value) })}
                                     />
                                 </div>
@@ -328,7 +437,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                         type="number"
                                         min={20}
                                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
-                                        value={config.tier_1000_min_players ?? 33}
+                                        value={config.tier_1000_min_players ?? 65}
                                         onChange={e => setConfig({ ...config, tier_1000_min_players: Number(e.target.value) })}
                                     />
                                 </div>
@@ -338,7 +447,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                         type="number"
                                         min={32}
                                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
-                                        value={config.tier_1000_max_players ?? 64}
+                                        value={config.tier_1000_max_players ?? 128}
                                         onChange={e => setConfig({ ...config, tier_1000_max_players: Number(e.target.value) })}
                                     />
                                 </div>
@@ -362,7 +471,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                     <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                                         👑 Master Final
                                     </span>
-                                    <span className="text-xs text-slate-300 font-medium">Torneo de Maestros (Top 8 del Año)</span>
+                                    <span className="text-xs text-slate-300 font-medium">Torneo de Maestros (Top del Año)</span>
                                 </div>
                                 <span className="text-xs text-muted font-mono">{config.tier_masters_points ?? 1500} pts Campeón</span>
                             </div>
@@ -372,7 +481,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                     <input
                                         type="number"
                                         min={4}
-                                        max={16}
+                                        max={32}
                                         className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-bold focus:border-primary outline-none"
                                         value={config.tier_masters_min_players ?? 8}
                                         onChange={e => setConfig({ ...config, tier_masters_min_players: Number(e.target.value) })}
@@ -390,6 +499,30 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                 </div>
                             </div>
                         </div>
+
+                        {/* REGLA DE CADENCIA ÉPICA (180 DÍAS) */}
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                            <div className="space-y-1">
+                                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                    <Clock size={16} className="text-amber-400" /> Cadencia Épica entre Ediciones de Sagas (Días)
+                                </h4>
+                                <p className="text-xs text-amber-200/80">
+                                    Días mínimos requeridos entre torneos de una misma saga para computar mérito y ascender de nivel.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="number"
+                                    min={30}
+                                    max={365}
+                                    step={10}
+                                    className="w-24 bg-slate-900 border border-white/15 rounded-xl p-2.5 text-amber-300 text-sm font-mono font-bold text-center focus:border-primary outline-none"
+                                    value={config.tier_cadence_days ?? 180}
+                                    onChange={e => setConfig({ ...config, tier_cadence_days: Number(e.target.value) })}
+                                />
+                                <span className="text-xs font-bold text-muted">días</span>
+                            </div>
+                        </div>
                     </div>
                 </Card>
 
@@ -398,10 +531,10 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                     <div className="border-b border-white/10 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                         <div>
                             <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                                <Wallet className="text-green-400" /> Modelo de Monetización y Comisiones (% Take Rate)
+                                <Wallet className="text-green-400" /> Matriz de Comisiones (% Take Rate)
                             </h3>
                             <p className="text-xs text-slate-300 mt-1">
-                                Configura el porcentaje de comisión que la aplicación retiene o factura por cada jugador inscripto.
+                                Tarifa Bonificada por Mérito vs. Tasa de Salto Directo a Nivel Superior.
                             </p>
                         </div>
                         <span className="px-2.5 py-1 bg-green-500/20 text-green-300 border border-green-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1">
@@ -410,93 +543,190 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                     </div>
 
                     <div className="space-y-6">
-                        {/* Commission Grid */}
-                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                            <div className="bg-sidebar/60 border border-cyan-500/20 rounded-2xl p-3.5 space-y-1.5">
+                        {/* Dual Rate Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            
+                            {/* Challenger */}
+                            <div className="bg-sidebar/60 border border-slate-500/20 rounded-2xl p-3.5 space-y-2">
+                                <div className="text-[10px] text-muted uppercase font-bold flex items-center justify-between">
+                                    <span>Challenger</span>
+                                    <span>🎾</span>
+                                </div>
+                                <div>
+                                    <label className="text-[10px] text-green-400 font-bold block mb-1">Por Mérito</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-xs focus:border-primary outline-none"
+                                            value={config.monetization_fee_pct ?? 5}
+                                            onChange={e => setConfig({ ...config, monetization_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Smash 250 */}
+                            <div className="bg-sidebar/60 border border-cyan-500/20 rounded-2xl p-3.5 space-y-2">
                                 <div className="text-[10px] text-muted uppercase font-bold flex items-center justify-between">
                                     <span>Smash 250</span>
-                                    <span className="text-cyan-400">🥉</span>
+                                    <span>🥉</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        min={0}
-                                        max={100}
-                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-sm focus:border-primary outline-none"
-                                        value={config.tier_250_fee_pct ?? 5}
-                                        onChange={e => setConfig({ ...config, tier_250_fee_pct: Number(e.target.value) })}
-                                    />
-                                    <span className="text-muted font-bold text-sm">%</span>
+                                <div>
+                                    <label className="text-[10px] text-green-400 font-bold block mb-1">Por Mérito</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_250_fee_pct ?? 5}
+                                            onChange={e => setConfig({ ...config, tier_250_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
                                 </div>
-                                <p className="text-[10px] text-muted">Comisión estándar</p>
+                                <div>
+                                    <label className="text-[10px] text-amber-400 font-bold block mb-1">Salto Directo</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-amber-500/20 rounded-xl p-2 text-amber-300 font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_250_direct_fee_pct ?? 6}
+                                            onChange={e => setConfig({ ...config, tier_250_direct_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="bg-sidebar/60 border border-purple-500/20 rounded-2xl p-3.5 space-y-1.5">
+                            {/* Smash 500 */}
+                            <div className="bg-sidebar/60 border border-purple-500/20 rounded-2xl p-3.5 space-y-2">
                                 <div className="text-[10px] text-muted uppercase font-bold flex items-center justify-between">
                                     <span>Smash 500</span>
-                                    <span className="text-purple-400">🥈</span>
+                                    <span>🥈</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        min={0}
-                                        max={100}
-                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-sm focus:border-primary outline-none"
-                                        value={config.tier_500_fee_pct ?? 7.5}
-                                        onChange={e => setConfig({ ...config, tier_500_fee_pct: Number(e.target.value) })}
-                                    />
-                                    <span className="text-muted font-bold text-sm">%</span>
+                                <div>
+                                    <label className="text-[10px] text-green-400 font-bold block mb-1">Por Mérito</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_500_fee_pct ?? 5}
+                                            onChange={e => setConfig({ ...config, tier_500_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
                                 </div>
-                                <p className="text-[10px] text-muted">Comisión media</p>
+                                <div>
+                                    <label className="text-[10px] text-amber-400 font-bold block mb-1">Salto Directo</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-amber-500/20 rounded-xl p-2 text-amber-300 font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_500_direct_fee_pct ?? 7}
+                                            onChange={e => setConfig({ ...config, tier_500_direct_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="bg-sidebar/60 border border-amber-500/20 rounded-2xl p-3.5 space-y-1.5">
+                            {/* Smash 1000 */}
+                            <div className="bg-sidebar/60 border border-amber-500/20 rounded-2xl p-3.5 space-y-2">
                                 <div className="text-[10px] text-muted uppercase font-bold flex items-center justify-between">
                                     <span>Smash 1000</span>
-                                    <span className="text-amber-400">🥇</span>
+                                    <span>🥇</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        min={0}
-                                        max={100}
-                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-sm focus:border-primary outline-none"
-                                        value={config.tier_1000_fee_pct ?? 10}
-                                        onChange={e => setConfig({ ...config, tier_1000_fee_pct: Number(e.target.value) })}
-                                    />
-                                    <span className="text-muted font-bold text-sm">%</span>
+                                <div>
+                                    <label className="text-[10px] text-green-400 font-bold block mb-1">Por Mérito</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_1000_fee_pct ?? 4}
+                                            onChange={e => setConfig({ ...config, tier_1000_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
                                 </div>
-                                <p className="text-[10px] text-muted">Comisión mayor</p>
+                                <div>
+                                    <label className="text-[10px] text-amber-400 font-bold block mb-1">Salto Directo</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-amber-500/20 rounded-xl p-2 text-amber-300 font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_1000_direct_fee_pct ?? 8}
+                                            onChange={e => setConfig({ ...config, tier_1000_direct_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div className="bg-sidebar/60 border border-emerald-500/20 rounded-2xl p-3.5 space-y-1.5">
+                            {/* Masters */}
+                            <div className="bg-sidebar/60 border border-emerald-500/20 rounded-2xl p-3.5 space-y-2">
                                 <div className="text-[10px] text-muted uppercase font-bold flex items-center justify-between">
                                     <span>Master Final</span>
-                                    <span className="text-emerald-400">👑</span>
+                                    <span>👑</span>
                                 </div>
-                                <div className="flex items-center gap-1.5">
-                                    <input
-                                        type="number"
-                                        step="0.5"
-                                        min={0}
-                                        max={100}
-                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-sm focus:border-primary outline-none"
-                                        value={config.tier_masters_fee_pct ?? 12}
-                                        onChange={e => setConfig({ ...config, tier_masters_fee_pct: Number(e.target.value) })}
-                                    />
-                                    <span className="text-muted font-bold text-sm">%</span>
+                                <div>
+                                    <label className="text-[10px] text-green-400 font-bold block mb-1">Por Mérito</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_masters_fee_pct ?? 4}
+                                            onChange={e => setConfig({ ...config, tier_masters_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
                                 </div>
-                                <p className="text-[10px] text-muted">Torneo especial</p>
+                                <div>
+                                    <label className="text-[10px] text-amber-400 font-bold block mb-1">Salto Directo</label>
+                                    <div className="flex items-center gap-1">
+                                        <input
+                                            type="number"
+                                            step="0.5"
+                                            min={0}
+                                            max={100}
+                                            className="w-full bg-slate-900 border border-amber-500/20 rounded-xl p-2 text-amber-300 font-bold text-xs focus:border-primary outline-none"
+                                            value={config.tier_masters_direct_fee_pct ?? 10}
+                                            onChange={e => setConfig({ ...config, tier_masters_direct_fee_pct: Number(e.target.value) })}
+                                        />
+                                        <span className="text-muted text-xs">%</span>
+                                    </div>
+                                </div>
                             </div>
+
                         </div>
 
-                        {/* Optional Fixed Base Fee & Payout Details */}
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                        {/* Extra Settings & Simulator Inputs */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
                             <div className="space-y-1">
-                                <label className="text-xs text-muted uppercase font-bold">Fee Fijo Base / Jugador (Opcional)</label>
+                                <label className="text-xs text-muted uppercase font-bold">Cargo Fijo Base por Jugador ($)</label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">$</span>
                                     <input
@@ -513,7 +743,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                             </div>
 
                             <div className="space-y-1">
-                                <label className="text-xs text-muted uppercase font-bold">Alias Mercado Pago / CVU de Cobro</label>
+                                <label className="text-xs text-muted uppercase font-bold">Alias Mercado Pago / CVU</label>
                                 <input
                                     type="text"
                                     placeholder="ej: smash.torneos.mp"
@@ -521,7 +751,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                     value={config.platform_payout_alias || ''}
                                     onChange={e => setConfig({ ...config, platform_payout_alias: e.target.value })}
                                 />
-                                <p className="text-[10px] text-muted">Para transferencias y liquidaciones de los clubes.</p>
+                                <p className="text-[10px] text-muted">Para transferencias de clubes.</p>
                             </div>
 
                             <div className="space-y-1">
@@ -533,7 +763,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                     value={config.platform_payout_holder || ''}
                                     onChange={e => setConfig({ ...config, platform_payout_holder: e.target.value })}
                                 />
-                                <p className="text-[10px] text-muted">Nombre que verán los clubes al transferir.</p>
+                                <p className="text-[10px] text-muted">Nombre visible al transferir.</p>
                             </div>
                         </div>
 
@@ -624,6 +854,149 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                 </div>
                             );
                         })()}
+                    </div>
+                </Card>
+
+                {/* PROMO CODES MANAGEMENT (FREE TRIAL 2 TORNEOS) */}
+                <Card className="border-purple-500/30 bg-gradient-to-br from-purple-950/20 via-card to-card">
+                    <div className="border-b border-white/10 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                        <div>
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Gift className="text-purple-400" /> Códigos Promocionales (Free Trial 2 Torneos)
+                            </h3>
+                            <p className="text-xs text-slate-300 mt-1">
+                                Genera y administra códigos de invitación para otorgar torneos gratuitos de bienvenida a nuevos clubes.
+                            </p>
+                        </div>
+                        <span className="px-2.5 py-1 bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-xl text-[11px] font-bold flex items-center gap-1">
+                            <Sparkles size={12} /> {promoCodes.length} Códigos Registrados
+                        </span>
+                    </div>
+
+                    <div className="space-y-6">
+                        {/* New Code Form */}
+                        <div className="bg-sidebar/80 border border-purple-500/20 p-4 rounded-2xl space-y-3">
+                            <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                                <Plus size={14} className="text-purple-400" /> Crear Nuevo Código de Invitación
+                            </h4>
+                            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Código *</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: BIENVENIDA2026"
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white font-mono font-bold text-xs uppercase focus:border-purple-400 outline-none"
+                                        value={newPromoCode.code}
+                                        onChange={e => setNewPromoCode({ ...newPromoCode, code: e.target.value.toUpperCase() })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Torneos Gratis</label>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={10}
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white font-bold text-xs focus:border-purple-400 outline-none"
+                                        value={newPromoCode.free_tournaments_count}
+                                        onChange={e => setNewPromoCode({ ...newPromoCode, free_tournaments_count: Number(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Usos Máximos</label>
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white font-bold text-xs focus:border-purple-400 outline-none"
+                                        value={newPromoCode.max_uses}
+                                        onChange={e => setNewPromoCode({ ...newPromoCode, max_uses: Number(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Vencimiento (Opcional)</label>
+                                    <input
+                                        type="date"
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs focus:border-purple-400 outline-none"
+                                        value={newPromoCode.expires_at}
+                                        onChange={e => setNewPromoCode({ ...newPromoCode, expires_at: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end pt-1">
+                                <button
+                                    type="button"
+                                    onClick={handleCreatePromoCode}
+                                    disabled={creatingCode || !newPromoCode.code.trim()}
+                                    className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-purple-600/20 disabled:opacity-50"
+                                >
+                                    <Plus size={14} /> {creatingCode ? 'Creando...' : 'Generar Código'}
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Codes Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead>
+                                    <tr className="border-b border-white/10 text-muted font-bold uppercase text-[10px]">
+                                        <th className="pb-2">Código</th>
+                                        <th className="pb-2">Torneos Gratis</th>
+                                        <th className="pb-2">Usos</th>
+                                        <th className="pb-2">Vencimiento</th>
+                                        <th className="pb-2">Estado</th>
+                                        <th className="pb-2 text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {promoCodes.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={6} className="py-6 text-center text-muted">
+                                                No hay códigos promocionales creados.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        promoCodes.map(code => (
+                                            <tr key={code.id} className="hover:bg-white/5 transition-colors">
+                                                <td className="py-3 font-mono font-bold text-white text-sm">
+                                                    {code.code}
+                                                </td>
+                                                <td className="py-3 text-cyan-300 font-bold">
+                                                    {code.free_tournaments_count} torneos
+                                                </td>
+                                                <td className="py-3 text-slate-300">
+                                                    <span className="font-bold text-white">{code.times_used}</span> / {code.max_uses}
+                                                </td>
+                                                <td className="py-3 text-muted">
+                                                    {code.expires_at ? new Date(code.expires_at).toLocaleDateString() : 'Sin Vto.'}
+                                                </td>
+                                                <td className="py-3">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleTogglePromoCode(code.id, code.is_active)}
+                                                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-colors ${
+                                                            code.is_active
+                                                                ? 'bg-green-500/20 text-green-300 border-green-500/40'
+                                                                : 'bg-red-500/20 text-red-300 border-red-500/40'
+                                                        }`}
+                                                    >
+                                                        {code.is_active ? 'Activo' : 'Inactivo'}
+                                                    </button>
+                                                </td>
+                                                <td className="py-3 text-right">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => handleDeletePromoCode(code.id)}
+                                                        className="p-1.5 rounded-lg text-red-400 hover:bg-red-500/20 transition-colors"
+                                                        title="Eliminar código"
+                                                    >
+                                                        <Trash2 size={15} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </Card>
 

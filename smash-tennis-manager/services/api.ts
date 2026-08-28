@@ -1,6 +1,6 @@
 
 import { supabase } from './supabaseClient';
-import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, StoryLayer, MatchmakingPost } from '../types';
+import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, StoryLayer, MatchmakingPost, PromoCode, TournamentSaga } from '../types';
 import { formatPlayerName } from '../utils/formatters';
 
 export const api = {
@@ -705,6 +705,103 @@ export const api = {
             const { data, error } = await supabase.from('tournaments').update(updates).eq('id', id).select().single();
             if (error) throw error;
             return data;
+        },
+        async checkAndMarkDisputed(tournamentId: string) {
+            try {
+                if (!tournamentId) return;
+                // Contar partidos jugados
+                const { count, error: countErr } = await supabase
+                    .from('matches')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('tournament_id', tournamentId)
+                    .eq('is_played', true);
+
+                if (countErr || (count || 0) < 2) return;
+
+                // El torneo alcanzó al menos 2 partidos jugados!
+                const { data: tourney, error: tErr } = await supabase
+                    .from('tournaments')
+                    .select('id, is_disputed, is_trial_free, created_by, institution_id, saga_id')
+                    .eq('id', tournamentId)
+                    .single();
+
+                if (tErr || !tourney || tourney.is_disputed) return;
+
+                // 1. Marcar torneo como disputado
+                try {
+                    await supabase.from('tournaments').update({ is_disputed: true }).eq('id', tournamentId);
+                } catch (e) {
+                    console.warn("Update tournament is_disputed fallback:", e);
+                }
+
+                // 2. Si era torneo de prueba gratuita, descontar 1 cupo del creador y del club
+                if (tourney.is_trial_free) {
+                    if (tourney.created_by) {
+                        try {
+                            const { data: creator } = await supabase
+                                .from('profiles')
+                                .select('free_tournaments_remaining, free_tournaments_disputed')
+                                .eq('id', tourney.created_by)
+                                .single();
+
+                            if (creator && (creator.free_tournaments_remaining || 0) > 0) {
+                                const newRemaining = Math.max(0, (creator.free_tournaments_remaining || 0) - 1);
+                                const newDisputed = (creator.free_tournaments_disputed || 0) + 1;
+                                await supabase.from('profiles').update({
+                                    free_tournaments_remaining: newRemaining,
+                                    free_tournaments_disputed: newDisputed
+                                }).eq('id', tourney.created_by);
+                            }
+                        } catch (e) {
+                            console.warn("Trial deduction creator fallback:", e);
+                        }
+                    }
+
+                    if (tourney.institution_id) {
+                        try {
+                            const { data: inst } = await supabase
+                                .from('institutions')
+                                .select('free_tournaments_remaining, free_tournaments_disputed')
+                                .eq('id', tourney.institution_id)
+                                .single();
+
+                            if (inst && (inst.free_tournaments_remaining || 0) > 0) {
+                                const newRemaining = Math.max(0, (inst.free_tournaments_remaining || 0) - 1);
+                                const newDisputed = (inst.free_tournaments_disputed || 0) + 1;
+                                await supabase.from('institutions').update({
+                                    free_tournaments_remaining: newRemaining,
+                                    free_tournaments_disputed: newDisputed
+                                }).eq('id', tourney.institution_id);
+                            }
+                        } catch (e) {
+                            console.warn("Trial deduction institution fallback:", e);
+                        }
+                    }
+                }
+
+                // 3. Si pertenece a una saga, actualizar métricas de la saga
+                if (tourney.saga_id) {
+                    try {
+                        const { data: saga } = await supabase
+                            .from('tournament_sagas')
+                            .select('total_editions')
+                            .eq('id', tourney.saga_id)
+                            .single();
+
+                        if (saga) {
+                            await supabase.from('tournament_sagas').update({
+                                last_edition_date: new Date().toISOString(),
+                                total_editions: (saga.total_editions || 0) + 1,
+                                updated_at: new Date().toISOString()
+                            }).eq('id', tourney.saga_id);
+                        }
+                    } catch (e) {
+                        console.warn("Saga edition count update fallback:", e);
+                    }
+                }
+            } catch (err) {
+                console.warn("checkAndMarkDisputed error:", err);
+            }
         },
         async delete(id: string) {
             // 1. Desvincular torneos que tengan a este como edición previa
@@ -1440,6 +1537,11 @@ export const api = {
                 if (fallbackErr) throw fallbackErr;
             }
 
+            // Check if tournament now qualifies as formally disputed (>=2 played matches)
+            if (matchData?.tournament_id) {
+                api.tournaments.checkAndMarkDisputed(matchData.tournament_id);
+            }
+
             return true;
         },
 
@@ -1502,6 +1604,11 @@ export const api = {
                 } catch (e) {
                     console.warn("Error awarding points on confirmation:", e);
                 }
+            }
+
+            // Check if tournament now qualifies as formally disputed (>=2 played matches)
+            if (matchData?.tournament_id) {
+                api.tournaments.checkAndMarkDisputed(matchData.tournament_id);
             }
 
             return true;
@@ -3172,6 +3279,243 @@ export const api = {
                     rankingHistory: []
                 };
             }
+        }
+    },
+    promoCodes: {
+        async redeemPromoCode(code: string, userId: string) {
+            const cleanCode = (code || '').trim().toUpperCase();
+            if (!cleanCode) throw new Error("Debes ingresar un código promocional válido.");
+
+            // 1. Buscar código
+            const { data: promo, error: pError } = await supabase
+                .from('promo_codes')
+                .select('*')
+                .eq('code', cleanCode)
+                .single();
+
+            if (pError || !promo) {
+                throw new Error("El código promocional ingresado no existe o es inválido.");
+            }
+
+            if (!promo.is_active) {
+                throw new Error("Este código promocional ya no se encuentra activo.");
+            }
+
+            if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+                throw new Error("Este código promocional ha expirado.");
+            }
+
+            if (promo.max_uses && (promo.current_uses || 0) >= promo.max_uses) {
+                throw new Error("Este código promocional ha alcanzado su límite máximo de usos.");
+            }
+
+            // 2. Verificar que el usuario no lo haya usado ya
+            const { data: userProfile, error: uError } = await supabase
+                .from('profiles')
+                .select('promo_code_used, free_tournaments_remaining')
+                .eq('id', userId)
+                .single();
+
+            if (uError) throw uError;
+
+            if (userProfile?.promo_code_used) {
+                throw new Error(`Ya has canjeado un código de bienvenida anteriormente (${userProfile.promo_code_used}).`);
+            }
+
+            const freeCount = promo.free_tournaments_count || 2;
+
+            // 3. Actualizar perfil del organizador
+            const { error: updateProfErr } = await supabase
+                .from('profiles')
+                .update({
+                    promo_code_used: cleanCode,
+                    free_tournaments_remaining: freeCount,
+                    free_tournaments_disputed: 0,
+                    membership_type: 'trial',
+                    is_membership_active: true
+                })
+                .eq('id', userId);
+
+            if (updateProfErr) throw updateProfErr;
+
+            // 3b. Si el usuario pertenece a un club, sincronizar los torneos gratuitos a nivel Institución
+            try {
+                const { data: prof } = await supabase.from('profiles').select('institution_id').eq('id', userId).single();
+                if (prof?.institution_id) {
+                    await supabase.from('institutions').update({
+                        promo_code_used: cleanCode,
+                        free_tournaments_remaining: freeCount,
+                        free_tournaments_disputed: 0,
+                        membership_type: 'trial',
+                        is_membership_active: true
+                    }).eq('id', prof.institution_id);
+                }
+            } catch (instIgn) {
+                console.warn("Could not sync promo code to institution (non-blocking):", instIgn);
+            }
+
+            // 4. Incrementar usos en promo_codes
+            try {
+                await supabase
+                    .from('promo_codes')
+                    .update({ current_uses: (promo.current_uses || 0) + 1 })
+                    .eq('id', promo.id);
+            } catch (ign) {}
+
+            return {
+                success: true,
+                free_tournaments_count: freeCount,
+                message: `¡Código ${cleanCode} canjeado con éxito! Tienes ${freeCount} torneos gratuitos para organizar.`
+            };
+        },
+
+        async list() {
+            const { data, error } = await supabase
+                .from('promo_codes')
+                .select('*')
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.warn("promo_codes list warning:", error);
+                return [];
+            }
+            return data as PromoCode[];
+        },
+
+        async create(payload: Partial<PromoCode>) {
+            const cleanCode = (payload.code || '').trim().toUpperCase();
+            const { data, error } = await supabase
+                .from('promo_codes')
+                .insert({
+                    ...payload,
+                    code: cleanCode,
+                    current_uses: 0,
+                    is_active: payload.is_active !== false
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data as PromoCode;
+        },
+
+        async toggleActive(id: string, is_active: boolean) {
+            const { data, error } = await supabase
+                .from('promo_codes')
+                .update({ is_active })
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+
+        async delete(id: string) {
+            const { error } = await supabase
+                .from('promo_codes')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
+            return true;
+        }
+    },
+
+    sagas: {
+        async getByInstitution(institutionId: string) {
+            const { data, error } = await supabase
+                .from('tournament_sagas')
+                .select('*')
+                .eq('institution_id', institutionId)
+                .order('name', { ascending: true });
+
+            if (error) {
+                console.warn("tournament_sagas getByInstitution warning:", error);
+                return [];
+            }
+            return data as TournamentSaga[];
+        },
+
+        async getById(id: string) {
+            const { data, error } = await supabase
+                .from('tournament_sagas')
+                .select('*, tournaments(*)')
+                .eq('id', id)
+                .single();
+
+            if (error) throw error;
+            return data;
+        },
+
+        async create(payload: { name: string; institution_id: string; created_by: string; current_tier?: string }) {
+            const { data, error } = await supabase
+                .from('tournament_sagas')
+                .insert({
+                    name: payload.name.trim(),
+                    institution_id: payload.institution_id,
+                    created_by: payload.created_by,
+                    current_tier: payload.current_tier || 'challenger',
+                    total_editions: 0
+                })
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data as TournamentSaga;
+        },
+
+        async update(id: string, updates: Partial<TournamentSaga>) {
+            const { data, error } = await supabase
+                .from('tournament_sagas')
+                .update({
+                    ...updates,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('id', id)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return data as TournamentSaga;
+        },
+
+        async delete(id: string) {
+            // Desvincular torneos de la saga
+            try {
+                await supabase.from('tournaments').update({ saga_id: null }).eq('saga_id', id);
+            } catch (ign) {}
+
+            const { error } = await supabase.from('tournament_sagas').delete().eq('id', id);
+            if (error) throw error;
+            return true;
+        }
+    },
+
+    organizers: {
+        async updateMembership(
+            userId: string,
+            data: {
+                membership_type: 'standard' | 'trial' | 'vip_time_limited' | 'vip_permanent';
+                membership_expires_at?: string | null;
+                is_membership_active: boolean;
+                free_tournaments_remaining?: number;
+            }
+        ) {
+            const { data: updated, error } = await supabase
+                .from('profiles')
+                .update({
+                    membership_type: data.membership_type,
+                    membership_expires_at: data.membership_expires_at || null,
+                    is_membership_active: data.is_membership_active,
+                    free_tournaments_remaining: data.free_tournaments_remaining !== undefined ? data.free_tournaments_remaining : undefined
+                })
+                .eq('id', userId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return updated;
         }
     }
 };
