@@ -243,6 +243,25 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         }
     };
 
+    const handleApproveOrganizer = async (targetUser: UserProfile) => {
+        const fullName = formatPlayerName(targetUser.name, targetUser.lastname);
+        if (!confirm(`¿Confirmas la autorización de ${fullName} como Organizador / Administrador de tu club?`)) return;
+        setProcessingApproval(true);
+        try {
+            await api.auth.updateProfile(targetUser.id, {
+                is_approved: true,
+                member_status: 'active',
+                role: 'admin'
+            });
+            alert(`¡${fullName} ha sido aprobado exitosamente como Organizador de tu institución!`);
+            loadUsers();
+        } catch (e: any) {
+            alert('Error al autorizar organizador: ' + e.message);
+        } finally {
+            setProcessingApproval(false);
+        }
+    };
+
     const handleRejectRequest = async (userId: string) => {
         if (!confirm('¿Estás seguro de rechazar y desvincular esta solicitud?')) return;
         try {
@@ -687,7 +706,14 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                 {(u.name || 'U').charAt(0).toUpperCase()}
                                             </div>
                                             <div>
-                                                <h4 className="font-bold text-white text-base">{formatPlayerName(u.name, u.lastname)}</h4>
+                                                <div className="flex items-center gap-2">
+                                                    <h4 className="font-bold text-white text-base">{formatPlayerName(u.name, u.lastname)}</h4>
+                                                    {u.role === 'admin' && (
+                                                        <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] px-2 py-0.5 rounded-full font-bold uppercase flex items-center gap-1">
+                                                            <Shield size={10} /> Organizador / Staff
+                                                        </span>
+                                                    )}
+                                                </div>
                                                 <p className="text-xs text-muted">{u.email}</p>
                                                 <div className="flex items-center gap-3 mt-1 text-xs text-slate-300">
                                                     {u.phone && <span className="flex items-center gap-1"><Phone size={12} className="text-green-400" /> {u.phone}</span>}
@@ -781,12 +807,12 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                             </div>
                                         </div>
                                     ) : (
-                                        <div className="flex items-center justify-between pt-3 border-t border-white/10 mt-auto">
+                                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-3 border-t border-white/10 mt-auto">
                                             <span className="text-xs text-muted">
                                                 Club solicitado: <strong className="text-white">{u.institution || 'Sin club'}</strong>
                                             </span>
 
-                                            <div className="flex gap-2">
+                                            <div className="flex flex-wrap gap-2">
                                                 <button
                                                     onClick={() => openEditModal(u)}
                                                     className="px-3 py-1.5 rounded-xl border border-blue-500/30 text-blue-400 hover:bg-blue-500/10 text-xs font-semibold transition-colors flex items-center gap-1"
@@ -799,18 +825,29 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                                 >
                                                     Rechazar
                                                 </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setApprovingUserId(u.id);
-                                                        setApprovalCategory(u.category || '4ta');
-                                                        setApprovalMemberNumber(u.member_number || '');
-                                                        setApprovalInstitutionId(u.institution_id || '');
-                                                        setApprovalIsMember(true);
-                                                    }}
-                                                    className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-lg shadow-primary/20 transition-all"
-                                                >
-                                                    <CheckCheck size={14} /> Revisar y Aprobar
-                                                </button>
+
+                                                {u.role === 'admin' ? (
+                                                    <button
+                                                        onClick={() => handleApproveOrganizer(u)}
+                                                        disabled={processingApproval}
+                                                        className="px-4 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-lg shadow-purple-600/20 transition-all"
+                                                    >
+                                                        <Shield size={14} /> Autorizar como Organizador
+                                                    </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={() => {
+                                                            setApprovingUserId(u.id);
+                                                            setApprovalCategory(u.category || '4ta');
+                                                            setApprovalMemberNumber(u.member_number || '');
+                                                            setApprovalInstitutionId(u.institution_id || '');
+                                                            setApprovalIsMember(true);
+                                                        }}
+                                                        className="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-lg shadow-primary/20 transition-all"
+                                                    >
+                                                        <CheckCheck size={14} /> Revisar y Aprobar
+                                                    </button>
+                                                )}
                                             </div>
                                         </div>
                                     )}

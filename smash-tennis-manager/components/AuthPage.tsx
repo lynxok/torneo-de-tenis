@@ -26,6 +26,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [isLogin, setIsLogin] = useState(initialMode ? initialMode === 'login' : false);
   const [loading, setLoading] = useState(false);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
+  const [organizerAction, setOrganizerAction] = useState<'create_club' | 'join_club'>('create_club');
   const { addToast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -108,12 +109,69 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     // --- REGISTRATION: CLUB / ORGANIZADOR ---
     if (formData.role === 'admin') {
-      const cleanClubName = formData.club_name.trim();
-      const cleanClubCity = formData.club_city.trim();
       const cleanName = formData.name.trim();
       const cleanLastname = formData.lastname.trim();
       const cleanPhone = formData.phone.trim();
       const cleanEmail = formData.email.trim();
+
+      if (!cleanName || cleanName.length < 2) {
+        addToast('Por favor ingresa tu Nombre (mínimo 2 letras).', 'error');
+        return;
+      }
+
+      if (!cleanLastname || cleanLastname.length < 2) {
+        addToast('Por favor ingresa tu Apellido.', 'error');
+        return;
+      }
+
+      if (!cleanPhone || cleanPhone.length < 6) {
+        addToast('Por favor ingresa el WhatsApp / Teléfono de contacto oficial.', 'error');
+        return;
+      }
+
+      if (!cleanEmail || !formData.password || formData.password.length < 6) {
+        addToast('Por favor ingresa un Email válido y una Contraseña de al menos 6 caracteres.', 'error');
+        return;
+      }
+
+      // CASO A: SUMARSE COMO ORGANIZADOR A UN CLUB EXISTENTE
+      if (organizerAction === 'join_club') {
+        if (!formData.institution_id) {
+          addToast('Por favor selecciona el Club o Institución al que perteneces.', 'error');
+          return;
+        }
+
+        const targetClub = institutions.find(i => i.id === formData.institution_id);
+        const targetClubName = targetClub?.name || 'la institución seleccionada';
+
+        setLoading(true);
+        try {
+          const { error: authError } = await api.auth.signUp(cleanEmail, formData.password, {
+            name: cleanName,
+            lastname: cleanLastname,
+            phone: cleanPhone,
+            role: 'admin',
+            institution_id: formData.institution_id,
+            is_approved: false, // Debe ser validado y aprobado por el responsable de esa institución
+            is_member: true,
+            member_status: 'pending'
+          });
+
+          if (authError) throw authError;
+
+          addToast(`📋 ¡Solicitud enviada! El responsable principal de "${targetClubName}" debe autorizar tu acceso desde su panel de control.`, 'success');
+          setIsLogin(true);
+        } catch (err: any) {
+          addToast(err.message || 'Error al enviar la solicitud de organizador', 'error');
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      // CASO B: CREAR NUEVA INSTITUCIÓN / CLUB (FUNDADOR)
+      const cleanClubName = formData.club_name.trim();
+      const cleanClubCity = formData.club_city.trim();
       const cleanPromo = formData.promo_code.trim().toUpperCase();
 
       if (!cleanClubName || cleanClubName.length < 3) {
@@ -123,21 +181,6 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
       if (!cleanClubCity || cleanClubCity.length < 3) {
         addToast('Por favor ingresa la Ciudad y Provincia del Club.', 'error');
-        return;
-      }
-
-      if (!cleanName || cleanName.length < 2) {
-        addToast('Por favor ingresa el Nombre del Responsable.', 'error');
-        return;
-      }
-
-      if (!cleanLastname || cleanLastname.length < 2) {
-        addToast('Por favor ingresa el Apellido del Responsable.', 'error');
-        return;
-      }
-
-      if (!cleanPhone || cleanPhone.length < 6) {
-        addToast('Por favor ingresa el WhatsApp / Teléfono de contacto oficial.', 'error');
         return;
       }
 
@@ -336,7 +379,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                 }`}
               >
                 <Shield size={16} />
-                <span>🛡️ Registrar mi Club</span>
+                <span>🛡️ Organizador / Club</span>
               </button>
 
               <button
@@ -357,173 +400,307 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && formData.role === 'admin' && (
-            /* --- FORMULARIO DE REGISTRO DE CLUB --- */
+            /* --- FORMULARIO DE REGISTRO DE ORGANIZADOR / CLUB --- */
             <div className="space-y-3.5 animate-fade-in">
-              <div className="p-3 bg-white/[0.02] border border-white/5 rounded-2xl space-y-3">
-                <div className="text-[11px] font-bold text-[#e15b34] uppercase tracking-wider flex items-center gap-1.5">
-                  <Building2 size={14} /> 1. Datos del Club o Sede
-                </div>
+              {/* Sub-selector: Crear Club vs Sumarme a Club Existente */}
+              <div className="flex p-1 bg-black/40 rounded-xl border border-white/10 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setOrganizerAction('create_club')}
+                  className={`flex-1 py-2 px-2.5 rounded-lg font-bold transition-all text-center ${
+                    organizerAction === 'create_club'
+                      ? 'bg-[#e15b34] text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  ➕ Crear Nueva Institución
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrganizerAction('join_club')}
+                  className={`flex-1 py-2 px-2.5 rounded-lg font-bold transition-all text-center ${
+                    organizerAction === 'join_club'
+                      ? 'bg-purple-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  🤝 Sumarme a Club Existente
+                </button>
+              </div>
 
-                <div>
-                  <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                    Nombre del Club / Complejo *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Ej: Club Tenis Parque España"
-                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                    required
-                    value={formData.club_name}
-                    onChange={e => setFormData({ ...formData, club_name: e.target.value })}
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1">
-                      <MapPin size={12} className="text-primary" /> Ciudad y Provincia *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Paraná, Entre Ríos"
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                      required
-                      value={formData.club_city}
-                      onChange={e => setFormData({ ...formData, club_city: e.target.value })}
-                    />
+              {organizerAction === 'join_club' ? (
+                /* --- CASO 1: SUMARME A CLUB EXISTENTE --- */
+                <div className="p-3.5 bg-white/[0.02] border border-purple-500/30 rounded-2xl space-y-3">
+                  <div className="text-[11px] font-bold text-purple-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 size={14} /> 1. Selecciona el Club o Institución
                   </div>
 
                   <div>
                     <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                      Dirección (Opcional)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Av. Costanera 450"
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                      value={formData.club_address}
-                      onChange={e => setFormData({ ...formData, club_address: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                      Cant. Canchas
+                      Club / Sede Oficial *
                     </label>
                     <select
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:border-primary focus:outline-none text-xs cursor-pointer"
-                      value={formData.club_courts_count}
-                      onChange={e => setFormData({ ...formData, club_courts_count: Number(e.target.value) })}
+                      required
+                      className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-purple-400 focus:outline-none transition-colors text-sm"
+                      value={formData.institution_id}
+                      onChange={e => setFormData({ ...formData, institution_id: e.target.value })}
                     >
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20].map(n => (
-                        <option key={n} value={n}>{n} {n === 1 ? 'Cancha' : 'Canchas'}</option>
+                      <option value="">-- Selecciona el Club / Institución --</option>
+                      {institutions.map(inst => (
+                        <option key={inst.id} value={inst.id}>
+                          {inst.name} {inst.city ? `(${inst.city})` : ''}
+                        </option>
                       ))}
                     </select>
+
+                    {/* Botón de redirección si el club no figura en la lista */}
+                    <div className="mt-2.5 p-2 rounded-lg bg-black/40 border border-white/5 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400">¿Tu club no figura en la lista?</span>
+                      <button
+                        type="button"
+                        onClick={() => setOrganizerAction('create_club')}
+                        className="text-[#e15b34] font-bold hover:underline cursor-pointer"
+                      >
+                        + Crear Nueva Institución
+                      </button>
+                    </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                      Superficie Principal
-                    </label>
-                    <select
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:border-primary focus:outline-none text-xs cursor-pointer"
-                      value={formData.club_surface}
-                      onChange={e => setFormData({ ...formData, club_surface: e.target.value })}
-                    >
-                      <option value="Polvo de ladrillo">Polvo de ladrillo</option>
-                      <option value="Cemento / Rápida">Cemento / Rápida</option>
-                      <option value="Césped sintético">Césped sintético</option>
-                      <option value="Pádel Cristal / Muro">Pádel Cristal / Muro</option>
-                      <option value="Mixto (Tenis + Pádel)">Mixto (Tenis + Pádel)</option>
-                    </select>
+                  <div className="text-[11px] font-bold text-[#ccff00] uppercase tracking-wider flex items-center gap-1.5 pt-2 border-t border-white/5">
+                    <User size={14} /> 2. Tus Datos de Organizador
                   </div>
-                </div>
-              </div>
 
-              <div className="p-3 bg-white/[0.02] border border-white/5 rounded-2xl space-y-3">
-                <div className="text-[11px] font-bold text-[#ccff00] uppercase tracking-wider flex items-center gap-1.5">
-                  <User size={14} /> 2. Datos del Responsable / Organizador
-                </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                        Nombre *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Martín"
+                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-purple-400 focus:outline-none transition-colors text-sm"
+                        required
+                        value={formData.name}
+                        onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                        Apellido *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: González"
+                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-purple-400 focus:outline-none transition-colors text-sm"
+                        required
+                        value={formData.lastname}
+                        onChange={e => setFormData({ ...formData, lastname: e.target.value })}
+                      />
+                    </div>
+                  </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                      Nombre *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Martín"
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                      required
-                      value={formData.name}
-                      onChange={e => setFormData({ ...formData, name: e.target.value })}
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                        Cargo / Rol en el Club
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Planillero / Co-Organizador"
+                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-purple-400 focus:outline-none transition-colors text-sm"
+                        value={formData.club_role_title}
+                        onChange={e => setFormData({ ...formData, club_role_title: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                        WhatsApp Oficial *
+                      </label>
+                      <input
+                        type="tel"
+                        placeholder="Ej: 3434123456"
+                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-purple-400 focus:outline-none transition-colors text-sm"
+                        required
+                        value={formData.phone}
+                        onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                      Apellido *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: González"
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                      required
-                      value={formData.lastname}
-                      onChange={e => setFormData({ ...formData, lastname: e.target.value })}
-                    />
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                      Cargo / Función
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ej: Capitán de Tenis"
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                      value={formData.club_role_title}
-                      onChange={e => setFormData({ ...formData, club_role_title: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                      WhatsApp Oficial *
-                    </label>
-                    <input
-                      type="tel"
-                      placeholder="Ej: 3434123456"
-                      className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                      required
-                      value={formData.phone}
-                      onChange={e => setFormData({ ...formData, phone: e.target.value })}
-                    />
+                  <div className="p-2.5 rounded-xl bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-200 leading-relaxed">
+                    🛡️ <strong>Aprobación requerida:</strong> Al sumarte a un club existente, el responsable / administrador principal de la institución deberá validar tu solicitud desde su panel de control para habilitar tus permisos de organizador.
                   </div>
                 </div>
+              ) : (
+                /* --- CASO 2: CREAR NUEVA INSTITUCIÓN (FUNDADOR) --- */
+                <>
+                  <div className="p-3 bg-white/[0.02] border border-white/5 rounded-2xl space-y-3">
+                    <div className="text-[11px] font-bold text-[#e15b34] uppercase tracking-wider flex items-center gap-1.5">
+                      <Building2 size={14} /> 1. Datos de la Nueva Institución
+                    </div>
 
-                {/* CÓDIGO PROMOCIONAL PARA CLUBES */}
-                <div>
-                  <label className="block text-[11px] font-semibold text-purple-300 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Tag size={12} className="text-purple-400" /> Código Promocional / Convenio (Opcional)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Ej: LANZAMIENTO2026, LYNXCLUB"
-                      className="w-full bg-sidebar border border-purple-500/30 focus:border-purple-400 rounded-xl p-3 text-white focus:outline-none transition-colors text-sm font-mono uppercase"
-                      value={formData.promo_code}
-                      onChange={e => setFormData({ ...formData, promo_code: e.target.value })}
-                    />
-                    <Sparkles size={14} className="absolute right-3.5 top-3.5 text-purple-400 pointer-events-none" />
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                        Nombre del Club / Complejo *
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Club Tenis Parque España"
+                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                        required
+                        value={formData.club_name}
+                        onChange={e => setFormData({ ...formData, club_name: e.target.value })}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1">
+                          <MapPin size={12} className="text-primary" /> Ciudad y Provincia *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: Paraná, Entre Ríos"
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                          required
+                          value={formData.club_city}
+                          onChange={e => setFormData({ ...formData, club_city: e.target.value })}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                          Dirección (Opcional)
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: Av. Costanera 450"
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                          value={formData.club_address}
+                          onChange={e => setFormData({ ...formData, club_address: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                          Cant. Canchas
+                        </label>
+                        <select
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:border-primary focus:outline-none text-xs cursor-pointer"
+                          value={formData.club_courts_count}
+                          onChange={e => setFormData({ ...formData, club_courts_count: Number(e.target.value) })}
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 10, 12, 16, 20].map(n => (
+                            <option key={n} value={n}>{n} {n === 1 ? 'Cancha' : 'Canchas'}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                          Superficie Principal
+                        </label>
+                        <select
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:border-primary focus:outline-none text-xs cursor-pointer"
+                          value={formData.club_surface}
+                          onChange={e => setFormData({ ...formData, club_surface: e.target.value })}
+                        >
+                          <option value="Polvo de ladrillo">Polvo de ladrillo</option>
+                          <option value="Cemento / Rápida">Cemento / Rápida</option>
+                          <option value="Césped sintético">Césped sintético</option>
+                          <option value="Pádel Cristal / Muro">Pádel Cristal / Muro</option>
+                          <option value="Mixto (Tenis + Pádel)">Mixto (Tenis + Pádel)</option>
+                        </select>
+                      </div>
+                    </div>
                   </div>
-                  <p className="text-[10px] text-slate-500 mt-1">
-                    Si tu club tiene un código de invitación o convenio, ingrésalo aquí para activar beneficios exclusivos.
-                  </p>
-                </div>
-              </div>
+
+                  <div className="p-3 bg-white/[0.02] border border-white/5 rounded-2xl space-y-3">
+                    <div className="text-[11px] font-bold text-[#ccff00] uppercase tracking-wider flex items-center gap-1.5">
+                      <User size={14} /> 2. Datos del Responsable Principal
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                          Nombre *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: Martín"
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                          required
+                          value={formData.name}
+                          onChange={e => setFormData({ ...formData, name: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                          Apellido *
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: González"
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                          required
+                          value={formData.lastname}
+                          onChange={e => setFormData({ ...formData, lastname: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                          Cargo / Función
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Ej: Presidente / Capitán"
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                          value={formData.club_role_title}
+                          onChange={e => setFormData({ ...formData, club_role_title: e.target.value })}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                          WhatsApp Oficial *
+                        </label>
+                        <input
+                          type="tel"
+                          placeholder="Ej: 3434123456"
+                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                          required
+                          value={formData.phone}
+                          onChange={e => setFormData({ ...formData, phone: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    {/* CÓDIGO PROMOCIONAL PARA CLUBES */}
+                    <div>
+                      <label className="block text-[11px] font-semibold text-purple-300 uppercase tracking-wider mb-1 flex items-center gap-1">
+                        <Tag size={12} className="text-purple-400" /> Código Promocional / Convenio (Opcional)
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="Ej: LANZAMIENTO2026, LYNXCLUB"
+                          className="w-full bg-sidebar border border-purple-500/30 focus:border-purple-400 rounded-xl p-3 text-white focus:outline-none transition-colors text-sm font-mono uppercase"
+                          value={formData.promo_code}
+                          onChange={e => setFormData({ ...formData, promo_code: e.target.value })}
+                        />
+                        <Sparkles size={14} className="absolute right-3.5 top-3.5 text-purple-400 pointer-events-none" />
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-1">
+                        Si tu club tiene un código de invitación o convenio, ingrésalo aquí para activar beneficios exclusivos y alta inmediata.
+                      </p>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           )}
 
