@@ -1184,7 +1184,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     if (!tournament) return <div className="text-center py-20 text-red-500">Torneo no encontrado.</div>;
 
     const isEnrolled = players.some(p => p.player_id === user.id || p.id === user.id);
-    const isRegClosed = tournament.registration_closed || tournament.status !== 'draft';
+    const isRegClosed = Boolean(
+        tournament.registration_closed || 
+        tournament.status === 'finished' ||
+        (tournament.registration_deadline && new Date() > new Date(tournament.registration_deadline + 'T23:59:59'))
+    );
     const isClubAdmin = user.role === 'superadmin' || (user.role === 'admin' && user.institution_id === tournament.institution_id);
 
     const canDeleteTournament = Boolean(

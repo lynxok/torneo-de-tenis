@@ -440,7 +440,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {group.items.map(t => {
-                                        const isRegClosed = t.registration_closed || t.status === 'finished';
+                                        const isRegClosed = Boolean(
+                                            t.registration_closed || 
+                                            t.status === 'finished' ||
+                                            (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
+                                        );
                                         const hasCompetitions = t.competitions && t.competitions.length > 0;
 
                                         return (
