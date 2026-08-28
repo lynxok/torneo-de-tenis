@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Tournament, UserProfile, TournamentPlayer, Match } from '../types';
+import { Tournament, UserProfile, TournamentPlayer, Match, Booking } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
@@ -8,7 +8,7 @@ import {
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
-    Printer, Image as ImageIcon, Download
+    Printer, Image as ImageIcon, Download, Plus
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
@@ -396,8 +396,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     setHasSet3(true);
                     if (s3.isSTB) {
                         setIsSet3SuperTiebreak(true);
-                        setScoreP1Set3(s3.tbP1 !== '' ? s3.tbP1 : (s3.p1 >= 10 ? s3.p1 : 10));
-                        setScoreP2Set3(s3.tbP2 !== '' ? s3.tbP2 : (s3.p2 >= 10 ? s3.p2 : 8));
+                        setScoreP1Set3(s3.tbP1 !== '' ? s3.tbP1 : (s3.p1 !== '' && s3.p1 >= 10 ? s3.p1 : 10));
+                        setScoreP2Set3(s3.tbP2 !== '' ? s3.tbP2 : (s3.p2 !== '' && s3.p2 >= 10 ? s3.p2 : 8));
                         setTbP1Set3('');
                         setTbP2Set3('');
                     } else {

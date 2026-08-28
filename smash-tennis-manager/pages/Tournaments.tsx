@@ -729,30 +729,30 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                     <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
                                         tierCalc.isTrialFree
                                             ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-200'
-                                            : tierCalc.isVipWaived
+                                            : tierCalc.isVipWaiver
                                                 ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
                                                 : tierCalc.isDirectJump
                                                     ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
                                                     : 'bg-green-500/10 border-green-500/30 text-green-200'
                                     }`}>
                                         {tierCalc.isTrialFree && <Gift size={18} className="text-cyan-400 shrink-0" />}
-                                        {tierCalc.isVipWaived && <Sparkles size={18} className="text-emerald-400 shrink-0" />}
-                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaived && tierCalc.isDirectJump && <Zap size={18} className="text-amber-400 shrink-0" />}
-                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaived && !tierCalc.isDirectJump && <Award size={18} className="text-green-400 shrink-0" />}
+                                        {tierCalc.isVipWaiver && <Sparkles size={18} className="text-emerald-400 shrink-0" />}
+                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaiver && tierCalc.isDirectJump && <Zap size={18} className="text-amber-400 shrink-0" />}
+                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaiver && !tierCalc.isDirectJump && <Award size={18} className="text-green-400 shrink-0" />}
 
                                         <div className="flex-1 leading-tight">
                                             <div className="font-bold text-[11px] uppercase tracking-wider">
                                                 {tierCalc.isTrialFree 
                                                     ? `🎉 Torneo de Bienvenida Bonificado (0% Comisión • Te quedan ${trialRemaining} ${trialRemaining === 1 ? 'cupo' : 'cupos'})`
-                                                    : tierCalc.isVipWaived 
+                                                    : tierCalc.isVipWaiver 
                                                         ? '👑 Membresía VIP Bonificada (0% Comisión)'
                                                         : tierCalc.isDirectJump 
-                                                            ? `⚡ Salto Directo a ${tierCalc.tierInfo.label} (${tierCalc.effectiveFeePct}% Comisión)`
+                                                            ? `⚡ Salto Directo a ${tierCalc.tier.label} (${tierCalc.effectiveFeePct}% Comisión)`
                                                             : `✓ Tarifa Bonificada por Mérito / Saga (${tierCalc.effectiveFeePct}% Comisión)`
                                                 }
                                             </div>
                                             <div className="text-[10px] text-slate-300 mt-0.5">
-                                                {tierCalc.tierInfo.pointsWinner} puntos al campeón • Convocatoria: {tierCalc.tierInfo.minPlayers}{tierCalc.tierInfo.maxPlayers ? `-${tierCalc.tierInfo.maxPlayers}` : '+'} jugadores
+                                                {tierCalc.tier.pointsWinner} puntos al campeón • Convocatoria: {tierCalc.tier.minPlayers}{tierCalc.tier.maxPlayers ? `-${tierCalc.tier.maxPlayers}` : '+'} jugadores
                                             </div>
                                         </div>
                                     </div>

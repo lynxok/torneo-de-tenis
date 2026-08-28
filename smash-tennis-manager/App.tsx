@@ -10,6 +10,7 @@ import { TutorialOverlay } from './components/TutorialOverlay';
 import { ToastProvider } from './components/ui/Toast';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { VersionUpdatePrompt } from './components/VersionUpdatePrompt';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { soundEffects } from './services/soundEffects';
 import { Menu, ShieldAlert, User, Shield, Loader2, GraduationCap } from 'lucide-react';
 
@@ -501,61 +502,63 @@ const AppContent = () => {
 
         <div className="flex-1 overflow-y-auto p-4 md:p-8">
           <div className="max-w-7xl mx-auto pb-10">
-            <Suspense fallback={
-              <div className="h-72 flex flex-col items-center justify-center space-y-4">
-                <Loader2 className="animate-spin text-primary" size={40} />
-                <span className="text-xs text-muted font-bold tracking-widest uppercase">Cargando pantalla...</span>
-              </div>
-            }>
-              {activeView === 'dashboard' && <Dashboard user={effectiveUser} onNavigate={handleNavigate} />}
-              {activeView === 'tournaments' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={navData} />}
-              {activeView === 'tournaments-map' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={{ view: 'map' }} />}
-              {activeView === 'tournament-detail' && (
-                <TournamentDetails
-                  tournamentId={navData}
-                  user={effectiveUser}
-                  onBack={() => handleNavigate('tournaments')}
-                />
-              )}
-              {activeView === 'profile' && (
-                <Profile
-                  user={effectiveUser}
-                  onProfileUpdate={() => fetchProfile(effectiveUser.id)}
-                />
-              )}
-              {activeView === 'rankings' && <Rankings user={effectiveUser} />}
-              {activeView === 'players' && <Players user={effectiveUser} onNavigate={handleNavigate} />}
-              {activeView === 'bookings' && <Bookings user={effectiveUser} />}
-              {activeView === 'messages' && (
-                <Messages
-                  user={effectiveUser}
-                  onRefreshNotifications={() => fetchUnreadMessages(effectiveUser)}
-                />
-              )}
-              {activeView === 'reports' && <Reports user={effectiveUser} />}
-              {(activeView === 'coach-dashboard' || activeView === 'classes') && (
-                <CoachDashboard user={effectiveUser} onNavigate={handleNavigate} />
-              )}
-              {activeView === 'pricing-commissions' && (
-                <PricingAndCommissions user={effectiveUser} onNavigate={handleNavigate} />
-              )}
-              {activeView === 'admin-users' && <AdminUsers user={effectiveUser} />}
-              {activeView === 'admin-institutions' && <AdminInstitutions user={effectiveUser} />}
-              {activeView === 'admin-settings' && <AdminSettings user={effectiveUser} />}
+            <ErrorBoundary>
+              <Suspense fallback={
+                <div className="h-72 flex flex-col items-center justify-center space-y-4">
+                  <Loader2 className="animate-spin text-primary" size={40} />
+                  <span className="text-xs text-muted font-bold tracking-widest uppercase">Cargando pantalla...</span>
+                </div>
+              }>
+                {activeView === 'dashboard' && <Dashboard user={effectiveUser} onNavigate={handleNavigate} />}
+                {activeView === 'tournaments' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={navData} />}
+                {activeView === 'tournaments-map' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={{ view: 'map' }} />}
+                {activeView === 'tournament-detail' && (
+                  <TournamentDetails
+                    tournamentId={navData}
+                    user={effectiveUser}
+                    onBack={() => handleNavigate('tournaments')}
+                  />
+                )}
+                {activeView === 'profile' && (
+                  <Profile
+                    user={effectiveUser}
+                    onProfileUpdate={() => fetchProfile(effectiveUser.id)}
+                  />
+                )}
+                {activeView === 'rankings' && <Rankings user={effectiveUser} />}
+                {activeView === 'players' && <Players user={effectiveUser} onNavigate={handleNavigate} />}
+                {activeView === 'bookings' && <Bookings user={effectiveUser} />}
+                {activeView === 'messages' && (
+                  <Messages
+                    user={effectiveUser}
+                    onRefreshNotifications={() => fetchUnreadMessages(effectiveUser)}
+                  />
+                )}
+                {activeView === 'reports' && <Reports user={effectiveUser} />}
+                {(activeView === 'coach-dashboard' || activeView === 'classes') && (
+                  <CoachDashboard user={effectiveUser} onNavigate={handleNavigate} />
+                )}
+                {activeView === 'pricing-commissions' && (
+                  <PricingAndCommissions user={effectiveUser} onNavigate={handleNavigate} />
+                )}
+                {activeView === 'admin-users' && <AdminUsers user={effectiveUser} />}
+                {activeView === 'admin-institutions' && <AdminInstitutions user={effectiveUser} />}
+                {activeView === 'admin-settings' && <AdminSettings user={effectiveUser} />}
 
-              {/* Tutorial View */}
-              {activeView === 'tutorials' && (
-                <TutorialsPage
-                  user={effectiveUser}
-                  onStartTutorial={handleStartTutorial}
-                />
-              )}
+                {/* Tutorial View */}
+                {activeView === 'tutorials' && (
+                  <TutorialsPage
+                    user={effectiveUser}
+                    onStartTutorial={handleStartTutorial}
+                  />
+                )}
 
-              {/* Default Fallback for unmatched/unknown activeView */}
-              {!VALID_VIEWS.includes(activeView as any) && (
-                <Dashboard user={effectiveUser} onNavigate={handleNavigate} />
-              )}
-            </Suspense>
+                {/* Default Fallback for unmatched/unknown activeView */}
+                {!VALID_VIEWS.includes(activeView as any) && (
+                  <Dashboard user={effectiveUser} onNavigate={handleNavigate} />
+                )}
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </div>
       </main>

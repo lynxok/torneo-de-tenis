@@ -71,17 +71,16 @@ export const PlayerCardModal: React.FC<PlayerCardModalProps> = ({
 
     const img = new Image();
     const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
-    const URLObj = window.URL || window.webkitURL || window;
-    const blobURL = URLObj.createObjectURL(svgBlob);
+    const blobURL = URL.createObjectURL(svgBlob);
 
     await new Promise((resolve) => {
       img.onload = () => {
         ctx.drawImage(img, 0, 0);
-        URLObj.revokeObjectURL(blobURL);
+        URL.revokeObjectURL(blobURL);
         resolve(null);
       };
       img.onerror = () => {
-        URLObj.revokeObjectURL(blobURL);
+        URL.revokeObjectURL(blobURL);
         resolve(null);
       };
       img.src = blobURL;

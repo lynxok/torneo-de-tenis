@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { UserProfile, TournamentSaga, SystemConfig } from '../types';
+import { UserProfile, TournamentSaga, SystemConfig, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';

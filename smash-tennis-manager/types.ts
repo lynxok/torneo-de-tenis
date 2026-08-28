@@ -333,6 +333,7 @@ export interface Match {
   proposal_data?: any;
   court_slot_id?: string;
   is_played?: boolean;
+  played_at?: string;
   
   // Score Verification & 24h Auto-confirmation
   score_status?: 'pending_confirmation' | 'confirmed' | 'disputed';
