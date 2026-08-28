@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { UserProfile } from '../types';
 import { api } from '../services/api';
-import { Medal, Trophy, Search, User, Info, X, Zap, Target, Star, ChevronDown, ChevronUp, History, TrendingUp, Calculator } from 'lucide-react';
+import { Medal, Trophy, Search, User, Info, X, Zap, Target, Star, ChevronDown, ChevronUp, History, TrendingUp, Calculator, Camera, Sparkles } from 'lucide-react';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { calculatePointsDetails, computeRankings, normalizeCategoryKey, RankedPlayer } from '../utils/ranking';
@@ -102,7 +102,7 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
 
                 {showRulesSummary && (
                     <div className="px-4 pb-4 pt-0 border-t border-white/5 animate-in fade-in slide-in-from-top-1">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
                             <div className="bg-black/20 p-3 rounded-xl border border-white/5">
                                 <div className="text-xs text-muted uppercase font-bold mb-1 flex items-center gap-1"><Zap size={12} className="text-yellow-400" /> Partidos</div>
                                 <div className="flex justify-between items-end">
@@ -123,6 +123,17 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
                                 <div className="flex justify-between items-end mt-1">
                                     <span className="text-xs text-slate-400">Finalista</span>
                                     <span className="text-sm font-bold text-white">+600 pts</span>
+                                </div>
+                            </div>
+                            <div className="bg-black/20 p-3 rounded-xl border border-white/5">
+                                <div className="text-xs text-muted uppercase font-bold mb-1 flex items-center gap-1"><Camera size={12} className="text-sky-400" /> Perfil & Identidad</div>
+                                <div className="flex justify-between items-end">
+                                    <span className="text-sm text-slate-300">Foto de Perfil</span>
+                                    <span className="text-lg font-bold text-sky-400">+50 pts</span>
+                                </div>
+                                <div className="flex justify-between items-end mt-1">
+                                    <span className="text-xs text-slate-400">Tipo de Bono</span>
+                                    <span className="text-xs font-bold text-slate-300">Única vez (Fijo)</span>
                                 </div>
                             </div>
                             <div className="flex flex-col justify-center">
@@ -505,6 +516,31 @@ const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, 
                                 )}
                             </div>
 
+                            {/* 4. PROFILE PHOTO BONUS */}
+                            <div className="rounded-lg overflow-hidden border border-white/10 transition-all">
+                                <div className="flex justify-between items-center p-3 bg-white/5">
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-1.5 rounded ${stats.breakdown.profilePhoto?.count ? 'bg-sky-500/20 text-sky-400' : 'bg-white/10 text-slate-500'}`}>
+                                            <Camera size={14} />
+                                        </div>
+                                        <div>
+                                            <div className="text-sm font-bold text-white flex items-center gap-2">
+                                                Foto de Perfil Oficial
+                                                {stats.breakdown.profilePhoto?.count ? (
+                                                    <span className="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-1.5 py-0.5 rounded border border-sky-500/30">✓ Activo (1/1)</span>
+                                                ) : (
+                                                    <span className="text-[10px] bg-white/10 text-slate-400 font-bold px-1.5 py-0.5 rounded">Pendiente</span>
+                                                )}
+                                            </div>
+                                            <div className="text-[10px] text-muted">Bono único no acumulativo por foto cargada en el perfil</div>
+                                        </div>
+                                    </div>
+                                    <div className={`font-bold font-mono ${stats.breakdown.profilePhoto?.points ? 'text-sky-400' : 'text-slate-500'}`}>
+                                        +{loadingDetails ? '...' : (stats.breakdown.profilePhoto?.points || 0)}
+                                    </div>
+                                </div>
+                            </div>
+
                             {!loadingDetails && stats.total === 0 && (
                                 <div className="text-center py-6 text-muted text-sm italic">
                                     El jugador aún no ha sumado puntos basados en el historial registrado.
@@ -517,8 +553,8 @@ const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, 
                         <Info className="text-blue-400 shrink-0" size={18} />
                         <p className="text-xs text-blue-200">
                             {isMe
-                                ? "Estos puntos se calculan en tiempo real basándose en tu historial de partidos."
-                                : "Este desglose refleja los puntos obtenidos en partidos registrados en la plataforma."}
+                                ? "Estos puntos se calculan en tiempo real basándose en tu historial de partidos y tu perfil oficial."
+                                : "Este desglose refleja los puntos obtenidos en partidos y perfil registrados en la plataforma."}
                         </p>
                     </div>
 
@@ -609,13 +645,27 @@ const RankingRulesModal = ({ onClose }: { onClose: () => void }) => {
                         </div>
                     </div>
 
-                    {/* Section 3: Extra Info */}
+                    {/* Section 3: Identity & Profile Bonus */}
+                    <div className="space-y-3">
+                        <h4 className="text-sm font-bold text-white uppercase flex items-center gap-2">
+                            <Camera size={16} className="text-sky-400" /> Identidad & Foto de Perfil
+                        </h4>
+                        <div className="bg-white/5 rounded-xl border border-white/5 overflow-hidden p-3 flex justify-between items-center">
+                            <div>
+                                <span className="text-sm text-slate-200 font-semibold block">Foto Oficial Cargada</span>
+                                <span className="text-[10px] text-muted block">Bono único de bienvenida para incentivar perfiles completos. No se acumula al cambiar la foto.</span>
+                            </div>
+                            <span className="text-sm font-bold text-sky-400 font-mono shrink-0 ml-3">+50 pts</span>
+                        </div>
+                    </div>
+
+                    {/* Section 4: Extra Info */}
                     <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl flex gap-3">
                         <Star className="text-blue-400 shrink-0" size={20} />
                         <div>
                             <h5 className="text-sm font-bold text-white mb-1">Ascensos y Descensos</h5>
                             <p className="text-xs text-blue-200 leading-relaxed">
-                                El ranking se actualiza semanalmente. Los 3 primeros jugadores de cada categoría al final de la temporada tendrán la opción de ascender a la categoría superior.
+                                El ranking se actualiza en tiempo real. Los mejores jugadores de cada categoría al final de la temporada tendrán la opción de ascender a la categoría superior.
                             </p>
                         </div>
                     </div>

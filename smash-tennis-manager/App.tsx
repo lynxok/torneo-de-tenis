@@ -527,13 +527,6 @@ const AppContent = () => {
                 />
               )}
 
-              {/* Landing Page Preview for logged-in users */}
-              {(activeView === 'landing' || activeView === 'inicio') && (
-                <LandingPage
-                  onOpenAuth={() => {}}
-                />
-              )}
-
               {/* Default Fallback for unmatched/unknown activeView */}
               {!VALID_VIEWS.includes(activeView as any) && (
                 <Dashboard user={effectiveUser} onNavigate={handleNavigate} />
