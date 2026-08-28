@@ -6,6 +6,7 @@ import { Medal, Trophy, Search, User, Info, X, Zap, Target, Star, ChevronDown, C
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { calculatePointsDetails, computeRankings, normalizeCategoryKey, RankedPlayer } from '../utils/ranking';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface RankingsProps {
     user: UserProfile;
@@ -211,22 +212,12 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
                                         </td>
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
-                                                {player.profile_picture_url || (player as any).avatar_url ? (
-                                                    <img
-                                                        src={player.profile_picture_url || (player as any).avatar_url}
-                                                        alt={player.name}
-                                                        className={`w-9 h-9 rounded-full object-cover border shrink-0 shadow-sm ${
-                                                            isCurrentUser ? 'border-primary ring-2 ring-primary/30' : 'border-white/10'
-                                                        }`}
-                                                    />
-                                                ) : (
-                                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${isCurrentUser
-                                                        ? 'bg-primary text-dark border-primary'
-                                                        : 'bg-gradient-to-br from-slate-700 to-slate-600 text-white border-white/10'
-                                                        }`}>
-                                                        {(player.name || 'U').charAt(0).toUpperCase()}
-                                                    </div>
-                                                )}
+                                                <UserAvatar 
+                                                    user={player} 
+                                                    size="sm" 
+                                                    shape="circle" 
+                                                    isCurrentUser={isCurrentUser} 
+                                                />
                                                 <div>
                                                     <div className={`font-bold transition-colors flex items-center gap-1.5 ${isCurrentUser ? 'text-primary' : 'text-white group-hover:text-primary'
                                                         }`}>
@@ -382,17 +373,12 @@ const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, 
 
                 <div className="p-6 border-b border-white/10 bg-gradient-to-r from-blue-900/40 to-card flex justify-between items-start gap-4">
                     <div className="flex items-center gap-3.5 min-w-0">
-                        {activePlayer.profile_picture_url || (activePlayer as any).avatar_url ? (
-                            <img
-                                src={activePlayer.profile_picture_url || (activePlayer as any).avatar_url}
-                                alt={activePlayer.name}
-                                className="w-12 h-12 rounded-full object-cover border-2 border-primary/40 shadow-lg shrink-0"
-                            />
-                        ) : (
-                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary-hover text-dark flex items-center justify-center font-black text-lg border-2 border-primary/30 shrink-0">
-                                {(activePlayer.name || 'U').charAt(0).toUpperCase()}
-                            </div>
-                        )}
+                        <UserAvatar 
+                            user={activePlayer} 
+                            size="lg" 
+                            shape="circle" 
+                            isCurrentUser={isMe} 
+                        />
                         <div className="min-w-0">
                             <div className="flex items-center gap-2 mb-0.5 text-muted text-xs uppercase font-bold">
                                 <Zap size={12} className="text-yellow-400" /> Desglose de Puntaje

@@ -7,6 +7,7 @@ import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
 import { computeRankings, normalizeCategoryKey, RankedPlayer } from '../utils/ranking';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface AdminUsersProps {
     user?: UserProfile;
@@ -491,9 +492,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 </td>
                 <td className="p-3.5">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-sm font-bold text-white border border-white/10">
-                            {(u.name || 'U').charAt(0).toUpperCase()}
-                        </div>
+                        <UserAvatar user={u} size="md" shape="circle" />
                         <div>
                             <div className="font-bold text-white flex items-center gap-1.5">
                                 {formatPlayerName(u.name, u.lastname)}
@@ -702,9 +701,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                 <div key={u.id} className="bg-card/70 border border-yellow-500/30 rounded-2xl p-5 shadow-xl relative overflow-hidden flex flex-col justify-between">
                                     <div className="flex items-start justify-between gap-3 mb-4">
                                         <div className="flex items-center gap-3">
-                                            <div className="w-12 h-12 rounded-2xl bg-slate-700 flex items-center justify-center font-bold text-lg text-white border border-white/10">
-                                                {(u.name || 'U').charAt(0).toUpperCase()}
-                                            </div>
+                                            <UserAvatar user={u} size="lg" shape="rounded" />
                                             <div>
                                                 <div className="flex items-center gap-2">
                                                     <h4 className="font-bold text-white text-base">{formatPlayerName(u.name, u.lastname)}</h4>
