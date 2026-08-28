@@ -780,20 +780,36 @@ const PlayerProfileModal = ({
 }) => {
     const [matches, setMatches] = useState<Match[]>([]);
     const [loadingMatches, setLoadingMatches] = useState(true);
+    const [bannerUrl, setBannerUrl] = useState('/profile-banner.jpg');
 
     useEffect(() => {
         api.matches.getByUser(player.id)
             .then(data => setMatches(data || []))
             .catch(console.error)
             .finally(() => setLoadingMatches(false));
+
+        api.settings.getConfig().then(config => {
+            if (config.profile_banner_url) {
+                setBannerUrl(config.profile_banner_url);
+            }
+        }).catch(() => {});
     }, [player.id]);
     const isMe = player.id === currentUser.id;
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={onClose}>
             <div id="player-profile-modal" className="bg-card border border-white/10 rounded-3xl w-full max-w-2xl shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
-                <button onClick={onClose} className="absolute top-4 right-4 z-20 p-2 bg-black/30 hover:bg-black/50 rounded-full text-white transition-colors"><X size={20} /></button>
-                <div className="relative h-40 bg-gradient-to-r from-slate-800 to-slate-900">
-                    <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30"></div>
+                <button onClick={onClose} className="absolute top-4 right-4 z-20 p-2 bg-black/40 hover:bg-black/70 rounded-full text-white transition-colors backdrop-blur-md border border-white/10 shadow-lg"><X size={18} /></button>
+                <div className="relative h-44 bg-slate-900 overflow-hidden border-b border-white/10 group">
+                    <img
+                        src={bannerUrl}
+                        alt="Smash Tennis Banner"
+                        className="absolute inset-0 w-full h-full object-cover object-[center_31%] opacity-90 group-hover:scale-105 transition-transform duration-700 ease-out"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-card via-card/40 to-transparent"></div>
+                    <div className="absolute top-3.5 left-4 flex items-center gap-2 bg-black/50 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/10 z-10 shadow-lg">
+                        <img src="/Smash.png" alt="Smash Tennis" className="h-4 w-auto object-contain" />
+                        <span className="text-[10px] font-black tracking-wider text-primary uppercase">Circuito Smash</span>
+                    </div>
                 </div>
                 <div className="px-8 pb-8 -mt-16 flex flex-col md:flex-row gap-6 items-end md:items-start relative z-10">
                     <UserAvatar 
