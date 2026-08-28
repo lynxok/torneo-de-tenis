@@ -350,7 +350,7 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         userLayer.addLayer(userMarker);
     }, [userLocation]);
 
-    // Render Tournament Markers
+    // Render Tournament Markers (Grouped by Club/Venue to prevent coordinate overlapping)
     useEffect(() => {
         const map = mapInstanceRef.current;
         const markersGroup = markersLayerRef.current;
@@ -362,89 +362,189 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
         const bounds = L.latLngBounds([]);
 
-        processedTournaments.forEach((t) => {
-            const isSelected = t.id === selectedTournamentId;
-            const clubName = t.institutions?.name || 'Club de Tenis';
-            const cityName = t.institutions?.city || '';
-            const tierBadge = t.tier.label;
-            const distanceStr = formatDistance(t.distanceKm);
+        // Group tournaments by Venue / Club
+        const venueMap = new Map<string, {
+            key: string;
+            clubName: string;
+            cityName: string;
+            coords: { lat: number; lng: number };
+            distanceKm: number | null;
+            tournaments: typeof processedTournaments;
+            hasOpenRegistration: boolean;
+        }>();
 
-            // Dynamic pin HTML
-            const pinHtml = `
-                <div class="smash-map-pin ${isSelected ? 'is-selected' : ''} ${t.isOpen ? 'is-open' : ''}" data-tournament-id="${t.id}">
-                    ${t.isOpen ? '<div class="pin-halo-pulse"></div>' : ''}
-                    <div class="pin-card ${isSelected ? 'ring-4 ring-primary ring-offset-2 ring-offset-slate-900 scale-110' : ''}">
-                        <div class="pin-tier-pill" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
-                            ${tierBadge}
+        processedTournaments.forEach((t) => {
+            const key = t.institution_id || `${t.coords.lat.toFixed(4)}_${t.coords.lng.toFixed(4)}`;
+            const existing = venueMap.get(key);
+            if (existing) {
+                existing.tournaments.push(t);
+                if (t.isOpen) existing.hasOpenRegistration = true;
+            } else {
+                const clubName = t.institutions?.name || 'Club de Tenis';
+                const cityName = t.institutions?.city || '';
+                venueMap.set(key, {
+                    key,
+                    clubName,
+                    cityName,
+                    coords: t.coords,
+                    distanceKm: t.distanceKm,
+                    tournaments: [t],
+                    hasOpenRegistration: t.isOpen,
+                });
+            }
+        });
+
+        const venueGroups = Array.from(venueMap.values());
+
+        venueGroups.forEach((group) => {
+            const isSingle = group.tournaments.length === 1;
+            const isSelected = group.tournaments.some((t) => t.id === selectedTournamentId);
+            const distanceStr = formatDistance(group.distanceKm);
+
+            let pinHtml = '';
+            let popupHtml = '';
+
+            if (isSingle) {
+                const t = group.tournaments[0];
+                const tierBadge = t.tier.label;
+
+                pinHtml = `
+                    <div class="smash-map-pin ${isSelected ? 'is-selected' : ''} ${t.isOpen ? 'is-open' : ''}" data-tournament-id="${t.id}">
+                        ${t.isOpen ? '<div class="pin-halo-pulse"></div>' : ''}
+                        <div class="pin-card ${isSelected ? 'ring-4 ring-primary ring-offset-2 ring-offset-slate-900 scale-110' : ''}">
+                            <div class="pin-tier-pill" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
+                                ${tierBadge}
+                            </div>
+                            <div class="pin-content">
+                                <span class="pin-title">${t.name}</span>
+                                <span class="pin-club">${group.clubName}${group.cityName ? ` • ${group.cityName}` : ''}</span>
+                            </div>
+                            ${t.isOpen ? '<div class="pin-open-badge">INSCRIPCIÓN ABIERTA</div>' : ''}
                         </div>
-                        <div class="pin-content">
-                            <span class="pin-title">${t.name}</span>
-                            <span class="pin-club">${clubName}${cityName ? ` • ${cityName}` : ''}</span>
-                        </div>
-                        ${t.isOpen ? '<div class="pin-open-badge">INSCRIPCIÓN ABIERTA</div>' : ''}
+                        <div class="pin-arrow"></div>
                     </div>
-                    <div class="pin-arrow"></div>
-                </div>
-            `;
+                `;
+
+                popupHtml = `
+                    <div class="p-3.5 bg-slate-900 text-white rounded-3xl max-w-[270px] border border-white/15 shadow-2xl">
+                        <div class="flex items-center justify-between gap-2 mb-2">
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
+                                ${t.tier.label}
+                            </span>
+                            ${t.isOpen ? '<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">● Abierto</span>' : '<span class="text-[10px] font-bold text-slate-400 bg-slate-800 px-2.5 py-0.5 rounded-full">Cerrado</span>'}
+                        </div>
+                        <h4 class="font-extrabold text-sm text-white mb-1 leading-tight">${t.name}</h4>
+                        <p class="text-xs text-slate-300 mb-2">📍 ${group.clubName}${group.cityName ? ` • ${group.cityName}` : ''}</p>
+                        ${distanceStr ? `<div class="text-[11px] text-sky-400 font-bold mb-2 flex items-center gap-1">🧭 A ${distanceStr} de tu ubicación</div>` : ''}
+                        <div class="flex items-center justify-between text-xs font-semibold text-slate-400 py-2 border-t border-white/10 mb-3">
+                            <span>Cat: <b class="text-white">${t.category}</b></span>
+                            <span class="text-primary font-bold">${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</span>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-2 px-3 rounded-xl text-center transition-all shadow-md cursor-pointer">
+                                ${t.isOpen ? '🎾 Inscribirme' : 'Ver Detalles'}
+                            </button>
+                            <button onclick="window.__handleNavigateToVenue('${group.coords.lat}', '${group.coords.lng}', '${encodeURIComponent(group.clubName)}')" class="bg-white/10 hover:bg-white/20 text-white text-xs p-2 rounded-xl transition-all border border-white/10 cursor-pointer" title="Cómo llegar">
+                                🧭
+                            </button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                // Multi-tournament Pin in the same club
+                pinHtml = `
+                    <div class="smash-map-pin ${isSelected ? 'is-selected' : ''} ${group.hasOpenRegistration ? 'is-open' : ''}">
+                        ${group.hasOpenRegistration ? '<div class="pin-halo-pulse"></div>' : ''}
+                        <div class="pin-card ${isSelected ? 'ring-4 ring-primary ring-offset-2 ring-offset-slate-900 scale-110' : ''}">
+                            <div class="pin-multi-badge">
+                                <span>🏆 ${group.tournaments.length} TORNEOS</span>
+                            </div>
+                            <div class="pin-content">
+                                <span class="pin-title">${group.clubName}</span>
+                                <span class="pin-club">${group.cityName || 'Sede oficial'}</span>
+                                <div class="mt-1 space-y-0.5 border-t border-white/10 pt-1">
+                                    ${group.tournaments.slice(0, 2).map((t) => `<div class="pin-multi-item">🎾 ${t.name} <span class="opacity-70 text-[8.5px]">(${t.category})</span></div>`).join('')}
+                                    ${group.tournaments.length > 2 ? `<div class="text-[8.5px] text-sky-400 font-bold">+${group.tournaments.length - 2} más</div>` : ''}
+                                </div>
+                            </div>
+                            ${group.hasOpenRegistration ? '<div class="pin-open-badge">INSCRIPCIÓN ABIERTA</div>' : ''}
+                        </div>
+                        <div class="pin-arrow"></div>
+                    </div>
+                `;
+
+                popupHtml = `
+                    <div class="p-3.5 bg-slate-900 text-white rounded-3xl max-w-[300px] border border-white/15 shadow-2xl">
+                        <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10">
+                            <div>
+                                <h4 class="font-extrabold text-sm text-white leading-tight">${group.clubName}</h4>
+                                <p class="text-xs text-slate-300">${group.cityName || 'Sede oficial'}</p>
+                            </div>
+                            <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-sky-500/20 text-sky-300 border border-sky-500/30 shrink-0">
+                                ${group.tournaments.length} Torneos
+                            </span>
+                        </div>
+
+                        ${distanceStr ? `<div class="text-[11px] text-sky-400 font-bold mb-2 flex items-center gap-1">🧭 A ${distanceStr} de tu ubicación</div>` : ''}
+
+                        <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar mb-3">
+                            ${group.tournaments.map((t) => `
+                                <div class="p-2.5 bg-white/5 rounded-2xl border border-white/10 hover:border-primary/50 transition-all flex flex-col justify-between gap-1.5">
+                                    <div class="flex items-center justify-between gap-1">
+                                        <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
+                                            ${t.tier.label}
+                                        </span>
+                                        <span class="text-[10px] font-semibold text-slate-300">Cat: <b class="text-white">${t.category}</b></span>
+                                    </div>
+                                    <div class="flex items-center justify-between gap-2">
+                                        <div class="font-extrabold text-xs text-white line-clamp-1">${t.name}</div>
+                                        <div class="text-primary font-bold text-xs shrink-0">${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</div>
+                                    </div>
+                                    <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-1 px-2.5 rounded-xl transition-all shadow-md mt-1 cursor-pointer">
+                                        ${t.isOpen ? '🎾 Inscribirme' : 'Ver Detalles'}
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+
+                        <button onclick="window.__handleNavigateToVenue('${group.coords.lat}', '${group.coords.lng}', '${encodeURIComponent(group.clubName)}')" class="w-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-xl transition-all border border-white/10 flex items-center justify-center gap-1.5 cursor-pointer">
+                            <span>🧭 Cómo llegar al Club</span>
+                        </button>
+                    </div>
+                `;
+            }
 
             const customIcon = L.divIcon({
                 html: pinHtml,
                 className: 'custom-tournament-leaflet-pin',
-                iconSize: isSelected ? [180, 80] : [150, 70],
-                iconAnchor: isSelected ? [90, 80] : [75, 70],
-                popupAnchor: [0, -75],
+                iconSize: isSelected ? [190, 95] : [160, 85],
+                iconAnchor: isSelected ? [95, 95] : [80, 85],
+                popupAnchor: [0, -85],
             });
 
-            const marker = L.marker([t.coords.lat, t.coords.lng], {
+            const marker = L.marker([group.coords.lat, group.coords.lng], {
                 icon: customIcon,
                 zIndexOffset: isSelected ? 1000 : 10,
             });
 
-            // Rich Popup Content
-            const popupHtml = `
-                <div class="p-3 bg-slate-900 text-white rounded-2xl max-w-[260px] border border-white/10 shadow-2xl">
-                    <div class="flex items-center justify-between gap-2 mb-2">
-                        <span class="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
-                            ${t.tier.label}
-                        </span>
-                        ${t.isOpen ? '<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full">● Abierto</span>' : '<span class="text-[10px] font-bold text-slate-400 bg-slate-800 px-2 py-0.5 rounded-full">Cerrado</span>'}
-                    </div>
-                    <h4 class="font-extrabold text-sm text-white mb-1 leading-tight">${t.name}</h4>
-                    <p class="text-xs text-slate-300 mb-2">${clubName}${cityName ? ` • ${cityName}` : ''}</p>
-                    ${distanceStr ? `<div class="text-[11px] text-sky-400 font-bold mb-2 flex items-center gap-1">📍 A ${distanceStr} de tu ubicación</div>` : ''}
-                    <div class="flex items-center justify-between text-xs font-semibold text-slate-400 pt-2 border-t border-white/10 mb-3">
-                        <span>Cat: <b class="text-white">${t.category}</b></span>
-                        <span>${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</span>
-                    </div>
-                    <div class="flex gap-2">
-                        <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-1.5 px-3 rounded-xl text-center transition-all shadow-md">
-                            ${t.isOpen ? '🎾 Inscribirme' : 'Ver Cuadros'}
-                        </button>
-                        <button onclick="window.__handleNavigateToVenue('${t.coords.lat}', '${t.coords.lng}', '${encodeURIComponent(clubName)}')" class="bg-white/10 hover:bg-white/20 text-white text-xs p-1.5 rounded-xl transition-all" title="Cómo llegar">
-                            🧭
-                        </button>
-                    </div>
-                </div>
-            `;
-
             marker.bindPopup(popupHtml, {
                 className: 'custom-smash-popup',
-                maxWidth: 280,
+                maxWidth: 320,
                 closeButton: false,
             });
 
             marker.on('click', (e) => {
                 L.DomEvent.stopPropagation(e);
-                setSelectedTournamentId(t.id);
+                setSelectedTournamentId(group.tournaments[0].id);
                 marker.openPopup();
-                map.flyTo([t.coords.lat, t.coords.lng], Math.max(map.getZoom(), 13), {
+                map.flyTo([group.coords.lat, group.coords.lng], Math.max(map.getZoom(), 13), {
                     duration: 0.8,
                     easeLinearity: 0.25,
                 });
             });
 
             markersGroup.addLayer(marker);
-            bounds.extend([t.coords.lat, t.coords.lng]);
+            bounds.extend([group.coords.lat, group.coords.lng]);
         });
 
         // Add user location to bounds if present
