@@ -609,6 +609,99 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                                 </div>
                             </div>
 
+                            {/* 4. MÓDULO EXCLUSIVO: CONTROL DE CAJA, INGRESOS Y EGRESOS */}
+                            <div className="p-6 sm:p-8 rounded-3xl bg-gradient-to-br from-[#0f131c] via-[#0b0f19] to-black border border-emerald-500/30 shadow-2xl">
+                                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 pb-4 border-b border-white/10">
+                                    <div>
+                                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 text-[11px] font-bold mb-1 border border-emerald-500/20">
+                                            <BarChart3 size={13} /> CONTROL DE CAJA Y ARQUEO DIARIO
+                                        </div>
+                                        <h3 className="text-lg sm:text-2xl font-black text-white">
+                                            Gestión Financiera Integral de tu Sede
+                                        </h3>
+                                        <p className="text-xs text-slate-400 mt-0.5">
+                                            Controlá cada peso que entra y sale de tu club en tiempo real, discriminado por turnos, torneos y cantina.
+                                        </p>
+                                    </div>
+                                    <span className="text-xs text-[#ccff00] font-mono bg-[#ccff00]/10 px-3 py-1.5 rounded-xl border border-[#ccff00]/20 font-bold whitespace-nowrap">
+                                        Balance Neto en Vivo
+                                    </span>
+                                </div>
+
+                                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+                                    {/* Columna 1: Ingresos */}
+                                    <div className="p-4 rounded-2xl bg-black/50 border border-emerald-500/20 space-y-3">
+                                        <div className="flex justify-between items-center text-xs font-bold text-emerald-400 pb-2 border-b border-white/5">
+                                            <span className="flex items-center gap-1.5">
+                                                <TrendingUp size={14} /> Ingresos del Torneo / Sede
+                                            </span>
+                                            <span className="font-mono text-white">+$1.024.000</span>
+                                        </div>
+                                        <div className="space-y-2 text-xs">
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>🎾 Inscripciones (32 jugadores):</span>
+                                                <span className="font-mono font-bold text-emerald-400">+$640.000</span>
+                                            </div>
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>📅 Alquiler de Canchas (24 turnos):</span>
+                                                <span className="font-mono font-bold text-emerald-400">+$288.000</span>
+                                            </div>
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>🥪 Cantina / Buffet / Bar:</span>
+                                                <span className="font-mono font-bold text-emerald-400">+$96.000</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Columna 2: Egresos */}
+                                    <div className="p-4 rounded-2xl bg-black/50 border border-rose-500/20 space-y-3">
+                                        <div className="flex justify-between items-center text-xs font-bold text-rose-400 pb-2 border-b border-white/5">
+                                            <span className="flex items-center gap-1.5">
+                                                <DollarSign size={14} /> Egresos & Gastos Operativos
+                                            </span>
+                                            <span className="font-mono text-white">-$225.000</span>
+                                        </div>
+                                        <div className="space-y-2 text-xs">
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>📦 Tubos de Pelotas Oficiales:</span>
+                                                <span className="font-mono font-bold text-rose-400">-$85.000</span>
+                                            </div>
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>🏆 Trofeos y Premiación:</span>
+                                                <span className="font-mono font-bold text-rose-400">-$90.000</span>
+                                            </div>
+                                            <div className="flex justify-between text-slate-300">
+                                                <span>👨‍⚖️ Pago Cancheros / Árbitro:</span>
+                                                <span className="font-mono font-bold text-rose-400">-$50.000</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Columna 3: Balance y Cierre de Caja */}
+                                    <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-center space-y-3">
+                                        <div className="text-[11px] text-slate-300 font-bold uppercase tracking-wider">
+                                            Resultado Neto Disponible
+                                        </div>
+                                        <div className="text-3xl font-black text-[#ccff00] font-mono">
+                                            +$799.000
+                                        </div>
+                                        <div className="text-[11px] text-slate-400 border-t border-white/10 pt-2 space-y-1">
+                                            <div className="flex justify-between">
+                                                <span>💵 Efectivo en Caja:</span>
+                                                <span className="text-white font-mono font-bold">$420.000</span>
+                                            </div>
+                                            <div className="flex justify-between">
+                                                <span>📲 Transferencia / Alias:</span>
+                                                <span className="text-white font-mono font-bold">$379.000</span>
+                                            </div>
+                                        </div>
+                                        <div className="text-[10px] text-emerald-300 font-bold bg-emerald-500/20 py-1 rounded-lg">
+                                            ✅ Reporte listo para Comisión Directiva
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* SIMULADOR FINANCIERO */}
                             <div className="p-6 sm:p-8 rounded-3xl bg-[#0f131c] border border-white/10">
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
