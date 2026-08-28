@@ -21,10 +21,14 @@ export const VersionUpdatePrompt: React.FC = () => {
 
       if (res.ok) {
         const data = await res.json();
-        if (data?.version && data.version !== packageInfo.version) {
-          console.log(`🎾 [Smash PWA] Nueva versión detectada: v${data.version} (Actual: v${packageInfo.version})`);
-          setNewVersion(data.version);
-          setUpdateAvailable(true);
+        if (data?.version) {
+          if (data.version !== packageInfo.version) {
+            console.log(`🎾 [Smash PWA] Nueva versión detectada: v${data.version} (Actual: v${packageInfo.version})`);
+            setNewVersion(data.version);
+            setUpdateAvailable(true);
+          } else {
+            setUpdateAvailable(false);
+          }
         }
       }
     } catch (e) {
