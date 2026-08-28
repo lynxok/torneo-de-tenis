@@ -2589,10 +2589,14 @@ export const api = {
         }
     },
     institutions: {
-        async getAll() {
-            const { data, error } = await supabase.from('institutions').select('*').order('name');
+        async getAll(includeInactive: boolean = false) {
+            let query = supabase.from('institutions').select('*').order('name');
+            if (!includeInactive) {
+                query = query.neq('is_active', false);
+            }
+            const { data, error } = await query;
             if (error) throw error;
-            return data as Institution[];
+            return (data || []).filter(inst => includeInactive || inst.is_active !== false) as Institution[];
         },
         async getById(id: string) {
             const { data, error } = await supabase.from('institutions').select('*').eq('id', id).single();

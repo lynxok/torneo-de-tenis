@@ -34,7 +34,7 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
   const loadInstitutions = async () => {
     setLoading(true);
     try {
-        const allData = await api.institutions.getAll();
+        const allData = await api.institutions.getAll(true);
         
         if (user?.role === 'superadmin') {
             // Superadmin sees all

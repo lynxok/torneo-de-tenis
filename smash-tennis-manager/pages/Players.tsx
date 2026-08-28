@@ -14,6 +14,7 @@ import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass, isJuniorPlayer } from '../utils/demographics';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { MatchmakingBoard } from '../components/MatchmakingBoard';
+import { UserAvatar } from '../components/UserAvatar';
 
 interface PlayersProps {
     user: UserProfile;
@@ -55,7 +56,18 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                 api.auth.getAllProfiles(),
                 api.institutions.getAll()
             ]);
-            setPlayers(allPlayers);
+            const enriched = allPlayers.map(p => {
+                if (p.id === user.id) {
+                    return {
+                        ...p,
+                        ...user,
+                        profile_picture_url: user.profile_picture_url || p.profile_picture_url,
+                        avatar_url: user.avatar_url || (p as any).avatar_url
+                    };
+                }
+                return p;
+            });
+            setPlayers(enriched);
             setInstitutions(allInstitutions);
         } catch (e) {
             console.error("Error loading players data", e);
@@ -64,7 +76,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
         }
     };
     loadData();
-  }, []);
+  }, [user]);
 
   // --- SMART SUGGESTION ALGORITHM (UPDATED) ---
   const suggestions = useMemo(() => {
@@ -286,10 +298,12 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                           </button>
 
                           <div className="flex items-center gap-4 mb-3">
-                              <div className="w-14 h-14 rounded-full bg-slate-700 flex items-center justify-center text-xl font-bold text-white shadow-inner relative shrink-0">
-                                  {player.name.charAt(0)}
-                                  <div className={`absolute bottom-0 right-0 w-3.5 h-3.5 rounded-full border-2 border-card ${player.is_approved ? 'bg-green-500' : 'bg-gray-500'}`}></div>
-                              </div>
+                              <UserAvatar 
+                                  user={player} 
+                                  size="lg" 
+                                  shape="circle" 
+                                  isCurrentUser={player.id === user.id} 
+                              />
                               <div className="min-w-0">
                                   <h4 className="font-bold text-white truncate">{player.name} {player.lastname}</h4>
                                   <div className="text-xs text-muted truncate">{player.institution || 'Sin club'}</div>
@@ -457,12 +471,12 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                         >
                                             <td className="p-4 pl-6">
                                                 <div className="flex items-center gap-4">
-                                                    <div className="relative">
-                                                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center text-sm font-bold text-white ring-2 ring-white/10 group-hover:ring-primary/50 transition-all">
-                                                            {player.name.charAt(0)}
-                                                        </div>
-                                                        {player.is_approved && <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-card rounded-full" title="Verificado"></div>}
-                                                    </div>
+                                                    <UserAvatar 
+                                                        user={player} 
+                                                        size="md" 
+                                                        shape="circle" 
+                                                        isCurrentUser={player.id === user.id} 
+                                                    />
                                                     <div>
                                                         <div className="font-bold text-white group-hover:text-primary transition-colors flex items-center gap-2">
                                                             <span>{formatPlayerName(player.name, player.lastname)}</span>
@@ -558,10 +572,12 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                     onClick={() => handleOpenProfile(player)}
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-slate-700 to-slate-800 flex items-center justify-center text-2xl font-bold text-white shadow-inner relative">
-                                            {player.name.charAt(0)}
-                                            <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-4 border-card ${player.is_approved ? 'bg-green-500' : 'bg-gray-500'}`}></div>
-                                        </div>
+                                        <UserAvatar 
+                                            user={player} 
+                                            size="xl" 
+                                            shape="rounded" 
+                                            isCurrentUser={player.id === user.id} 
+                                        />
                                         <div>
                                             <h4 className="font-bold text-white text-lg leading-tight group-hover:text-primary transition-colors flex items-center gap-1.5">
                                                 <span>{formatPlayerName(player.name, player.lastname)}</span>
@@ -780,9 +796,13 @@ const PlayerProfileModal = ({
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-30"></div>
                 </div>
                 <div className="px-8 pb-8 -mt-16 flex flex-col md:flex-row gap-6 items-end md:items-start relative z-10">
-                    <div className="w-32 h-32 rounded-3xl bg-card border-4 border-card shadow-xl flex items-center justify-center text-4xl font-bold text-white bg-gradient-to-br from-slate-700 to-slate-600">
-                        {player.name.charAt(0)}
-                    </div>
+                    <UserAvatar 
+                        user={player} 
+                        size="2xl" 
+                        shape="rounded" 
+                        isCurrentUser={isMe} 
+                        className="w-32 h-32 rounded-3xl border-4 border-card shadow-xl" 
+                    />
                     <div className="flex-1 pt-16 md:pt-18 space-y-1">
                         <div className="flex justify-between items-start flex-wrap gap-2">
                              <div>
@@ -887,9 +907,7 @@ const ContactModal = ({ toPlayer, currentUser, onClose }: { toPlayer: UserProfil
             <div className="bg-card border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
                 <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold">
-                            {toPlayer.name[0]}
-                        </div>
+                        <UserAvatar user={toPlayer} size="md" shape="rounded" />
                         <div>
                             <h3 className="text-base font-bold text-white leading-none">Desafiar a {toPlayer.name} {toPlayer.lastname || ''}</h3>
                             <p className="text-xs text-muted mt-1">{toPlayer.institution || 'Sin club'} • Cat. {toPlayer.category || 'Open'}</p>

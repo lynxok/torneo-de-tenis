@@ -1,0 +1,156 @@
+import React from 'react';
+import { X, ExternalLink, Download, User as UserIcon, Building, Award, CheckCircle2 } from 'lucide-react';
+import { formatPlayerName } from '../utils/formatters';
+
+export interface AvatarPreviewModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  name: string;
+  lastname?: string;
+  imageUrl?: string | null;
+  category?: string;
+  institution?: string;
+  role?: string;
+  isVerified?: boolean;
+}
+
+export const AvatarPreviewModal: React.FC<AvatarPreviewModalProps> = ({
+  isOpen,
+  onClose,
+  name,
+  lastname,
+  imageUrl,
+  category,
+  institution,
+  role,
+  isVerified = false,
+}) => {
+  if (!isOpen) return null;
+
+  const formattedName = formatPlayerName(name, lastname);
+  const hasImage = Boolean(imageUrl && typeof imageUrl === 'string' && imageUrl.trim().length > 0);
+
+  const handleDownload = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!imageUrl) return;
+    const link = document.createElement('a');
+    link.href = imageUrl;
+    link.download = `Foto-${formattedName.replace(/\s+/g, '_')}.jpg`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.click();
+  };
+
+  const handleOpenOriginal = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!imageUrl) return;
+    window.open(imageUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in zoom-in-95 duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="bg-slate-900 border border-white/10 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col relative"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top Floating Controls */}
+        <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+          {hasImage && (
+            <button
+              onClick={handleOpenOriginal}
+              className="p-2.5 bg-black/50 hover:bg-black/80 rounded-full text-white/80 hover:text-white transition-all backdrop-blur-sm"
+              title="Abrir imagen original"
+            >
+              <ExternalLink size={18} />
+            </button>
+          )}
+          <button
+            onClick={onClose}
+            className="p-2.5 bg-black/50 hover:bg-black/80 rounded-full text-white/80 hover:text-white transition-all backdrop-blur-sm"
+            title="Cerrar vista previa"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Image Preview Container */}
+        <div className="relative w-full aspect-square bg-slate-950 flex items-center justify-center overflow-hidden group">
+          {/* Subtle Ambient Glow */}
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent to-transparent z-10 pointer-events-none" />
+
+          {hasImage ? (
+            <img
+              src={imageUrl!}
+              alt={formattedName}
+              className="w-full h-full object-cover select-none transition-transform duration-300 group-hover:scale-105"
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-slate-800 to-slate-950 text-white select-none">
+              <div className="w-32 h-32 rounded-full bg-primary/20 text-primary border-2 border-primary/30 flex items-center justify-center text-5xl font-black shadow-2xl mb-4">
+                {(name || 'U').charAt(0).toUpperCase()}
+              </div>
+              <span className="text-xs text-muted font-semibold uppercase tracking-wider">
+                Sin foto oficial cargada
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Player Details Footer */}
+        <div className="p-6 bg-slate-900 space-y-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <h3 className="text-2xl font-bold text-white leading-tight">
+                {formattedName}
+              </h3>
+              {isVerified && (
+                <CheckCircle2 size={18} className="text-green-400 shrink-0" title="Verificado Oficial" />
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300 mt-2">
+              {category && (
+                <span className="px-2.5 py-1 rounded-lg bg-primary/20 text-primary border border-primary/30 font-bold flex items-center gap-1">
+                  <Award size={13} /> {category.includes('Cat') || category === 'Open' ? category : `Cat. ${category}`}
+                </span>
+              )}
+              {institution && (
+                <span className="px-2.5 py-1 rounded-lg bg-white/5 text-slate-300 border border-white/10 flex items-center gap-1">
+                  <Building size={13} className="text-muted" /> {institution}
+                </span>
+              )}
+              {role && role !== 'player' && (
+                <span className="px-2.5 py-1 rounded-lg bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold uppercase text-[10px]">
+                  {role}
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="pt-2 flex items-center gap-3 border-t border-white/10">
+            {hasImage && (
+              <button
+                onClick={handleDownload}
+                className="flex-1 py-2.5 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-all flex items-center justify-center gap-2 border border-white/10"
+              >
+                <Download size={15} /> Descargar Foto
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className={`py-2.5 px-5 rounded-xl font-bold text-xs transition-all text-dark bg-primary hover:bg-primary-hover shadow-lg shadow-primary/20 ${
+                hasImage ? '' : 'w-full'
+              }`}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

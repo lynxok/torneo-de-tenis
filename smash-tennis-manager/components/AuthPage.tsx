@@ -81,7 +81,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
       setIsLogin(true);
     }
 
-    api.institutions.getAll().then(setInstitutions).catch(err => console.error("Error loading clubs", err));
+    api.institutions.getAll().then(data => {
+      setInstitutions(data.filter(i => i.is_active !== false));
+    }).catch(err => console.error("Error loading clubs", err));
   }, [initialClubId, initialMode, initialRole]);
 
   const handleSubmit = async (e: React.FormEvent) => {
