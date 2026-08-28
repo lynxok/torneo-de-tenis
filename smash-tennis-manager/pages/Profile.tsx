@@ -283,6 +283,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                 setUploadingImage(true);
                 const imageUrl = await api.storage.uploadProfileImage(selectedFile, user.id);
                 updates.profile_picture_url = imageUrl;
+                updates.avatar_url = imageUrl;
                 setUploadingImage(false);
             }
 

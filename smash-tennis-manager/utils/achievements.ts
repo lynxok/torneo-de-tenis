@@ -208,11 +208,20 @@ export function calculatePlayerAchievements(
             category: 'community',
             tier: 'bronze',
             icon: 'Camera',
-            unlocked: Boolean(user.profile_picture_url && user.profile_picture_url.trim().length > 0),
+            unlocked: Boolean(
+                (user.profile_picture_url && user.profile_picture_url.trim().length > 0) ||
+                ((user as any).avatar_url && (user as any).avatar_url.trim().length > 0)
+            ),
             progress: {
-                current: (user.profile_picture_url && user.profile_picture_url.trim().length > 0) ? 1 : 0,
+                current: (
+                    (user.profile_picture_url && user.profile_picture_url.trim().length > 0) ||
+                    ((user as any).avatar_url && (user as any).avatar_url.trim().length > 0)
+                ) ? 1 : 0,
                 max: 1,
-                label: (user.profile_picture_url && user.profile_picture_url.trim().length > 0) ? '¡Foto activa!' : '0/1 foto cargada'
+                label: (
+                    (user.profile_picture_url && user.profile_picture_url.trim().length > 0) ||
+                    ((user as any).avatar_url && (user as any).avatar_url.trim().length > 0)
+                ) ? '¡Foto activa!' : '0/1 foto cargada'
             },
             badgeColor: 'from-sky-600 to-blue-800',
             rewardDescription: '+50 pts de bonus en el Ranking'

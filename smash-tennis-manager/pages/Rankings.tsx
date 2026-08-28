@@ -26,10 +26,21 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
 
     useEffect(() => {
         api.auth.getAllProfiles().then(data => {
-            const ranked = computeRankings(data);
+            const enriched = data.map(p => {
+                if (p.id === user.id) {
+                    return {
+                        ...p,
+                        ...user,
+                        profile_picture_url: user.profile_picture_url || p.profile_picture_url,
+                        avatar_url: user.avatar_url || (p as any).avatar_url
+                    };
+                }
+                return p;
+            });
+            const ranked = computeRankings(enriched);
             setPlayers(ranked);
         }).finally(() => setLoading(false));
-    }, []);
+    }, [user]);
 
     const filteredPlayers = players.filter(p => {
         // 1. Text Search Filter
@@ -52,7 +63,8 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
 
     const handlePointClick = (e: React.MouseEvent, player: UserProfile) => {
         e.stopPropagation();
-        setSelectedPlayerForPoints(player);
+        const enrichedPlayer = player.id === user.id ? { ...player, ...user } : player;
+        setSelectedPlayerForPoints(enrichedPlayer);
     };
 
     return (
@@ -199,12 +211,22 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
                                         </td>
                                         <td className="p-4">
                                             <div className="flex items-center gap-3">
-                                                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border ${isCurrentUser
-                                                    ? 'bg-primary text-dark border-primary'
-                                                    : 'bg-gradient-to-br from-slate-700 to-slate-600 text-white border-white/10'
-                                                    }`}>
-                                                    {(player.name || 'U').charAt(0).toUpperCase()}
-                                                </div>
+                                                {player.profile_picture_url || (player as any).avatar_url ? (
+                                                    <img
+                                                        src={player.profile_picture_url || (player as any).avatar_url}
+                                                        alt={player.name}
+                                                        className={`w-9 h-9 rounded-full object-cover border shrink-0 shadow-sm ${
+                                                            isCurrentUser ? 'border-primary ring-2 ring-primary/30' : 'border-white/10'
+                                                        }`}
+                                                    />
+                                                ) : (
+                                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold border shrink-0 ${isCurrentUser
+                                                        ? 'bg-primary text-dark border-primary'
+                                                        : 'bg-gradient-to-br from-slate-700 to-slate-600 text-white border-white/10'
+                                                        }`}>
+                                                        {(player.name || 'U').charAt(0).toUpperCase()}
+                                                    </div>
+                                                )}
                                                 <div>
                                                     <div className={`font-bold transition-colors flex items-center gap-1.5 ${isCurrentUser ? 'text-primary' : 'text-white group-hover:text-primary'
                                                         }`}>
@@ -271,18 +293,21 @@ export const Rankings: React.FC<RankingsProps> = ({ user }) => {
 import { Match } from '../types';
 
 const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, user: UserProfile, onClose: () => void }) => {
+    const isMe = player.id === user.id;
+    // Enrich with latest user memory if looking at own profile
+    const activePlayer: UserProfile = isMe ? { ...player, ...user } : player;
+
     // State for detailed history
     const [historyMatches, setHistoryMatches] = useState<Match[]>([]);
     const [loadingDetails, setLoadingDetails] = useState(true);
     const [expandedSection, setExpandedSection] = useState<'tournaments' | 'wins' | 'participation' | null>(null);
 
     // Initial simple stats from profile (fallback)
-    // We will replace this with "Real Calculated Stats" once history loads
-    const [stats, setStats] = useState(() => calculatePointsDetails(player));
+    const [stats, setStats] = useState(() => calculatePointsDetails(activePlayer));
 
     useEffect(() => {
         // Fetch real history to populate details
-        api.matches.getByUser(player.id)
+        api.matches.getByUser(activePlayer.id)
             .then(data => {
                 setHistoryMatches(data);
 
@@ -296,7 +321,7 @@ const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, 
                 let partPts = 0;
 
                 data.forEach(m => {
-                    const isWinner = m.winner_id === player.id;
+                    const isWinner = m.winner_id === activePlayer.id;
 
                     // 1. Participation (Everyone gets it)
                     partCount++;
@@ -318,20 +343,25 @@ const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, 
                     }
                 });
 
+                // 4. Photo Bonus
+                const photoUrl = activePlayer.profile_picture_url || (activePlayer as any).avatar_url;
+                const hasPhoto = Boolean(photoUrl && typeof photoUrl === 'string' && photoUrl.trim().length > 0);
+                const photoPts = hasPhoto ? 50 : 0;
+                newTotal += photoPts;
+
                 setStats({
                     total: newTotal,
                     breakdown: {
                         tournaments: { count: tournWins, points: tournPts },
                         wins: { count: matchWins, points: matchPts },
-                        participation: { count: partCount, points: partPts }
+                        participation: { count: partCount, points: partPts },
+                        profilePhoto: { count: hasPhoto ? 1 : 0, points: photoPts }
                     }
                 });
             })
             .catch(err => console.error("Failed to load history", err))
             .finally(() => setLoadingDetails(false));
-    }, [player.id]);
-
-    const isMe = player.id === user.id;
+    }, [activePlayer.id, activePlayer.profile_picture_url, (activePlayer as any).avatar_url]);
 
     const toggleSection = (section: 'tournaments' | 'wins' | 'participation') => {
         if (expandedSection === section) {
@@ -342,28 +372,41 @@ const PointsBreakdownModal = ({ player, user, onClose }: { player: UserProfile, 
     };
 
     // Derived lists from real history
-    const winsList = historyMatches.filter(m => m.winner_id === player.id);
+    const winsList = historyMatches.filter(m => m.winner_id === activePlayer.id);
     const participationList = historyMatches;
-    const tournamentsList = historyMatches.filter(m => m.round === 'Final' && m.winner_id === player.id);
+    const tournamentsList = historyMatches.filter(m => m.round === 'Final' && m.winner_id === activePlayer.id);
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95" onClick={onClose}>
             <div className="bg-card border border-white/10 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col max-h-[90vh]" onClick={e => e.stopPropagation()}>
 
-                <div className="p-6 border-b border-white/10 bg-gradient-to-r from-blue-900/40 to-card flex justify-between items-start">
-                    <div>
-                        <div className="flex items-center gap-2 mb-1 text-muted text-xs uppercase font-bold">
-                            <Zap size={12} className="text-yellow-400" /> Desglose de Puntaje
+                <div className="p-6 border-b border-white/10 bg-gradient-to-r from-blue-900/40 to-card flex justify-between items-start gap-4">
+                    <div className="flex items-center gap-3.5 min-w-0">
+                        {activePlayer.profile_picture_url || (activePlayer as any).avatar_url ? (
+                            <img
+                                src={activePlayer.profile_picture_url || (activePlayer as any).avatar_url}
+                                alt={activePlayer.name}
+                                className="w-12 h-12 rounded-full object-cover border-2 border-primary/40 shadow-lg shrink-0"
+                            />
+                        ) : (
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary to-primary-hover text-dark flex items-center justify-center font-black text-lg border-2 border-primary/30 shrink-0">
+                                {(activePlayer.name || 'U').charAt(0).toUpperCase()}
+                            </div>
+                        )}
+                        <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5 text-muted text-xs uppercase font-bold">
+                                <Zap size={12} className="text-yellow-400" /> Desglose de Puntaje
+                            </div>
+                            <h3 className="text-xl font-bold text-white truncate">
+                                {formatPlayerName(activePlayer.name, activePlayer.lastname)}
+                            </h3>
+                            <p className="text-xs text-slate-300">
+                                {isMe ? 'Así se compone tu puntaje actual.' : 'Detalle de puntos acumulados en base al historial.'}
+                            </p>
                         </div>
-                        <h3 className="text-2xl font-bold text-white mb-1">
-                            {formatPlayerName(player.name, player.lastname)}
-                        </h3>
-                        <p className="text-sm text-slate-300">
-                            {isMe ? 'Así se compone tu puntaje actual.' : 'Detalle de puntos acumulados en base al historial.'}
-                        </p>
                     </div>
-                    <div className="text-right">
-                        <div className="text-3xl font-bold text-primary transition-all duration-500">
+                    <div className="text-right shrink-0">
+                        <div className="text-3xl font-bold text-primary transition-all duration-500 font-mono">
                             {loadingDetails ? <span className="text-muted text-lg animate-pulse">...</span> : stats.total}
                         </div>
                         <div className="text-[10px] text-muted uppercase">Puntos Totales</div>

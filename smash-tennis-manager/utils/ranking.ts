@@ -15,7 +15,8 @@ export function calculatePointsDetails(player: UserProfile): PlayerPointsDetails
     const wins = player.matches_won || 0;
     const tourneys = player.tournaments_won || 0;
     const estimatedLosses = Math.floor(wins * 0.5);
-    const hasPhoto = Boolean(player.profile_picture_url && player.profile_picture_url.trim().length > 0);
+    const photoUrl = player.profile_picture_url || (player as any).avatar_url;
+    const hasPhoto = Boolean(photoUrl && typeof photoUrl === 'string' && photoUrl.trim().length > 0);
 
     const pointsFromTournaments = tourneys * 1000;
     const pointsFromWins = wins * 100;
