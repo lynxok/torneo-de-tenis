@@ -247,13 +247,21 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             attributionControl: false,
         });
 
-        // CartoDB Dark Matter Tiles (High contrast, modern dark theme)
+        // Esri Dark Gray Canvas Basemap (Free, high performance, zero watermark / no API key required)
         const tileLayer = L.tileLayer(
-            'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+            'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}',
             {
-                subdomains: 'abcd',
-                maxZoom: 19,
-                attribution: '&copy; CARTO &copy; OSM',
+                maxZoom: 16,
+                attribution: '&copy; Esri &copy; OpenStreetMap',
+            }
+        ).addTo(map);
+
+        // Dark Reference labels overlay
+        L.tileLayer(
+            'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}',
+            {
+                maxZoom: 16,
+                attribution: '',
             }
         ).addTo(map);
 
