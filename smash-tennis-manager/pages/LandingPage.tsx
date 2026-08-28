@@ -653,7 +653,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onOpenAuth }) => {
 
                     <div className="flex items-center gap-3.5">
                         <span className="text-sm text-slate-400 font-medium">Desarrollado por</span>
-                        <a href="https://lynx.com.ar" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity inline-flex items-center">
+                        <a href="https://www.lnx.com.ar" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity inline-flex items-center">
                             <img src="/lynx-logo-blanco.png" alt="LYNX" className="h-9 md:h-10 w-auto object-contain drop-shadow-[0_0_10px_rgba(255,255,255,0.25)]" />
                         </a>
                     </div>

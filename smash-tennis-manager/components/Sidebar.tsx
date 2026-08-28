@@ -173,7 +173,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Footer Branding */}
-        <div className="pt-6 pb-2 flex flex-col items-center justify-center gap-2 opacity-70 hover:opacity-100 transition-opacity">
+        <a 
+          href="https://www.lnx.com.ar" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          className="pt-6 pb-2 flex flex-col items-center justify-center gap-2 opacity-70 hover:opacity-100 transition-opacity"
+        >
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-muted">Desarrollado por</span>
             <img src="/lynx-logo-blanco.png" alt="Lynx" className="h-7 w-auto object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]" />
@@ -181,7 +186,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span className="text-[10px] font-mono text-primary/80 bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
             v{packageInfo.version}
           </span>
-        </div>
+        </a>
       </nav>
     </aside>
   );

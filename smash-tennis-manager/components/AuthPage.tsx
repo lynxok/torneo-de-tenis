@@ -766,7 +766,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         {/* FOOTER */}
         <div className="absolute bottom-4 left-0 right-0 flex justify-center items-center gap-2 opacity-50 hover:opacity-100 transition-opacity">
           <span className="text-xs text-muted">Desarrollado por</span>
-          <img src="/lynx-logo-blanco.png" alt="Lynx Consulting" className="h-6 w-auto" />
+          <a href="https://www.lnx.com.ar" target="_blank" rel="noopener noreferrer" className="hover:opacity-80 transition-opacity inline-flex items-center">
+            <img src="/lynx-logo-blanco.png" alt="LYNX" className="h-6 w-auto object-contain" />
+          </a>
         </div>
       </div>
     </div>

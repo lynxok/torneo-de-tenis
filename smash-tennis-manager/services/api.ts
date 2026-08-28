@@ -262,6 +262,12 @@ export const api = {
                 'member_number',
                 'member_status',
                 'memberships',
+                'free_tournaments_remaining',
+                'free_tournaments_disputed',
+                'is_membership_active',
+                'membership_type',
+                'membership_expires_at',
+                'promo_code_used',
                 'updated_at'
             ];
 
