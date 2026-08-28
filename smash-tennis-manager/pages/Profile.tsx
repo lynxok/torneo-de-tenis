@@ -276,6 +276,8 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                 await api.auth.updateUserPassword(user.id, formData.newPassword.trim());
             }
 
+            const isFirstPhoto = !user.profile_picture_url && Boolean(selectedFile);
+
             // 1. Upload Image if selected
             if (selectedFile) {
                 setUploadingImage(true);
@@ -287,7 +289,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             // 2. Update Profile Data
             await api.auth.updateProfile(user.id, updates);
 
-            if (isInstitutionChanged) {
+            if (isFirstPhoto) {
+                soundEffects.playTennisHit();
+                addToast("🎉 ¡Felicitaciones! Sumaste +50 pts al Ranking Oficial por subir tu foto de perfil.", 'success');
+            } else if (isInstitutionChanged) {
                 addToast("Cambiaste de institución. Pendiente de aprobación.", 'warning');
             } else {
                 addToast("Perfil actualizado correctamente.", 'success');
@@ -420,6 +425,37 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                             </button>
                         </div>
                     </div>
+
+                    {/* INCENTIVE BANNER FOR PROFILE PHOTO (+50 PTS) */}
+                    {!user.profile_picture_url && (
+                        <div className="bg-gradient-to-r from-sky-950/60 via-card to-blue-900/40 border border-sky-500/40 rounded-2xl p-4 sm:p-5 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl animate-fade-up">
+                            <div className="flex items-center gap-3.5">
+                                <div className="p-3 bg-sky-500/20 text-sky-400 rounded-2xl border border-sky-500/30 shrink-0 shadow-lg shadow-sky-500/10">
+                                    <Camera size={26} />
+                                </div>
+                                <div className="space-y-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <h4 className="text-sm sm:text-base font-bold text-white">¡Suma tus primeros +50 pts de Ranking!</h4>
+                                        <span className="text-[10px] bg-amber-500/20 text-amber-300 font-black px-2 py-0.5 rounded-full border border-amber-500/30 flex items-center gap-1">
+                                            <Sparkles size={10} className="text-yellow-400" /> Bono Oficial
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-slate-300 leading-relaxed">
+                                        Sube tu foto de perfil para tu tarjeta coleccionable, los cuadros de torneos y escala posiciones en el ranking oficial al instante.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    soundEffects.playScoreBeep();
+                                    setIsEditing(true);
+                                }}
+                                className="w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-sky-400 to-blue-500 hover:from-sky-300 hover:to-blue-400 text-slate-950 text-xs font-black rounded-xl transition-all shadow-lg shadow-sky-500/20 shrink-0 flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                                <Camera size={15} /> Subir Foto (+50 pts)
+                            </button>
+                        </div>
+                    )}
 
                     <Card className="space-y-6">
                         <h3 className="text-lg font-bold text-white border-b border-white/10 pb-4 mb-4">Información Personal</h3>
@@ -859,14 +895,14 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
 
                                 {/* PROFILE PICTURE UPLOAD */}
                                 <div className="flex flex-col items-center justify-center mb-6">
-                                    <div className="relative w-24 h-24 rounded-full bg-slate-800 border-2 border-dashed border-white/20 flex items-center justify-center overflow-hidden group">
+                                    <div className="relative w-24 h-24 rounded-full bg-slate-800 border-2 border-dashed border-sky-500/40 flex items-center justify-center overflow-hidden group shadow-lg shadow-sky-500/10">
                                         {previewUrl ? (
                                             <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
                                         ) : (
-                                            <Camera size={24} className="text-muted" />
+                                            <Camera size={28} className="text-sky-400" />
                                         )}
-                                        <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
-                                            <p className="text-xs text-white font-bold">Cambiar</p>
+                                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                                            <p className="text-xs text-white font-bold">{previewUrl ? 'Cambiar' : 'Subir'}</p>
                                         </div>
                                         <input
                                             type="file"
@@ -875,8 +911,11 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                                         />
                                     </div>
-                                    <div className="text-center mt-2">
-                                        <p className="text-xs text-muted">Haz clic para subir foto</p>
+                                    <div className="text-center mt-2.5 space-y-1">
+                                        <span className="inline-flex items-center gap-1 text-[11px] font-bold bg-sky-500/15 text-sky-300 px-2.5 py-0.5 rounded-full border border-sky-500/30">
+                                            <Sparkles size={11} className="text-yellow-400" /> +50 pts de Ranking por foto
+                                        </span>
+                                        <p className="text-xs text-muted">Haz clic para subir o cambiar tu foto</p>
                                         {selectedFile && <p className="text-[10px] text-primary">{selectedFile.name}</p>}
                                     </div>
                                 </div>

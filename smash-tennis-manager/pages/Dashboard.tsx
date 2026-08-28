@@ -30,7 +30,8 @@ import {
     Flame,
     UserCircle,
     X,
-    Loader2
+    Loader2,
+    Camera
 } from 'lucide-react';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { StoriesBar } from '../components/stories/StoriesBar';
@@ -541,6 +542,32 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 <QuickAction icon={Trophy} label="Mis Torneos" onClick={() => onNavigate('tournaments')} color="bg-amber-500" />
                 <QuickAction icon={Zap} label="Ver Ranking" onClick={() => onNavigate('rankings')} color="bg-slate-700" />
             </div>
+
+            {/* INCENTIVE BANNER: SUBE TU FOTO Y GANA +50 PTS */}
+            {!user.profile_picture_url && (
+                <div className="bg-gradient-to-r from-sky-950/60 via-card to-blue-900/40 border border-sky-500/40 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4 shadow-xl animate-fade-up">
+                    <div className="flex items-center gap-3.5">
+                        <div className="p-2.5 bg-sky-500/20 text-sky-400 rounded-xl border border-sky-500/30 shrink-0">
+                            <Camera size={22} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-white">¡Gana tus primeros 50 pts de Ranking!</h4>
+                                <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-1.5 py-0.5 rounded-full border border-amber-500/30">+50 pts</span>
+                            </div>
+                            <p className="text-xs text-slate-300">
+                                Sube tu foto de perfil oficial para el circuito, cuadros de torneos y tu tarjeta coleccionable.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => onNavigate('profile')}
+                        className="w-full sm:w-auto px-4 py-2 bg-gradient-to-r from-sky-400 to-blue-500 hover:from-sky-300 hover:to-blue-400 text-slate-950 text-xs font-black rounded-xl transition-all shadow-md shrink-0 flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                        <Camera size={14} /> Subir Foto
+                    </button>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column (2/3) */}
