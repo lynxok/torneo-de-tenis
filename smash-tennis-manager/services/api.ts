@@ -3282,6 +3282,31 @@ export const api = {
         }
     },
     promoCodes: {
+        async validatePromoCode(code: string) {
+            const cleanCode = (code || '').trim().toUpperCase();
+            if (!cleanCode) return { valid: false, message: "Código vacío." };
+
+            const { data: promo, error: pError } = await supabase
+                .from('promo_codes')
+                .select('*')
+                .eq('code', cleanCode)
+                .single();
+
+            if (pError || !promo) {
+                return { valid: false, message: "El código promocional no existe o es inválido." };
+            }
+
+            if (!promo.is_active || (promo.current_uses && promo.current_uses >= 1)) {
+                return { valid: false, message: "Este código promocional ya fue utilizado y no puede reutilizarse." };
+            }
+
+            if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
+                return { valid: false, message: "Este código promocional ha expirado." };
+            }
+
+            return { valid: true, promo };
+        },
+
         async redeemPromoCode(code: string, userId: string) {
             const cleanCode = (code || '').trim().toUpperCase();
             if (!cleanCode) throw new Error("Debes ingresar un código promocional válido.");
@@ -3297,16 +3322,12 @@ export const api = {
                 throw new Error("El código promocional ingresado no existe o es inválido.");
             }
 
-            if (!promo.is_active) {
-                throw new Error("Este código promocional ya no se encuentra activo.");
+            if (!promo.is_active || (promo.current_uses && promo.current_uses >= 1)) {
+                throw new Error("Este código promocional ya ha sido utilizado (los códigos solo pueden usarse una sola vez).");
             }
 
             if (promo.expires_at && new Date(promo.expires_at) < new Date()) {
                 throw new Error("Este código promocional ha expirado.");
-            }
-
-            if (promo.max_uses && (promo.current_uses || 0) >= promo.max_uses) {
-                throw new Error("Este código promocional ha alcanzado su límite máximo de usos.");
             }
 
             // 2. Verificar que el usuario no lo haya usado ya
@@ -3354,11 +3375,14 @@ export const api = {
                 console.warn("Could not sync promo code to institution (non-blocking):", instIgn);
             }
 
-            // 4. Incrementar usos en promo_codes
+            // 4. Marcar código como utilizado y desactivarlo para garantizar uso único
             try {
                 await supabase
                     .from('promo_codes')
-                    .update({ current_uses: (promo.current_uses || 0) + 1 })
+                    .update({ 
+                        current_uses: (promo.current_uses || 0) + 1,
+                        is_active: false
+                    })
                     .eq('id', promo.id);
             } catch (ign) {}
 

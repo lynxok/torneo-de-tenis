@@ -136,18 +136,10 @@ const AppContent = () => {
 
   const checkUnauthUrlRedirects = () => {
     const params = new URLSearchParams(window.location.search);
-    const pathname = window.location.pathname.toLowerCase();
     const modeParam = params.get('mode');
     const roleParam = params.get('role');
     const clubParam = params.get('club') || params.get('c');
     const viewParam = params.get('view');
-
-    const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
-
-    if (isExplicitInicio) {
-      setUnauthView('landing');
-      return;
-    }
 
     if (modeParam === 'login' || modeParam === 'register' || clubParam || viewParam === 'auth' || viewParam === 'login' || viewParam === 'register') {
       setUnauthView('auth');
