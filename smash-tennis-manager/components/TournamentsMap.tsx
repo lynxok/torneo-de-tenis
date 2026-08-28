@@ -245,6 +245,8 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                     return a.distanceKm - b.distanceKm;
                 }
                 // Default sort by start date
+                const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
+                const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
                 return dateA - dateB;
             });
     }, [
