@@ -26,7 +26,7 @@ export const AuthPage: React.FC<AuthPageProps> = ({
   const [isLogin, setIsLogin] = useState(initialMode ? initialMode === 'login' : false);
   const [loading, setLoading] = useState(false);
   const [institutions, setInstitutions] = useState<Institution[]>([]);
-  const [organizerAction, setOrganizerAction] = useState<'create_club' | 'join_club'>('create_club');
+  const [organizerAction, setOrganizerAction] = useState<'create_club' | 'join_club'>('join_club');
   const { addToast } = useToast();
 
   const [formData, setFormData] = useState({
@@ -402,19 +402,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           {!isLogin && formData.role === 'admin' && (
             /* --- FORMULARIO DE REGISTRO DE ORGANIZADOR / CLUB --- */
             <div className="space-y-3.5 animate-fade-in">
-              {/* Sub-selector: Crear Club vs Sumarme a Club Existente */}
+              {/* Sub-selector: Sumarme a Club Existente (Default) vs Crear Nueva Institución */}
               <div className="flex p-1 bg-black/40 rounded-xl border border-white/10 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setOrganizerAction('create_club')}
-                  className={`flex-1 py-2 px-2.5 rounded-lg font-bold transition-all text-center ${
-                    organizerAction === 'create_club'
-                      ? 'bg-[#e15b34] text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  ➕ Crear Nueva Institución
-                </button>
                 <button
                   type="button"
                   onClick={() => setOrganizerAction('join_club')}
@@ -425,6 +414,17 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   }`}
                 >
                   🤝 Sumarme a Club Existente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOrganizerAction('create_club')}
+                  className={`flex-1 py-2 px-2.5 rounded-lg font-bold transition-all text-center ${
+                    organizerAction === 'create_club'
+                      ? 'bg-[#e15b34] text-white shadow-sm'
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  ➕ Crear Nueva Institución
                 </button>
               </div>
 
