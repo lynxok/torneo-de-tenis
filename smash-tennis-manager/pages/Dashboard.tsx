@@ -817,14 +817,52 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                         </div>
                     </div>
 
-                    {/* 3. OPEN TOURNAMENTS (Compatible) */}
-                    <div>
-                        <div className="flex items-center gap-2 mb-4">
-                            <div className="p-1.5 bg-green-500/20 rounded-lg text-green-400"><UserPlus size={18} /></div>
-                            <div>
-                                <h3 className="text-lg font-bold text-white leading-none">Inscripciones Abiertas</h3>
-                                <p className="text-xs text-muted">Torneos disponibles para tu categoría ({user.category || 'Sin Cat.'}).</p>
+                    {/* 3. EXPLORE TOURNAMENTS MAP BANNER */}
+                    <div 
+                        onClick={() => onNavigate('tournaments', { view: 'map' })}
+                        className="bg-gradient-to-r from-sky-950/60 via-slate-900 to-blue-950/40 border border-sky-500/30 rounded-3xl p-5 relative overflow-hidden group cursor-pointer hover:border-sky-400/60 transition-all shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                    >
+                        <div className="flex items-center gap-4">
+                            <div className="w-12 h-12 rounded-2xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400 font-extrabold text-xl shrink-0 group-hover:scale-110 transition-transform shadow-lg shadow-sky-500/10">
+                                🗺️
                             </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h4 className="text-base font-extrabold text-white group-hover:text-sky-300 transition-colors">
+                                        Mapa Interactivo de Torneos
+                                    </h4>
+                                    <span className="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-2 py-0.5 rounded-full border border-sky-400/30">
+                                        📍 GPS & Cercanía
+                                    </span>
+                                </div>
+                                <p className="text-xs text-slate-300 mt-0.5">
+                                    Explora torneos activos en Entre Ríos, Santa Fe y el país ordenados por distancia a tu ubicación.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400 bg-sky-500/10 group-hover:bg-sky-500 group-hover:text-white px-3.5 py-2 rounded-xl transition-all shrink-0 w-full sm:w-auto justify-center">
+                            <span>Ver en Mapa</span>
+                            <ArrowRight size={14} />
+                        </div>
+                    </div>
+
+                    {/* 4. OPEN TOURNAMENTS (Compatible) */}
+                    <div>
+                        <div className="flex items-center justify-between gap-2 mb-4">
+                            <div className="flex items-center gap-2">
+                                <div className="p-1.5 bg-green-500/20 rounded-lg text-green-400"><UserPlus size={18} /></div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white leading-none">Inscripciones Abiertas</h3>
+                                    <p className="text-xs text-muted">Torneos disponibles para tu categoría ({user.category || 'Sin Cat.'}).</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => onNavigate('tournaments', { view: 'map' })}
+                                className="text-xs text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-xl border border-sky-500/20 transition-all"
+                            >
+                                <span>Ver en Mapa</span>
+                                <ArrowRight size={12} />
+                            </button>
                         </div>
 
                         <div className="space-y-3">

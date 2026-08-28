@@ -56,6 +56,7 @@ const CoachDashboard = lazyRetry(() => import('./pages/CoachDashboard').then(m =
 export const VALID_VIEWS = [
   'dashboard',
   'tournaments',
+  'tournaments-map',
   'tournament-detail',
   'profile',
   'rankings',
@@ -190,6 +191,9 @@ const AppContent = () => {
     } else if (clubId) {
       setActiveView('bookings');
       setNavData({ clubId });
+    } else if (viewParam === 'map') {
+      setActiveView('tournaments');
+      setNavData({ view: 'map' });
     } else if (viewParam && VALID_VIEWS.includes(viewParam)) {
       setActiveView(viewParam);
     } else {
@@ -505,6 +509,7 @@ const AppContent = () => {
             }>
               {activeView === 'dashboard' && <Dashboard user={effectiveUser} onNavigate={handleNavigate} />}
               {activeView === 'tournaments' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={navData} />}
+              {activeView === 'tournaments-map' && <Tournaments user={effectiveUser} onNavigate={handleNavigate} initialState={{ view: 'map' }} />}
               {activeView === 'tournament-detail' && (
                 <TournamentDetails
                   tournamentId={navData}

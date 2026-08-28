@@ -3,9 +3,10 @@ import { Tournament, UserProfile, Institution, TournamentSaga } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, TIER_META, TIER_ORDER, getEffectiveTournamentTier, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
+import { TournamentsMap } from '../components/TournamentsMap';
 
 interface TournamentsProps {
     user: UserProfile;
@@ -321,62 +322,106 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
     }, [tournaments]);
 
     const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all');
+    const [viewMode, setViewMode] = useState<'list' | 'map'>(() => 
+        (initialState?.view === 'map' || initialState === 'map') ? 'map' : 'list'
+    );
 
     return (
         <div className="space-y-8 animate-fade-up">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-white">Torneos</h2>
-                    <p className="text-muted text-sm">Calendario de competencias oficiales y amistosas.</p>
+                    <h2 className="text-2xl font-bold text-white flex items-center gap-2.5">
+                        <Trophy className="text-primary" size={26} />
+                        Torneos
+                    </h2>
+                    <p className="text-muted text-sm">Calendario y mapa interactivo de competencias oficiales.</p>
                 </div>
-                {(user.role === 'admin' || user.role === 'superadmin') && (
-                    <button
-                        id="btn-new-tournament"
-                        onClick={() => setShowCreateModal(true)}
-                        className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
-                    >
-                        <Plus size={18} /> Nuevo Torneo
-                    </button>
-                )}
-            </div>
 
-            {/* Month Quick Filter Tabs */}
-            {groupedTournaments.length > 1 && (
-                <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
-                    <button
-                        onClick={() => setSelectedMonthFilter('all')}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                            selectedMonthFilter === 'all'
-                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
-                                : 'bg-card border-white/10 text-muted hover:text-white hover:bg-white/5'
-                        }`}
-                    >
-                        Todos los Meses ({tournaments.length})
-                    </button>
-                    {groupedTournaments.map(g => (
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+                    {/* View Switcher: List vs Map */}
+                    <div className="flex bg-slate-900/90 p-1 rounded-2xl border border-white/10 shadow-lg">
                         <button
-                            key={g.sortKey}
-                            onClick={() => setSelectedMonthFilter(g.sortKey)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                                selectedMonthFilter === g.sortKey
-                                    ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
-                                    : 'bg-card border-white/10 text-muted hover:text-white hover:bg-white/5'
+                            onClick={() => setViewMode('list')}
+                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                viewMode === 'list'
+                                    ? 'bg-primary text-white shadow-md shadow-primary/25'
+                                    : 'text-slate-400 hover:text-white'
                             }`}
                         >
-                            {g.monthLabel} ({g.items.length})
+                            <List size={15} />
+                            <span>Lista</span>
                         </button>
-                    ))}
-                </div>
-            )}
+                        <button
+                            onClick={() => setViewMode('map')}
+                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                                viewMode === 'map'
+                                    ? 'bg-gradient-to-r from-sky-500 to-blue-600 text-white shadow-md shadow-sky-500/25'
+                                    : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            <MapIcon size={15} />
+                            <span>Mapa</span>
+                        </button>
+                    </div>
 
-            {loading ? (
-                <div className="text-center py-20 text-muted">Cargando calendario de torneos...</div>
-            ) : tournaments.length === 0 ? (
-                <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
-                    No hay torneos programados por el momento.
+                    {(user.role === 'admin' || user.role === 'superadmin') && (
+                        <button
+                            id="btn-new-tournament"
+                            onClick={() => setShowCreateModal(true)}
+                            className="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 transition-all shadow-lg shadow-primary/20"
+                        >
+                            <Plus size={18} /> Nuevo Torneo
+                        </button>
+                    )}
                 </div>
+            </div>
+
+            {viewMode === 'map' ? (
+                <TournamentsMap
+                    tournaments={tournaments}
+                    user={user}
+                    onSelectTournament={handleTournamentClick}
+                    onCloseMap={() => setViewMode('list')}
+                />
             ) : (
-                <div className="space-y-10">
+                <>
+                    {/* Month Quick Filter Tabs */}
+                    {groupedTournaments.length > 1 && (
+                        <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                            <button
+                                onClick={() => setSelectedMonthFilter('all')}
+                                className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                    selectedMonthFilter === 'all'
+                                        ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                        : 'bg-card border-white/10 text-muted hover:text-white hover:bg-white/5'
+                                }`}
+                            >
+                                Todos los Meses ({tournaments.length})
+                            </button>
+                            {groupedTournaments.map(g => (
+                                <button
+                                    key={g.sortKey}
+                                    onClick={() => setSelectedMonthFilter(g.sortKey)}
+                                    className={`px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                                        selectedMonthFilter === g.sortKey
+                                            ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                            : 'bg-card border-white/10 text-muted hover:text-white hover:bg-white/5'
+                                    }`}
+                                >
+                                    {g.monthLabel} ({g.items.length})
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
+                    {loading ? (
+                        <div className="text-center py-20 text-muted">Cargando calendario de torneos...</div>
+                    ) : tournaments.length === 0 ? (
+                        <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
+                            No hay torneos programados por el momento.
+                        </div>
+                    ) : (
+                        <div className="space-y-10">
                     {groupedTournaments
                         .filter(g => selectedMonthFilter === 'all' || selectedMonthFilter === g.sortKey)
                         .map(group => (
@@ -546,6 +591,8 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate }) =>
                             </div>
                         ))}
                 </div>
+            )}
+            </>
             )}
 
             {/* Warning Modal */}
