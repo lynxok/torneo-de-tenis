@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.markercluster/dist/MarkerCluster.css';
+import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
+import 'leaflet.markercluster';
 import { Tournament, UserProfile } from '../types';
 import { 
     getTournamentCoordinates, 
@@ -265,12 +268,37 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             }
         ).addTo(map);
 
-        const markersLayer = L.layerGroup().addTo(map);
+        // Marker Cluster Group with custom Smash Tennis glowing bubbles
+        const markersClusterGroup = (L as any).markerClusterGroup({
+            showCoverageOnHover: false,
+            maxClusterRadius: 45,
+            spiderfyOnMaxZoom: true,
+            disableClusteringAtZoom: 15,
+            iconCreateFunction: (cluster: any) => {
+                const count = cluster.getChildCount();
+                return L.divIcon({
+                    html: `
+                        <div class="smash-cluster-container">
+                            <div class="smash-cluster-halo"></div>
+                            <div class="smash-cluster-bubble">
+                                <span class="smash-cluster-count">${count}</span>
+                                <span class="smash-cluster-label">Torneos</span>
+                            </div>
+                        </div>
+                    `,
+                    className: 'custom-cluster-leaflet-pin',
+                    iconSize: [48, 48],
+                    iconAnchor: [24, 24],
+                });
+            },
+        });
+        markersClusterGroup.addTo(map);
+
         const userLayer = L.layerGroup().addTo(map);
 
         mapInstanceRef.current = map;
         tileLayerRef.current = tileLayer;
-        markersLayerRef.current = markersLayer;
+        markersLayerRef.current = markersClusterGroup;
         userLayerRef.current = userLayer;
 
         // Invalidate size shortly after mount for perfect rendering
