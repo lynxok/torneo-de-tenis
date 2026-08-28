@@ -241,6 +241,40 @@ body {
   text-align: center;
 }
 
+.pin-disputing-badge {
+  font-size: 8px;
+  font-weight: 800;
+  color: #fbbf24;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  border-radius: 6px;
+  padding: 1px 4px;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.pin-finished-badge {
+  font-size: 8px;
+  font-weight: 800;
+  color: #94a3b8;
+  background: rgba(148, 163, 184, 0.15);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 6px;
+  padding: 1px 4px;
+  margin-top: 4px;
+  text-align: center;
+}
+
+.pin-date-tag {
+  font-size: 8.5px;
+  font-weight: 700;
+  color: #cbd5e1;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  margin-top: 2px;
+}
+
 .pin-multi-badge {
   display: inline-flex;
   align-items: center;
@@ -266,6 +300,17 @@ body {
   overflow: hidden;
   text-overflow: ellipsis;
   line-height: 1.25;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.pin-multi-date {
+  font-size: 8px;
+  font-weight: 600;
+  color: #94a3b8;
+  flex-shrink: 0;
 }
 
 .pin-arrow {

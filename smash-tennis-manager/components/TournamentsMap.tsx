@@ -63,9 +63,38 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
     const markersLayerRef = useRef<L.LayerGroup | null>(null);
     const userLayerRef = useRef<L.LayerGroup | null>(null);
 
+    // Helper Date Formatters
+    const formatShortDate = (dateStr?: string) => {
+        if (!dateStr) return 'A confirmar';
+        try {
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('es-AR', {
+                day: 'numeric',
+                month: 'short',
+            });
+        } catch {
+            return dateStr;
+        }
+    };
+
+    const formatFullDate = (dateStr?: string) => {
+        if (!dateStr) return 'Fecha a confirmar';
+        try {
+            const d = new Date(dateStr + 'T00:00:00');
+            return d.toLocaleDateString('es-AR', {
+                weekday: 'short',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric',
+            });
+        } catch {
+            return dateStr;
+        }
+    };
+
     // Filter & Search State
     const [searchQuery, setSearchQuery] = useState('');
-    const [onlyOpenRegistration, setOnlyOpenRegistration] = useState(true);
+    const [onlyOpenRegistration, setOnlyOpenRegistration] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedTier, setSelectedTier] = useState<string>('all');
     const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
@@ -80,7 +109,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
     // Initial Geolocation Auto-Detection on Mount
     useEffect(() => {
-        // Attempt passive geolocation if permitted, or fallback gracefully
         if ('geolocation' in navigator) {
             navigator.geolocation.getCurrentPosition(
                 (pos) => {
@@ -134,7 +162,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                 console.warn('Geolocation error:', err.message);
                 setIsLocating(false);
                 setGpsStatusMessage('No se pudo obtener el GPS. Usando sede principal.');
-                // Fallback to user's club location or default hub
                 if (mapInstanceRef.current) {
                     mapInstanceRef.current.flyTo([DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng], 12);
                 }
@@ -153,6 +180,10 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                     : null;
                 const tier = getTournamentTier(t);
                 const isOpen = t.status === 'active' && !t.registration_closed;
+                const isDisputing = t.status === 'active' && !isOpen;
+                const isFinished = t.status === 'finished';
+                const shortDate = formatShortDate(t.start_date);
+                const fullDate = formatFullDate(t.start_date);
 
                 return {
                     ...t,
@@ -160,6 +191,10 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                     distanceKm,
                     tier,
                     isOpen,
+                    isDisputing,
+                    isFinished,
+                    shortDate,
+                    fullDate,
                 };
             })
             .filter((t) => {
@@ -173,7 +208,7 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                     if (!matchName && !matchClub && !matchCity && !matchCat) return false;
                 }
 
-                // 2. Open Registration Filter
+                // 2. Open Registration Filter (if active)
                 if (onlyOpenRegistration && !t.isOpen) {
                     return false;
                 }
@@ -210,8 +245,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                     return a.distanceKm - b.distanceKm;
                 }
                 // Default sort by start date
-                const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
-                const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
                 return dateA - dateB;
             });
     }, [
@@ -418,33 +451,53 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                             <div class="pin-content">
                                 <span class="pin-title">${t.name}</span>
                                 <span class="pin-club">${group.clubName}${group.cityName ? ` • ${group.cityName}` : ''}</span>
+                                <div class="pin-date-tag">
+                                    <span>📅 Inicia: <b>${t.shortDate}</b></span>
+                                </div>
                             </div>
-                            ${t.isOpen ? '<div class="pin-open-badge">INSCRIPCIÓN ABIERTA</div>' : ''}
+                            ${t.isOpen 
+                                ? '<div class="pin-open-badge">● INSCRIPCIÓN ABIERTA</div>' 
+                                : '<div class="pin-disputing-badge">⚡ DISPUTANDO</div>'}
                         </div>
                         <div class="pin-arrow"></div>
                     </div>
                 `;
 
                 popupHtml = `
-                    <div class="p-3.5 bg-slate-900 text-white rounded-3xl max-w-[270px] border border-white/15 shadow-2xl">
-                        <div class="flex items-center justify-between gap-2 mb-2">
+                    <div class="p-4 bg-slate-900 text-white rounded-3xl max-w-[285px] border border-white/15 shadow-2xl">
+                        <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-white/10">
                             <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
                                 ${t.tier.label}
                             </span>
-                            ${t.isOpen ? '<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">● Abierto</span>' : '<span class="text-[10px] font-bold text-slate-400 bg-slate-800 px-2.5 py-0.5 rounded-full">Cerrado</span>'}
+                            ${t.isOpen 
+                                ? '<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">● Inscripción Abierta</span>' 
+                                : '<span class="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30">⚡ En Disputa</span>'}
                         </div>
                         <h4 class="font-extrabold text-sm text-white mb-1 leading-tight">${t.name}</h4>
-                        <p class="text-xs text-slate-300 mb-2">📍 ${group.clubName}${group.cityName ? ` • ${group.cityName}` : ''}</p>
+                        <p class="text-xs text-slate-300 mb-1.5 flex items-center gap-1">📍 ${group.clubName}${group.cityName ? ` • ${group.cityName}` : ''}</p>
+                        
+                        <div class="text-[11px] text-slate-300 font-semibold mb-2 flex items-center gap-1.5 bg-white/5 px-2.5 py-1.5 rounded-xl border border-white/5">
+                            <span>📅 Fecha de Inicio: <b class="text-white">${t.fullDate}</b></span>
+                        </div>
+
                         ${distanceStr ? `<div class="text-[11px] text-sky-400 font-bold mb-2 flex items-center gap-1">🧭 A ${distanceStr} de tu ubicación</div>` : ''}
+
                         <div class="flex items-center justify-between text-xs font-semibold text-slate-400 py-2 border-t border-white/10 mb-3">
                             <span>Cat: <b class="text-white">${t.category}</b></span>
                             <span class="text-primary font-bold">${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</span>
                         </div>
+
                         <div class="flex gap-2">
-                            <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-primary hover:bg-primary-hover text-white text-xs font-bold py-2 px-3 rounded-xl text-center transition-all shadow-md cursor-pointer">
-                                ${t.isOpen ? '🎾 Inscribirme' : 'Ver Detalles'}
-                            </button>
-                            <button onclick="window.__handleNavigateToVenue('${group.coords.lat}', '${group.coords.lng}', '${encodeURIComponent(group.clubName)}')" class="bg-white/10 hover:bg-white/20 text-white text-xs p-2 rounded-xl transition-all border border-white/10 cursor-pointer" title="Cómo llegar">
+                            ${t.isOpen ? `
+                                <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white text-xs font-extrabold py-2 px-3 rounded-xl text-center transition-all shadow-md shadow-primary/25 cursor-pointer flex items-center justify-center gap-1">
+                                    <span>🎾 Inscribirme</span>
+                                </button>
+                            ` : `
+                                <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2 px-3 rounded-xl text-center transition-all border border-white/10 shadow-md cursor-pointer flex items-center justify-center gap-1">
+                                    <span>🏆 Ver Cuadros / Resultados</span>
+                                </button>
+                            `}
+                            <button onclick="window.__handleNavigateToVenue('${group.coords.lat}', '${group.coords.lng}', '${encodeURIComponent(group.clubName)}')" class="bg-white/10 hover:bg-white/20 text-white text-xs p-2 rounded-xl transition-all border border-white/10 cursor-pointer" title="Cómo llegar con GPS">
                                 🧭
                             </button>
                         </div>
@@ -462,19 +515,26 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                             <div class="pin-content">
                                 <span class="pin-title">${group.clubName}</span>
                                 <span class="pin-club">${group.cityName || 'Sede oficial'}</span>
-                                <div class="mt-1 space-y-0.5 border-t border-white/10 pt-1">
-                                    ${group.tournaments.slice(0, 2).map((t) => `<div class="pin-multi-item">🎾 ${t.name} <span class="opacity-70 text-[8.5px]">(${t.category})</span></div>`).join('')}
+                                <div class="mt-1.5 space-y-1 border-t border-white/10 pt-1.5">
+                                    ${group.tournaments.slice(0, 2).map((t) => `
+                                        <div class="pin-multi-item">
+                                            <span class="truncate font-bold">🎾 ${t.name} <span class="opacity-70 text-[8px]">(${t.category})</span></span>
+                                            <span class="pin-multi-date">📅 ${t.shortDate}</span>
+                                        </div>
+                                    `).join('')}
                                     ${group.tournaments.length > 2 ? `<div class="text-[8.5px] text-sky-400 font-bold">+${group.tournaments.length - 2} más</div>` : ''}
                                 </div>
                             </div>
-                            ${group.hasOpenRegistration ? '<div class="pin-open-badge">INSCRIPCIÓN ABIERTA</div>' : ''}
+                            ${group.hasOpenRegistration 
+                                ? '<div class="pin-open-badge">● INSCRIPCIÓN ABIERTA</div>' 
+                                : '<div class="pin-disputing-badge">⚡ DISPUTANDO</div>'}
                         </div>
                         <div class="pin-arrow"></div>
                     </div>
                 `;
 
                 popupHtml = `
-                    <div class="p-3.5 bg-slate-900 text-white rounded-3xl max-w-[300px] border border-white/15 shadow-2xl">
+                    <div class="p-4 bg-slate-900 text-white rounded-3xl max-w-[315px] border border-white/15 shadow-2xl">
                         <div class="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10">
                             <div>
                                 <h4 class="font-extrabold text-sm text-white leading-tight">${group.clubName}</h4>
@@ -487,22 +547,36 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
                         ${distanceStr ? `<div class="text-[11px] text-sky-400 font-bold mb-2 flex items-center gap-1">🧭 A ${distanceStr} de tu ubicación</div>` : ''}
 
-                        <div class="space-y-2 max-h-[220px] overflow-y-auto pr-1 custom-scrollbar mb-3">
+                        <div class="space-y-2.5 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar mb-3">
                             ${group.tournaments.map((t) => `
-                                <div class="p-2.5 bg-white/5 rounded-2xl border border-white/10 hover:border-primary/50 transition-all flex flex-col justify-between gap-1.5">
+                                <div class="p-3 bg-white/5 rounded-2xl border ${t.isOpen ? 'border-emerald-500/30' : 'border-white/10'} hover:border-primary/50 transition-all flex flex-col justify-between gap-2">
                                     <div class="flex items-center justify-between gap-1">
                                         <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
                                             ${t.tier.label}
                                         </span>
-                                        <span class="text-[10px] font-semibold text-slate-300">Cat: <b class="text-white">${t.category}</b></span>
+                                        ${t.isOpen 
+                                            ? '<span class="text-[9px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">● Abierto</span>' 
+                                            : '<span class="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">⚡ En Disputa</span>'}
                                     </div>
-                                    <div class="flex items-center justify-between gap-2">
-                                        <div class="font-extrabold text-xs text-white line-clamp-1">${t.name}</div>
-                                        <div class="text-primary font-bold text-xs shrink-0">${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</div>
+                                    
+                                    <div>
+                                        <div class="font-extrabold text-xs text-white leading-tight">${t.name}</div>
+                                        <div class="flex items-center justify-between text-[10px] text-slate-300 font-semibold mt-1">
+                                            <span>Cat: <b class="text-white">${t.category}</b></span>
+                                            <span>📅 Inicio: <b class="text-white">${t.shortDate}</b></span>
+                                            <span class="text-primary font-bold">${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</span>
+                                        </div>
                                     </div>
-                                    <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-primary hover:bg-primary-hover text-white text-xs font-bold py-1 px-2.5 rounded-xl transition-all shadow-md mt-1 cursor-pointer">
-                                        ${t.isOpen ? '🎾 Inscribirme' : 'Ver Detalles'}
-                                    </button>
+
+                                    ${t.isOpen ? `
+                                        <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white text-xs font-bold py-1.5 px-2.5 rounded-xl transition-all shadow-md shadow-primary/20 cursor-pointer">
+                                            🎾 Inscribirme
+                                        </button>
+                                    ` : `
+                                        <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-1.5 px-2.5 rounded-xl transition-all border border-white/10 shadow-md cursor-pointer">
+                                            🏆 Ver Cuadros / Resultados
+                                        </button>
+                                    `}
                                 </div>
                             `).join('')}
                         </div>
@@ -591,20 +665,6 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             delete (window as any).__handleNavigateToVenue;
         };
     }, [tournaments, onSelectTournament]);
-
-    const formatDate = (dateStr?: string) => {
-        if (!dateStr) return 'A confirmar';
-        try {
-            const d = new Date(dateStr + 'T00:00:00');
-            return d.toLocaleDateString('es-AR', {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'short',
-            });
-        } catch {
-            return dateStr;
-        }
-    };
 
     return (
         <div className="relative w-full h-[78vh] min-h-[550px] max-h-[850px] rounded-3xl overflow-hidden border border-white/10 shadow-2xl bg-slate-950 flex flex-col animate-fade-in">
