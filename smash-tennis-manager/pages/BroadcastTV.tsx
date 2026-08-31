@@ -22,6 +22,62 @@ interface BroadcastTVProps {
 type TVSlide = 'live' | 'order_of_play' | 'standings' | 'playoffs' | 'weather' | 'qr';
 type RotationMode = 'single' | 'all' | 'custom';
 
+// Robust Tournament Status Determination (En Juego, Inscr. Abierta, Inscr. Cerrada, Finalizado)
+export const getTournamentStatusInfo = (t: Tournament | null | undefined, extraMatches?: Match[]) => {
+    if (!t) return { status: 'draft', label: 'Borrador', badgeClass: 'bg-white/10 text-slate-400', isRegClosed: true, isOngoing: false, isFinished: false };
+
+    const effectiveMatches = (extraMatches && extraMatches.length > 0) ? extraMatches : (t.matches || []);
+    const hasMatches = effectiveMatches.length > 0;
+    const allMatchesPlayed = hasMatches && effectiveMatches.every((m: any) => m.is_played);
+
+    // 1. Finished
+    if (t.status === 'finished' || t.status === 'completed' || allMatchesPlayed) {
+        return {
+            status: 'finished',
+            label: '🏁 Finalizado',
+            badgeClass: 'bg-slate-800 text-slate-400 border border-white/10',
+            isRegClosed: true,
+            isOngoing: false,
+            isFinished: true
+        };
+    }
+
+    // 2. Ongoing (matches exist or status explicitly ongoing/active/in_progress)
+    if (hasMatches || t.status === 'ongoing' || t.status === 'in_progress' || t.status === 'active') {
+        return {
+            status: 'ongoing',
+            label: '🎾 En Juego',
+            badgeClass: 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30',
+            isRegClosed: true, // Si hay partidos generados o disputándose, la inscripción está cerrada
+            isOngoing: true,
+            isFinished: false
+        };
+    }
+
+    // 3. Registration closed (manually closed or deadline passed, before generating matches)
+    const deadlinePassed = t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59');
+    if (t.registration_closed || deadlinePassed) {
+        return {
+            status: 'closed',
+            label: '🔒 Inscr. Cerrada',
+            badgeClass: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+            isRegClosed: true,
+            isOngoing: false,
+            isFinished: false
+        };
+    }
+
+    // 4. Open for registration
+    return {
+        status: 'open',
+        label: '🟢 Inscr. Abierta',
+        badgeClass: 'bg-blue-500/20 text-blue-300 border border-blue-500/30',
+        isRegClosed: false,
+        isOngoing: false,
+        isFinished: false
+    };
+};
+
 export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamentId, onExit }) => {
     const isSuperAdmin = user?.role === 'superadmin';
     const isOrgAdmin = user?.role === 'admin' || user?.role === 'professor' || user?.role === 'coordinator';
@@ -370,27 +426,20 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
 
     const currentSlide = slides[currentSlideIndex].id;
 
-    // Check if active tournament registration is closed
-    const isRegClosed = useMemo(() => {
-        if (!activeTournament) return true;
-        return Boolean(
-            activeTournament.registration_closed || 
-            activeTournament.status === 'finished' ||
-            (activeTournament.registration_deadline && new Date() > new Date(activeTournament.registration_deadline + 'T23:59:59'))
-        );
-    }, [activeTournament]);
+    // Check if active tournament status and registration status
+    const activeStatusInfo = useMemo(() => {
+        return getTournamentStatusInfo(activeTournament, matches);
+    }, [activeTournament, matches]);
+
+    const isRegClosed = activeStatusInfo.isRegClosed;
 
     // Open tournaments in current club
     const openTournamentsInClub = useMemo(() => {
         return tournaments.filter(t => {
-            const closed = Boolean(
-                t.registration_closed || 
-                t.status === 'finished' ||
-                (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
-            );
-            return !closed;
+            const info = getTournamentStatusInfo(t, t.id === activeTournament?.id ? matches : undefined);
+            return !info.isRegClosed && !info.isOngoing && !info.isFinished;
         });
-    }, [tournaments]);
+    }, [tournaments, activeTournament?.id, matches]);
 
     // QR Target URL
     const qrUrl = useMemo(() => {
@@ -1281,12 +1330,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 <div className="max-h-48 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                                     {tournaments.map(t => {
                                         const isChecked = customSelectedIds.includes(t.id);
-                                        const isClosed = Boolean(
-                                            t.registration_closed || 
-                                            t.status === 'finished' ||
-                                            (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
-                                        );
-                                        const isOngoing = t.status === 'ongoing' || t.status === 'in_progress';
+                                        const info = getTournamentStatusInfo(t, t.id === activeTournament?.id ? matches : undefined);
 
                                         return (
                                             <div
@@ -1315,23 +1359,9 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                                         <div className="text-[11px] text-slate-400">{t.category} • {t.gender} • {t.type === 'doubles' ? 'Dobles' : 'Singles'}</div>
                                                     </div>
                                                 </div>
-                                                {isOngoing ? (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                                        🎾 En Juego
-                                                    </span>
-                                                ) : t.status === 'finished' ? (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-white/10 text-slate-400">
-                                                        🏁 Finalizado
-                                                    </span>
-                                                ) : isClosed ? (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                                                        🔒 Inscr. Cerrada
-                                                    </span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                                                        🟢 Inscr. Abierta
-                                                    </span>
-                                                )}
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 ${info.badgeClass}`}>
+                                                    {info.label}
+                                                </span>
                                             </div>
                                         );
                                     })}

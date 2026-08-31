@@ -541,10 +541,10 @@ export const api = {
             if (error) throw error;
             return data as Tournament[];
         },
-        async getAll(page = 1, pageSize = 10) {
+        async getAll(page = 1, pageSize = 50) {
             const { data, error } = await supabase
                 .from('tournaments')
-                .select('*, institutions(name, city)', { count: 'exact' })
+                .select('*, institutions(name, city), matches(id, is_played, status)', { count: 'exact' })
                 .order('created_at', { ascending: false })
                 .range((page - 1) * pageSize, page * pageSize - 1);
 
