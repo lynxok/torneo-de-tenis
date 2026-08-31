@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../services/api';
 import { Tournament, Match, Institution, UserProfile, TournamentPlayer } from '../types';
 import { QRCodeSVG } from '../components/QRCodeSVG';
@@ -9,7 +9,7 @@ import { getTournamentCoordinates } from '../utils/geoUtils';
 import { 
     Tv, Play, Pause, Maximize, Minimize, Volume2, VolumeX, ArrowLeft,
     Clock, Calendar, CloudSun, Trophy, Swords, Users, Sparkles,
-    MapPin, Wind, Droplets, CheckCircle2, ShieldCheck, QrCode, Building, Layers
+    MapPin, Wind, Droplets, CheckCircle2, ShieldCheck, QrCode, Building, Layers, RotateCw
 } from 'lucide-react';
 
 interface BroadcastTVProps {
@@ -41,13 +41,15 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         return '';
     });
 
-    // Tournaments & Matches State
+    // Tournaments & Rotation State
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
+    const [activeTournamentIndex, setActiveTournamentIndex] = useState<number>(0);
     const [selectedTournamentId, setSelectedTournamentId] = useState<string>(urlTournamentParam || '');
     const [activeTournament, setActiveTournament] = useState<Tournament | null>(null);
     const [matches, setMatches] = useState<Match[]>([]);
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
     const [loading, setLoading] = useState(true);
+    const [autoRotateTournaments, setAutoRotateTournaments] = useState(true);
 
     // TV Slides & Timing
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -117,6 +119,8 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 filteredTourneys[0] || null;
 
             if (targetTourney) {
+                const idx = filteredTourneys.findIndex(t => t.id === targetTourney!.id);
+                if (idx !== -1) setActiveTournamentIndex(idx);
                 setSelectedTournamentId(targetTourney.id);
                 const fullTourney = await api.tournaments.getById(targetTourney.id);
                 setActiveTournament(fullTourney);
@@ -140,9 +144,16 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         return () => clearInterval(pollInterval);
     }, [selectedInstitutionId]);
 
-    // When tournament selector changes manually
-    const handleSelectTournament = async (tId: string) => {
+    // When tournament selector changes manually or automatically
+    const handleSelectTournament = async (tId: string, indexHint?: number) => {
         setSelectedTournamentId(tId);
+        if (indexHint !== undefined) {
+            setActiveTournamentIndex(indexHint);
+        } else {
+            const idx = tournaments.findIndex(t => t.id === tId);
+            if (idx !== -1) setActiveTournamentIndex(idx);
+        }
+
         if (!tId) return;
         setLoading(true);
         try {
@@ -170,6 +181,12 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         if (selectedInstitutionId === 'all') return 'Circuito General Smash Tenis';
         return 'Club de Tenis';
     }, [currentInstitution, activeTournament, user, isOrgAdmin, selectedInstitutionId]);
+
+    // Tier badge info for active tournament
+    const activeTier = useMemo(() => {
+        if (!activeTournament) return null;
+        return getTournamentTier(activeTournament.tier_applied || 'smash_250');
+    }, [activeTournament?.tier_applied]);
 
     // Fetch live weather for active institution coordinates
     useEffect(() => {
@@ -220,7 +237,13 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
             .catch(err => console.warn("OpenMeteo fetch notice in BroadcastTV:", err));
     }, [currentInstitution?.id, currentInstitution?.name, currentInstitution?.city]);
 
-    // Slide Carousel Timer with smooth progress bar
+    // Keep ref of tournaments for timer rotation without stale closures
+    const tournamentsRef = useRef(tournaments);
+    tournamentsRef.current = tournaments;
+    const activeTournamentIndexRef = useRef(activeTournamentIndex);
+    activeTournamentIndexRef.current = activeTournamentIndex;
+
+    // Slide Carousel Timer with smooth progress bar & multi-tournament rotation
     useEffect(() => {
         if (!isPlaying) return;
 
@@ -233,6 +256,16 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                     setCurrentSlideIndex(curr => {
                         const next = (curr + 1) % slides.length;
                         if (soundEnabled) soundEffects.playScoreBeep();
+
+                        // When completing a full carousel loop (back to Slide 0), advance to the next tournament if club has multiple
+                        if (next === 0 && autoRotateTournaments && tournamentsRef.current.length > 1) {
+                            const nextTIndex = (activeTournamentIndexRef.current + 1) % tournamentsRef.current.length;
+                            const nextTourney = tournamentsRef.current[nextTIndex];
+                            if (nextTourney) {
+                                handleSelectTournament(nextTourney.id, nextTIndex);
+                            }
+                        }
+
                         return next;
                     });
                     return 0;
@@ -242,7 +275,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         }, intervalMs);
 
         return () => clearInterval(timer);
-    }, [isPlaying, slideDuration, slides.length, soundEnabled]);
+    }, [isPlaying, slideDuration, slides.length, soundEnabled, autoRotateTournaments]);
 
     // Fullscreen toggle
     const toggleFullscreen = () => {
@@ -328,6 +361,42 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         return { p1: '6', p2: '4' };
     };
 
+    // Reusable Tournament Banner on Slide Headers
+    const renderTournamentHeaderCard = () => {
+        if (!activeTournament) return null;
+        return (
+            <div className="bg-gradient-to-r from-white/10 via-slate-900 to-black/60 border border-primary/40 px-4 py-2.5 rounded-2xl flex items-center gap-3 shadow-xl backdrop-blur shrink-0 animate-in fade-in duration-300">
+                <div className="w-10 h-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-black border border-primary/30 shrink-0">
+                    <Trophy size={20} className="text-yellow-400 animate-bounce" />
+                </div>
+                <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm sm:text-base font-black text-white uppercase tracking-tight truncate">
+                            {activeTournament.name}
+                        </span>
+                        {activeTier && (
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border hidden sm:inline ${activeTier.badgeColor} ${activeTier.textColor} ${activeTier.borderColor}`}>
+                                {activeTier.label}
+                            </span>
+                        )}
+                    </div>
+                    <div className="text-xs text-primary font-bold flex items-center gap-2 truncate">
+                        <span>{activeTournament.category} Categoría</span>
+                        <span>•</span>
+                        <span>{activeTournament.gender}</span>
+                        <span>•</span>
+                        <span>{activeTournament.type === 'doubles' ? 'Modalidad Dobles' : 'Singles'}</span>
+                        {tournaments.length > 1 && (
+                            <span className="text-slate-400 text-[11px] font-normal hidden md:inline">
+                                ({activeTournamentIndex + 1} de {tournaments.length} torneos)
+                            </span>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
     return (
         <div className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white flex flex-col select-none overflow-hidden font-sans">
             
@@ -370,6 +439,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                             onChange={(e) => {
                                                 setSelectedInstitutionId(e.target.value);
                                                 setSelectedTournamentId('');
+                                                setActiveTournamentIndex(0);
                                             }}
                                             className="bg-transparent text-orange-200 font-bold text-xs outline-none cursor-pointer"
                                         >
@@ -399,14 +469,23 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                         <select
                                             value={selectedTournamentId}
                                             onChange={(e) => handleSelectTournament(e.target.value)}
-                                            className="bg-transparent text-slate-300 text-xs font-bold outline-none cursor-pointer max-w-[140px] sm:max-w-[220px] truncate"
+                                            className="bg-transparent text-slate-300 text-xs font-bold outline-none cursor-pointer max-w-[140px] sm:max-w-[200px] truncate"
                                         >
-                                            {tournaments.map(t => (
+                                            {tournaments.map((t, idx) => (
                                                 <option key={t.id} value={t.id} className="bg-slate-900 text-white">
                                                     🏆 {t.name} ({t.category})
                                                 </option>
                                             ))}
                                         </select>
+                                        {tournaments.length > 1 && (
+                                            <button
+                                                onClick={() => setAutoRotateTournaments(!autoRotateTournaments)}
+                                                className={`p-1 rounded transition-colors ${autoRotateTournaments ? 'text-primary' : 'text-slate-500'}`}
+                                                title={autoRotateTournaments ? "Rotación automática de torneos activada" : "Rotación de torneos pausada"}
+                                            >
+                                                <RotateCw size={11} className={autoRotateTournaments ? "animate-spin-slow" : ""} />
+                                            </button>
+                                        )}
                                     </div>
                                 )}
                             </div>
@@ -494,7 +573,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 {/* 1. SLIDE: LIVE COURTS */}
                 {currentSlide === 'live' && (
                     <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-white/10 pb-4 gap-4">
                             <div>
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                                     <Swords size={16} /> Central de Canchas
@@ -503,12 +582,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     Partidos en Cancha & Marcadores en Vivo
                                 </h1>
                             </div>
-                            {activeTournament && (
-                                <div className="text-right hidden sm:block">
-                                    <span className="text-sm font-bold text-slate-300">{activeTournament.name}</span>
-                                    <div className="text-xs text-primary font-bold">{activeTournament.category} • {activeTournament.gender}</div>
-                                </div>
-                            )}
+                            {renderTournamentHeaderCard()}
                         </div>
 
                         {liveMatches.length === 0 ? (
@@ -585,7 +659,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 {/* 2. SLIDE: ORDER OF PLAY */}
                 {currentSlide === 'order_of_play' && (
                     <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-white/10 pb-4 gap-4">
                             <div>
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                                     <Clock size={16} /> Programación Oficial
@@ -594,9 +668,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     Orden de Juego & Próximos Turnos
                                 </h1>
                             </div>
-                            <span className="text-xs font-bold text-slate-400 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
-                                {clubName}
-                            </span>
+                            {renderTournamentHeaderCard()}
                         </div>
 
                         {scheduledMatches.length === 0 ? (
@@ -642,7 +714,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 {/* 3. SLIDE: STANDINGS (FASE DE GRUPOS) */}
                 {currentSlide === 'standings' && (
                     <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-white/10 pb-4 gap-4">
                             <div>
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                                     <Users size={16} /> Tablas de Posiciones
@@ -651,9 +723,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     Fase de Grupos & Clasificación a Playoffs
                                 </h1>
                             </div>
-                            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20">
-                                Top 2 Clasifican a Llaves
-                            </span>
+                            {renderTournamentHeaderCard()}
                         </div>
 
                         {zones.length === 0 ? (
@@ -720,7 +790,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 {/* 4. SLIDE: PLAYOFFS / BRACKETS */}
                 {currentSlide === 'playoffs' && (
                     <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-white/10 pb-4 gap-4">
                             <div>
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                                     <Trophy size={16} /> Eliminación Directa
@@ -729,6 +799,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     Cuadro de Llaves & Camino al Campeonato
                                 </h1>
                             </div>
+                            {renderTournamentHeaderCard()}
                         </div>
 
                         {playoffRounds.length === 0 ? (
@@ -771,7 +842,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 {/* 5. SLIDE: WEATHER & COURTS */}
                 {currentSlide === 'weather' && (
                     <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-white/10 pb-4 gap-4">
                             <div>
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                                     <CloudSun size={16} /> Estación Meteorológica Oficial
@@ -780,9 +851,13 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     Condiciones Climáticas & Estado de Canchas
                                 </h1>
                             </div>
-                            <span className="text-xs font-bold text-emerald-400 bg-emerald-500/10 px-4 py-2 rounded-xl border border-emerald-500/20 flex items-center gap-2">
-                                <CheckCircle2 size={16} /> Canchas en Óptimo Estado
-                            </span>
+                            <div className="bg-white/5 border border-primary/30 px-4 py-2 rounded-2xl flex items-center gap-3 shadow-lg">
+                                <MapPin size={20} className="text-primary shrink-0" />
+                                <div>
+                                    <div className="text-sm font-black text-white">{clubName}</div>
+                                    <div className="text-xs text-emerald-400 font-bold">Canchas Habilitadas</div>
+                                </div>
+                            </div>
                         </div>
 
                         {weather ? (
@@ -853,7 +928,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 {/* 6. SLIDE: QR ENROLLMENT & APP */}
                 {currentSlide === 'qr' && (
                     <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-white/10 pb-4 gap-4">
                             <div>
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
                                     <QrCode size={16} /> Acceso Rápido Móvil
@@ -862,9 +937,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     ¡Sumate a {clubName}!
                                 </h1>
                             </div>
-                            <span className="text-xs font-bold text-primary bg-primary/10 px-4 py-2 rounded-xl border border-primary/20">
-                                App Web Oficial
-                            </span>
+                            {renderTournamentHeaderCard()}
                         </div>
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border-2 border-primary/40 rounded-3xl p-8 sm:p-12 shadow-2xl">
