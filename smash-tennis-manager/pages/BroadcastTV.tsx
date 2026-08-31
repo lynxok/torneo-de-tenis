@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { api } from '../services/api';
+import { supabase } from '../services/supabaseClient';
 import { Tournament, Match, Institution, UserProfile, TournamentPlayer } from '../types';
 import { QRCodeSVG } from '../components/QRCodeSVG';
 import { soundEffects } from '../services/soundEffects';
@@ -164,10 +165,26 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
     // Load initial institutions & tournaments
     const fetchData = async () => {
         try {
-            const [allTourneys, allInsts] = await Promise.all([
+            const [allTourneys, allInsts, matchesRes] = await Promise.all([
                 api.tournaments.getAll(),
-                api.institutions.getAll()
+                api.institutions.getAll(),
+                supabase.from('matches').select('id, tournament_id, is_played').then(r => r.data || []).catch(() => [])
             ]);
+
+            const matchesList = matchesRes || [];
+            const matchesByTourney = new Map<string, any[]>();
+            matchesList.forEach((m: any) => {
+                if (m.tournament_id) {
+                    const arr = matchesByTourney.get(m.tournament_id) || [];
+                    arr.push(m);
+                    matchesByTourney.set(m.tournament_id, arr);
+                }
+            });
+
+            // Attach matches to tournaments in memory
+            allTourneys.forEach(t => {
+                t.matches = matchesByTourney.get(t.id) || [];
+            });
 
             setInstitutions(allInsts);
 
