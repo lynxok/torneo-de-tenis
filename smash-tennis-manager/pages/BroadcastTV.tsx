@@ -1,14 +1,15 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
 import { Tournament, Match, Institution, UserProfile } from '../types';
 import { QRCodeSVG } from '../components/QRCodeSVG';
 import { soundEffects } from '../services/soundEffects';
 import { calculateGroupStandings, organizePlayoffRounds } from '../utils/bracketHelper';
 import { getTournamentTier } from '../utils/tournamentTiers';
+import { getTournamentCoordinates } from '../utils/geoUtils';
 import { 
     Tv, Play, Pause, Maximize, Minimize, Volume2, VolumeX, ArrowLeft,
-    Clock, Calendar, CloudSun, Trophy, Swords, Users, Sparkles, ChevronRight,
-    MapPin, Wind, Droplets, CheckCircle2, ShieldCheck, QrCode, RefreshCw
+    Clock, Calendar, CloudSun, Trophy, Swords, Users, Sparkles,
+    MapPin, Wind, Droplets, CheckCircle2, ShieldCheck, QrCode, Building, Layers
 } from 'lucide-react';
 
 interface BroadcastTVProps {
@@ -20,11 +21,31 @@ interface BroadcastTVProps {
 type TVSlide = 'live' | 'order_of_play' | 'standings' | 'playoffs' | 'weather' | 'qr';
 
 export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamentId, onExit }) => {
+    const isSuperAdmin = user?.role === 'superadmin';
+    const isOrgAdmin = user?.role === 'admin' || user?.role === 'professor' || user?.role === 'coordinator';
+
+    // Get URL Params for public TV / Chromecast links (e.g. ?view=tv&club=inst-1)
+    const urlParams = useMemo(() => {
+        return typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    }, []);
+
+    const urlClubParam = urlParams.get('club') || urlParams.get('c') || urlParams.get('institution');
+    const urlTournamentParam = initialTournamentId || urlParams.get('tournament') || urlParams.get('t');
+
+    // Institution State
+    const [institutions, setInstitutions] = useState<Institution[]>([]);
+    const [selectedInstitutionId, setSelectedInstitutionId] = useState<string>(() => {
+        if (isOrgAdmin && user?.institution_id) return user.institution_id;
+        if (urlClubParam) return urlClubParam;
+        if (isSuperAdmin) return 'all';
+        return '';
+    });
+
+    // Tournaments & Matches State
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
-    const [selectedTournamentId, setSelectedTournamentId] = useState<string>(initialTournamentId || '');
+    const [selectedTournamentId, setSelectedTournamentId] = useState<string>(urlTournamentParam || '');
     const [activeTournament, setActiveTournament] = useState<Tournament | null>(null);
     const [matches, setMatches] = useState<Match[]>([]);
-    const [institutions, setInstitutions] = useState<Institution[]>([]);
     const [loading, setLoading] = useState(true);
 
     // TV Slides & Timing
@@ -62,27 +83,46 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         return () => clearInterval(timer);
     }, []);
 
-    // Load initial data and poll every 20 seconds for live updates
+    // Load initial institutions & tournaments
     const fetchData = async () => {
         try {
-            const [tourneys, insts] = await Promise.all([
+            const [allTourneys, allInsts] = await Promise.all([
                 api.tournaments.getAll(),
                 api.institutions.getAll()
             ]);
 
-            setTournaments(tourneys);
-            setInstitutions(insts);
+            setInstitutions(allInsts);
 
-            // Find current active tournament or default to first ongoing
-            const active = tourneys.find(t => t.id === selectedTournamentId) || 
-                           tourneys.find(t => t.status === 'ongoing' || t.status === 'in_progress') ||
-                           tourneys[0] || null;
+            // Determine effective institution filter
+            let effectiveInstId = selectedInstitutionId;
+            if (isOrgAdmin && user?.institution_id) {
+                effectiveInstId = user.institution_id;
+            } else if (!effectiveInstId && allInsts.length > 0) {
+                effectiveInstId = urlClubParam || (isSuperAdmin ? 'all' : allInsts[0].id);
+            }
+            setSelectedInstitutionId(effectiveInstId);
+
+            // Filter tournaments by institution
+            const filteredTourneys = allTourneys.filter(t => {
+                if (effectiveInstId === 'all') return true;
+                return t.institution_id === effectiveInstId;
+            });
+
+            setTournaments(filteredTourneys);
+
+            // Find current active tournament
+            let active = filteredTourneys.find(t => t.id === selectedTournamentId) || 
+                         filteredTourneys.find(t => t.status === 'ongoing' || t.status === 'in_progress') ||
+                         filteredTourneys[0] || null;
 
             if (active) {
                 setSelectedTournamentId(active.id);
                 const fullTourney = await api.tournaments.getById(active.id);
                 setActiveTournament(fullTourney);
                 setMatches(fullTourney?.matches || []);
+            } else {
+                setActiveTournament(null);
+                setMatches([]);
             }
         } catch (e) {
             console.error("Error fetching broadcast data:", e);
@@ -95,12 +135,42 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         fetchData();
         const pollInterval = setInterval(fetchData, 20000);
         return () => clearInterval(pollInterval);
-    }, [selectedTournamentId]);
+    }, [selectedInstitutionId, selectedTournamentId]);
 
-    // Fetch live weather for active institution / Diamante ER
+    // Active Institution Details
+    const currentInstitution = useMemo(() => {
+        if (selectedInstitutionId === 'all') return null;
+        return institutions.find(i => i.id === selectedInstitutionId) || null;
+    }, [institutions, selectedInstitutionId]);
+
+    const clubName = useMemo(() => {
+        if (currentInstitution?.name) return currentInstitution.name;
+        if (activeTournament?.institution_name) return activeTournament.institution_name;
+        if (user?.institution && isOrgAdmin) return user.institution;
+        if (selectedInstitutionId === 'all') return 'Circuito General Smash Tenis';
+        return 'Club de Tenis';
+    }, [currentInstitution, activeTournament, user, isOrgAdmin, selectedInstitutionId]);
+
+    // Fetch live weather for active institution coordinates
     useEffect(() => {
-        const lat = -32.0664;
-        const lon = -60.6384;
+        let lat = -32.0664;
+        let lon = -60.6384;
+
+        if (currentInstitution) {
+            if (currentInstitution.latitude && currentInstitution.longitude) {
+                lat = currentInstitution.latitude;
+                lon = currentInstitution.longitude;
+            } else {
+                const geo = getTournamentCoordinates({ 
+                    institutions: currentInstitution, 
+                    institution_name: currentInstitution.name,
+                    city: currentInstitution.city 
+                });
+                lat = geo.lat;
+                lon = geo.lng;
+            }
+        }
+
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max&timezone=America%2FArgentina%2FBuenos_Aires`;
 
         fetch(url)
@@ -128,7 +198,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 }
             })
             .catch(err => console.warn("OpenMeteo fetch notice in BroadcastTV:", err));
-    }, [activeTournament?.institution_id]);
+    }, [currentInstitution?.id, currentInstitution?.name, currentInstitution?.city]);
 
     // Slide Carousel Timer with smooth progress bar
     useEffect(() => {
@@ -168,10 +238,6 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         return matches.filter(m => !m.is_played && (m.scheduling_status === 'scheduled' || m.court || m.round?.includes('Semifinal') || m.round?.includes('Final')));
     }, [matches]);
 
-    const completedMatches = useMemo(() => {
-        return matches.filter(m => m.is_played);
-    }, [matches]);
-
     const scheduledMatches = useMemo(() => {
         return matches.filter(m => !m.is_played);
     }, [matches]);
@@ -204,45 +270,101 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         return organizePlayoffRounds(pMatches);
     }, [matches]);
 
-    const activeTier = activeTournament ? getTournamentTier(activeTournament) : null;
     const currentSlide = slides[currentSlideIndex].id;
 
-    const clubName = activeTournament?.institution_name || 
-                     institutions.find(i => i.id === activeTournament?.institution_id)?.name || 
-                     'Tenis Parque España — Diamante';
+    // QR Target URL
+    const qrUrl = useMemo(() => {
+        const base = typeof window !== 'undefined' ? window.location.origin : 'https://smashtenis.lnx.com.ar';
+        if (activeTournament?.id) {
+            return `${base}/?view=tournament-detail&tournament=${activeTournament.id}`;
+        }
+        if (selectedInstitutionId && selectedInstitutionId !== 'all') {
+            return `${base}/?view=tournaments&club=${selectedInstitutionId}`;
+        }
+        return `${base}/inicio`;
+    }, [activeTournament?.id, selectedInstitutionId]);
 
     return (
         <div className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white flex flex-col select-none overflow-hidden font-sans">
             
             {/* TOP BROADCAST HEADER (TV SAFE AREA) */}
-            <header className="h-20 bg-slate-950/90 border-b border-primary/30 backdrop-blur px-8 flex items-center justify-between shrink-0 shadow-2xl">
-                {/* Left: Brand & Live Clock */}
-                <div className="flex items-center gap-6">
+            <header className="h-20 bg-slate-950/90 border-b border-primary/30 backdrop-blur px-6 sm:px-8 flex items-center justify-between shrink-0 shadow-2xl gap-4">
+                {/* Left: Brand & Institution Scoping */}
+                <div className="flex items-center gap-4 sm:gap-6 min-w-0">
                     {onExit && (
                         <button 
                             onClick={onExit}
-                            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted hover:text-white border border-white/10 transition-colors"
+                            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted hover:text-white border border-white/10 transition-colors shrink-0"
                             title="Volver al panel"
                         >
                             <ArrowLeft size={20} />
                         </button>
                     )}
 
-                    <div className="flex items-center gap-3">
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary to-emerald-400 p-0.5 shadow-lg shadow-primary/30 flex items-center justify-center">
+                    <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary to-emerald-400 p-0.5 shadow-lg shadow-primary/30 flex items-center justify-center shrink-0">
                             <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
                                 <Tv size={22} className="text-primary animate-pulse" />
                             </div>
                         </div>
-                        <div>
+                        <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                                <span className="text-lg font-black tracking-tight text-white uppercase">SMASH BROADCAST</span>
-                                <span className="px-2 py-0.5 text-[10px] font-black bg-red-600 text-white rounded-md tracking-widest uppercase animate-pulse flex items-center gap-1 shadow-md shadow-red-600/30">
+                                <span className="text-base sm:text-lg font-black tracking-tight text-white uppercase truncate">SMASH BROADCAST</span>
+                                <span className="px-2 py-0.5 text-[10px] font-black bg-red-600 text-white rounded-md tracking-widest uppercase animate-pulse flex items-center gap-1 shadow-md shadow-red-600/30 shrink-0">
                                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> EN VIVO
                                 </span>
                             </div>
-                            <div className="text-xs text-slate-400 font-medium flex items-center gap-2">
-                                <MapPin size={12} className="text-primary" /> {clubName}
+
+                            {/* Institution Display / Selector */}
+                            <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-300">
+                                {isSuperAdmin ? (
+                                    /* Super Admin: Can select any institution */
+                                    <div className="flex items-center gap-1.5 bg-orange-500/10 border border-orange-500/30 px-2 py-0.5 rounded-lg">
+                                        <Building size={12} className="text-orange-400 shrink-0" />
+                                        <select
+                                            value={selectedInstitutionId}
+                                            onChange={(e) => {
+                                                setSelectedInstitutionId(e.target.value);
+                                                setSelectedTournamentId('');
+                                            }}
+                                            className="bg-transparent text-orange-200 font-bold text-xs outline-none cursor-pointer"
+                                        >
+                                            <option value="all" className="bg-slate-900 text-white">🌐 Todas las Sedes (General)</option>
+                                            {institutions.map(inst => (
+                                                <option key={inst.id} value={inst.id} className="bg-slate-900 text-white">
+                                                    🎾 {inst.name} {inst.city ? `(${inst.city})` : ''}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    /* Organizer / Admin: Fixed to their own organization */
+                                    <div className="flex items-center gap-1.5 font-semibold text-slate-300 truncate">
+                                        <MapPin size={12} className="text-primary shrink-0" />
+                                        <span className="truncate">{clubName}</span>
+                                        {currentInstitution?.city && (
+                                            <span className="text-slate-500 text-[11px] hidden md:inline">• {currentInstitution.city}</span>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Tournament switcher if club has multiple tournaments */}
+                                {tournaments.length > 1 && (
+                                    <div className="hidden xl:flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded-lg border border-white/10">
+                                        <Layers size={11} className="text-primary" />
+                                        <select
+                                            value={selectedTournamentId}
+                                            onChange={(e) => setSelectedTournamentId(e.target.value)}
+                                            className="bg-transparent text-slate-300 text-xs font-bold outline-none cursor-pointer"
+                                        >
+                                            {tournaments.map(t => (
+                                                <option key={t.id} value={t.id} className="bg-slate-900 text-white">
+                                                    {t.name} ({t.category})
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -274,7 +396,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 </div>
 
                 {/* Right: Digital Clock & TV Controls */}
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 shrink-0">
                     {/* Live Clock */}
                     <div className="text-right">
                         <div className="text-xl font-black tracking-wider text-primary font-mono leading-none">
@@ -323,7 +445,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
             </div>
 
             {/* MAIN STAGE CONTENT (RESPONSIVE FOR 1080p / 4K) */}
-            <main className="flex-1 p-8 overflow-y-auto flex flex-col justify-center relative">
+            <main className="flex-1 p-6 sm:p-8 overflow-y-auto flex flex-col justify-center relative">
                 
                 {/* 1. SLIDE: LIVE COURTS */}
                 {currentSlide === 'live' && (
@@ -352,7 +474,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 </div>
                                 <h3 className="text-2xl font-bold text-white">No hay partidos en juego en este momento</h3>
                                 <p className="text-slate-400 text-sm max-w-md mx-auto">
-                                    Los próximos encuentros comenzarán según el orden de juego programado.
+                                    Los próximos encuentros de {clubName} comenzarán según el orden de juego programado.
                                 </p>
                             </div>
                         ) : (
@@ -426,39 +548,47 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 </h1>
                             </div>
                             <span className="text-xs font-bold text-slate-400 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
-                                Canchas Oficiales de Tenis
+                                {clubName}
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {scheduledMatches.slice(0, 6).map((m, idx) => (
-                                <div key={m.id || idx} className="bg-slate-900/80 border border-white/10 rounded-2xl p-5 space-y-3 hover:border-primary/40 transition-colors shadow-lg">
-                                    <div className="flex justify-between items-center text-xs">
-                                        <span className="px-2.5 py-1 bg-primary/20 text-primary font-bold rounded-lg border border-primary/30">
-                                            {m.scheduled_time ? `🕒 ${m.scheduled_time} hs` : `Turno ${idx + 1}`}
-                                        </span>
-                                        <span className="text-slate-400 font-bold">
-                                            Cancha {m.court || ((idx % 3) + 1)}
-                                        </span>
-                                    </div>
-
-                                    <div className="space-y-1.5 py-1">
-                                        <div className="text-base font-black text-white flex items-center justify-between">
-                                            <span className="truncate">{m.player1_name || 'TBD'}</span>
-                                            <span className="text-xs text-primary font-mono font-bold">VS</span>
+                        {scheduledMatches.length === 0 ? (
+                            <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-12 text-center space-y-4">
+                                <Clock size={40} className="text-primary mx-auto opacity-70" />
+                                <h3 className="text-xl font-bold text-white">No hay partidos programados pendientes</h3>
+                                <p className="text-slate-400 text-xs">Todos los encuentros asignados han sido completados.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {scheduledMatches.slice(0, 6).map((m, idx) => (
+                                    <div key={m.id || idx} className="bg-slate-900/80 border border-white/10 rounded-2xl p-5 space-y-3 hover:border-primary/40 transition-colors shadow-lg">
+                                        <div className="flex justify-between items-center text-xs">
+                                            <span className="px-2.5 py-1 bg-primary/20 text-primary font-bold rounded-lg border border-primary/30">
+                                                {m.scheduled_time ? `🕒 ${m.scheduled_time} hs` : `Turno ${idx + 1}`}
+                                            </span>
+                                            <span className="text-slate-400 font-bold">
+                                                Cancha {m.court || ((idx % 3) + 1)}
+                                            </span>
                                         </div>
-                                        <div className="text-base font-black text-white truncate">
-                                            {m.player2_name || 'TBD'}
+
+                                        <div className="space-y-1.5 py-1">
+                                            <div className="text-base font-black text-white flex items-center justify-between">
+                                                <span className="truncate">{m.player1_name || 'TBD'}</span>
+                                                <span className="text-xs text-primary font-mono font-bold">VS</span>
+                                            </div>
+                                            <div className="text-base font-black text-white truncate">
+                                                {m.player2_name || 'TBD'}
+                                            </div>
+                                        </div>
+
+                                        <div className="text-[11px] text-slate-400 border-t border-white/10 pt-2 flex justify-between">
+                                            <span>{m.round || 'Zona de Clasificación'}</span>
+                                            <span className="text-slate-300 font-semibold">{activeTournament?.category}</span>
                                         </div>
                                     </div>
-
-                                    <div className="text-[11px] text-slate-400 border-t border-white/10 pt-2 flex justify-between">
-                                        <span>{m.round || 'Zona de Clasificación'}</span>
-                                        <span className="text-slate-300 font-semibold">{activeTournament?.category}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -479,50 +609,58 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                             </span>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            {zones.slice(0, 4).map((z, idx) => (
-                                <div key={idx} className="bg-slate-900/80 border border-white/10 rounded-2xl overflow-hidden shadow-xl">
-                                    <div className="bg-slate-950 p-3.5 border-b border-white/10 flex justify-between items-center">
-                                        <span className="text-sm font-black text-white uppercase tracking-wider">{z.name}</span>
-                                        <span className="text-xs text-primary font-bold">{z.standings.length} Jugadores</span>
+                        {zones.length === 0 ? (
+                            <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-12 text-center space-y-4">
+                                <Users size={40} className="text-primary mx-auto opacity-70" />
+                                <h3 className="text-xl font-bold text-white">Sin fase de grupos activa en este torneo</h3>
+                                <p className="text-slate-400 text-xs">El torneo se disputa en formato de cuadro directo o aún no ha conformado zonas.</p>
+                            </div>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                {zones.slice(0, 4).map((z, idx) => (
+                                    <div key={idx} className="bg-slate-900/80 border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+                                        <div className="bg-slate-950 p-3.5 border-b border-white/10 flex justify-between items-center">
+                                            <span className="text-sm font-black text-white uppercase tracking-wider">{z.name}</span>
+                                            <span className="text-xs text-primary font-bold">{z.standings.length} Jugadores</span>
+                                        </div>
+                                        <table className="w-full text-xs text-left">
+                                            <thead className="bg-black/30 text-slate-400 font-bold uppercase text-[10px]">
+                                                <tr>
+                                                    <th className="p-3">Pos / Jugador</th>
+                                                    <th className="p-3 text-center">PJ</th>
+                                                    <th className="p-3 text-center">PG</th>
+                                                    <th className="p-3 text-center">PP</th>
+                                                    <th className="p-3 text-center">Sets</th>
+                                                    <th className="p-3 text-center text-primary font-black">Pts</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-white/5">
+                                                {z.standings.map((st, sIdx) => {
+                                                    const isQualified = sIdx < 2;
+                                                    return (
+                                                        <tr key={sIdx} className={isQualified ? 'bg-primary/5 font-semibold text-white' : 'text-slate-300'}>
+                                                            <td className="p-3 flex items-center gap-2">
+                                                                <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                                                                    isQualified ? 'bg-primary text-slate-950' : 'bg-white/10 text-slate-400'
+                                                                }`}>
+                                                                    {sIdx + 1}
+                                                                </span>
+                                                                <span className="font-bold truncate max-w-[140px] sm:max-w-[180px]">{st.name}</span>
+                                                            </td>
+                                                            <td className="p-3 text-center text-slate-400">{st.played}</td>
+                                                            <td className="p-3 text-center text-emerald-400 font-bold">{st.won}</td>
+                                                            <td className="p-3 text-center text-slate-400">{st.lost}</td>
+                                                            <td className="p-3 text-center font-mono">{st.diffSets > 0 ? `+${st.diffSets}` : st.diffSets}</td>
+                                                            <td className="p-3 text-center text-primary font-black text-sm">{st.points}</td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
                                     </div>
-                                    <table className="w-full text-xs text-left">
-                                        <thead className="bg-black/30 text-slate-400 font-bold uppercase text-[10px]">
-                                            <tr>
-                                                <th className="p-3">Pos / Jugador</th>
-                                                <th className="p-3 text-center">PJ</th>
-                                                <th className="p-3 text-center">PG</th>
-                                                <th className="p-3 text-center">PP</th>
-                                                <th className="p-3 text-center">Sets</th>
-                                                <th className="p-3 text-center text-primary font-black">Pts</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-white/5">
-                                            {z.standings.map((st, sIdx) => {
-                                                const isQualified = sIdx < 2;
-                                                return (
-                                                    <tr key={sIdx} className={isQualified ? 'bg-primary/5 font-semibold text-white' : 'text-slate-300'}>
-                                                        <td className="p-3 flex items-center gap-2">
-                                                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
-                                                                isQualified ? 'bg-primary text-slate-950' : 'bg-white/10 text-slate-400'
-                                                            }`}>
-                                                                {sIdx + 1}
-                                                            </span>
-                                                            <span className="font-bold truncate max-w-[140px] sm:max-w-[180px]">{st.name}</span>
-                                                        </td>
-                                                        <td className="p-3 text-center text-slate-400">{st.played}</td>
-                                                        <td className="p-3 text-center text-emerald-400 font-bold">{st.won}</td>
-                                                        <td className="p-3 text-center text-slate-400">{st.lost}</td>
-                                                        <td className="p-3 text-center font-mono">{st.diffSets > 0 ? `+${st.diffSets}` : st.diffSets}</td>
-                                                        <td className="p-3 text-center text-primary font-black text-sm">{st.points}</td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
 
@@ -596,7 +734,9 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 {/* Left Big Card: Current Temp */}
                                 <div className="lg:col-span-1 bg-gradient-to-br from-slate-900 via-card to-slate-950 border border-primary/30 rounded-3xl p-8 flex flex-col justify-between shadow-2xl">
                                     <div>
-                                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">Diamante, Entre Ríos</div>
+                                        <div className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                                            {currentInstitution?.city || 'Diamante, Entre Ríos'}
+                                        </div>
                                         <div className="text-7xl sm:text-8xl font-black text-white tracking-tighter my-4">
                                             {weather.temp}°<span className="text-3xl text-primary font-medium">C</span>
                                         </div>
@@ -620,7 +760,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 {/* Right: 5-Day Forecast Table */}
                                 <div className="lg:col-span-2 bg-slate-900/90 border border-white/10 rounded-3xl p-8 flex flex-col justify-between shadow-2xl">
                                     <div className="text-sm font-bold text-white uppercase tracking-wider mb-4 flex items-center gap-2">
-                                        <Calendar size={16} className="text-primary" /> Pronóstico Extendido del Torneo
+                                        <Calendar size={16} className="text-primary" /> Pronóstico Extendido — {clubName}
                                     </div>
 
                                     <div className="grid grid-cols-5 gap-3">
@@ -644,7 +784,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
 
                                     <div className="mt-6 p-4 bg-primary/10 border border-primary/20 rounded-2xl text-xs text-slate-300 flex items-center gap-3">
                                         <ShieldCheck size={20} className="text-primary shrink-0" />
-                                        <span>Canchas de polvo de ladrillo compactadas y con riego regulado para la jornada.</span>
+                                        <span>Canchas de polvo de ladrillo habilitadas y con mantenimiento técnico al día.</span>
                                     </div>
                                 </div>
                             </div>
@@ -663,7 +803,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     <QrCode size={16} /> Acceso Rápido Móvil
                                 </span>
                                 <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mt-1">
-                                    ¡Sumate a la Comunidad de Smash Tenis!
+                                    ¡Sumate a {clubName}!
                                 </h1>
                             </div>
                             <span className="text-xs font-bold text-primary bg-primary/10 px-4 py-2 rounded-xl border border-primary/20">
@@ -674,10 +814,10 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border-2 border-primary/40 rounded-3xl p-8 sm:p-12 shadow-2xl">
                             <div className="space-y-5">
                                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-yellow-400/10 border border-yellow-400/20 text-yellow-400 rounded-full text-xs font-bold">
-                                    <Sparkles size={13} /> Inscripciones Abiertas
+                                    <Sparkles size={13} /> {activeTournament ? activeTournament.name : 'Inscripciones Abiertas'}
                                 </div>
                                 <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight">
-                                    Escaneá el código QR con tu celular y jugá el próximo torneo
+                                    Escaneá el código QR con tu celular y jugá en nuestro club
                                 </h2>
                                 <ul className="space-y-2.5 text-sm text-slate-300">
                                     <li className="flex items-center gap-2.5">
@@ -693,14 +833,14 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                         <span>Desafiá a otros socios y reservá canchas desde tu teléfono.</span>
                                     </li>
                                 </ul>
-                                <div className="text-xs text-slate-400 font-mono">
-                                    https://smashtenis.lnx.com.ar
+                                <div className="text-xs text-slate-400 font-mono truncate">
+                                    {qrUrl}
                                 </div>
                             </div>
 
                             <div className="flex flex-col items-center justify-center space-y-4">
                                 <QRCodeSVG 
-                                    value={window.location.origin || 'https://smashtenis.lnx.com.ar'} 
+                                    value={qrUrl} 
                                     size={240}
                                     className="border-4 border-primary shadow-2xl shadow-primary/40 p-3 bg-white"
                                 />
@@ -719,7 +859,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                     <span className="font-bold text-white flex items-center gap-2">
                         <Trophy size={14} className="text-yellow-400" /> Circuito Smash Tenis
                     </span>
-                    <span className="hidden sm:inline">Modo TV Diseñado para Pantallas de Clubes & Buffets</span>
+                    <span className="hidden sm:inline">Pantalla Oficial • {clubName}</span>
                 </div>
                 <div className="flex items-center gap-3">
                     <span className="text-[11px] font-bold text-primary">Rotación: {slideDuration}s</span>
