@@ -177,25 +177,28 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 effectiveInstId = user.institution_id;
             } else if (!effectiveInstId && allInsts.length > 0) {
                 effectiveInstId = urlClubParam || (isSuperAdmin ? 'all' : allInsts[0].id);
+                setSelectedInstitutionId(effectiveInstId);
             }
-            setSelectedInstitutionId(effectiveInstId);
 
             // Filter tournaments by institution
             const filteredTourneys = allTourneys.filter(t => {
-                if (effectiveInstId === 'all') return true;
+                if (!effectiveInstId || effectiveInstId === 'all') return true;
                 return t.institution_id === effectiveInstId;
             });
 
             setTournaments(filteredTourneys);
 
-            // Default custom selected IDs to all if empty
-            if (customSelectedIds.length === 0 && filteredTourneys.length > 0) {
+            // Reset custom selection if switching clubs
+            const validCustomIds = customSelectedIds.filter(id => filteredTourneys.some(t => t.id === id));
+            if (validCustomIds.length > 0) {
+                setCustomSelectedIds(validCustomIds);
+            } else if (filteredTourneys.length > 0) {
                 setCustomSelectedIds(filteredTourneys.map(t => t.id));
             }
 
-            // Find current active tournament
+            // Find current active tournament within the filtered list
             let targetTourney = filteredTourneys.find(t => t.id === selectedTournamentId) || 
-                                filteredTourneys.find(t => t.status === 'ongoing' || t.status === 'in_progress') ||
+                                filteredTourneys.find(t => t.status === 'ongoing' || t.status === 'in_progress' || (t.matches && t.matches.length > 0)) ||
                                 filteredTourneys[0] || null;
 
             if (targetTourney) {

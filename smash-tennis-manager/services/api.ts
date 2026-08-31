@@ -2811,9 +2811,6 @@ export const api = {
     institutions: {
         async getAll(includeInactive: boolean = false) {
             let query = supabase.from('institutions').select('*').order('name');
-            if (!includeInactive) {
-                query = query.neq('is_active', false);
-            }
             const { data, error } = await query;
             if (error) throw error;
             return (data || []).filter(inst => includeInactive || inst.is_active !== false) as Institution[];

@@ -3,10 +3,13 @@ import React, { useEffect, useState } from 'react';
 import { Institution, UserProfile } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
+import { useToast } from '../components/ui/Toast';
+import { QRCodeSVG } from '../components/QRCodeSVG';
 import { 
     Building, MapPin, Plus, Lightbulb, Sun, X, Save, 
     Instagram, Globe, Phone, Mail, Car, Wifi, Utensils, Droplets, ShoppingBag, Clock, ShieldCheck,
-    ArrowRightLeft, Layers, Info, Award, Trash2, Power, AlertTriangle, Gift, Sparkles
+    ArrowRightLeft, Layers, Info, Award, Trash2, Power, AlertTriangle, Gift, Sparkles,
+    Tv, Copy, ExternalLink, Share2, Check, MessageSquare
 } from 'lucide-react';
 import { CATEGORY_EQUIVALENCES } from '../utils/categories';
 
@@ -15,6 +18,7 @@ interface AdminInstitutionsProps {
 }
 
 export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) => {
+  const { addToast } = useToast();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -24,6 +28,7 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
   const [deletingInst, setDeletingInst] = useState<Institution | null>(null);
   const [confirmName, setConfirmName] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [copiedClubId, setCopiedClubId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -368,6 +373,48 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                              <span className="font-bold text-primary font-mono text-xl">${inst.price_day || 0}</span>
                         </div>
                     </div>
+
+                    {/* TV Broadcast Quick Action Bar */}
+                    <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2">
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                const base = window.location.origin;
+                                const url = `${base}/?view=tv&club=${inst.id}`;
+                                navigator.clipboard.writeText(url);
+                                setCopiedClubId(inst.id);
+                                setTimeout(() => setCopiedClubId(null), 2500);
+                                addToast(`¡Link de Modo TV copiado para ${inst.name}!`, 'success');
+                            }}
+                            className="flex-1 bg-gradient-to-r from-primary/10 to-blue-500/10 hover:from-primary/20 hover:to-blue-500/20 text-primary border border-primary/30 hover:border-primary py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                            title="Copiar link permanente para Smart TV del club"
+                        >
+                            {copiedClubId === inst.id ? (
+                                <>
+                                    <Check size={14} className="text-emerald-400" />
+                                    <span className="text-emerald-400 font-bold">¡Link Copiado!</span>
+                                </>
+                            ) : (
+                                <>
+                                    <Tv size={14} className="text-primary animate-pulse" />
+                                    <span>Copiar Link TV Buffet</span>
+                                </>
+                            )}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                window.open(`/?view=tv&club=${inst.id}`, '_blank');
+                            }}
+                            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-all active:scale-95"
+                            title="Abrir Pantalla TV en nueva pestaña"
+                        >
+                            <ExternalLink size={14} />
+                        </button>
+                    </div>
                 </div>
              </Card>
              );
@@ -390,6 +437,7 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                     <TabButton id="location" label="Ubicación" active={activeTab === 'location'} onClick={setActiveTab} />
                     <TabButton id="facilities" label="Instalaciones & Valores" active={activeTab === 'facilities'} onClick={setActiveTab} />
                     <TabButton id="media" label="Configuración" active={activeTab === 'media'} onClick={setActiveTab} />
+                    <TabButton id="broadcast" label="📺 Modo TV Buffet" active={activeTab === 'broadcast'} onClick={setActiveTab} />
                     {user?.role === 'superadmin' && (
                         <TabButton id="membership" label="👑 Membresía VIP & Trial" active={activeTab === 'membership'} onClick={setActiveTab} />
                     )}
@@ -692,6 +740,113 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                                     </div>
                                 </div>
                             )}
+                        </div>
+                    )}
+
+                    {activeTab === 'broadcast' && (
+                        <div className="space-y-6 animate-in fade-in duration-200">
+                            <div className="bg-gradient-to-r from-primary/15 via-blue-500/10 to-transparent border border-primary/30 p-5 rounded-2xl space-y-2 shadow-lg">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-xl bg-primary/20 text-primary border border-primary/30 flex items-center justify-center">
+                                        <Tv size={22} className="animate-pulse" />
+                                    </div>
+                                    <div>
+                                        <h4 className="text-base font-bold text-white">Transmisión Panorámica Modo TV (Smart TV / Buffet)</h4>
+                                        <p className="text-xs text-primary font-medium">Sede: {formData.name || 'Mi Institución'}</p>
+                                    </div>
+                                </div>
+                                <p className="text-xs text-slate-300 leading-relaxed pt-1">
+                                    Este es el enlace permanente para proyectar en las Smart TVs y monitores del buffet o confitería de tu club. 
+                                    Se actualiza automáticamente cada pocos segundos mostrando canchas en vivo, orden de juego oficial, zonas, llaves de eliminación directa, clima local y códigos QR para nuevas inscripciones.
+                                </p>
+                            </div>
+
+                            {/* Enlace Directo Box */}
+                            <div className="space-y-2 bg-white/5 border border-white/10 p-4 rounded-2xl">
+                                <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                    <span>Enlace Permanente del Club</span>
+                                    <span className="text-primary text-[11px] font-semibold">Listo para navegador de Smart TV o Chromecast</span>
+                                </label>
+                                
+                                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                                    <input 
+                                        type="text" 
+                                        readOnly 
+                                        value={`${window.location.origin}/?view=tv&club=${formData.id || user?.institution_id || ''}`}
+                                        className="flex-1 bg-black/40 border border-white/10 rounded-xl p-3 text-white text-xs font-mono select-all focus:outline-none focus:border-primary"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const url = `${window.location.origin}/?view=tv&club=${formData.id || user?.institution_id || ''}`;
+                                                navigator.clipboard.writeText(url);
+                                                addToast("¡Enlace de TV copiado al portapapeles!", 'success');
+                                            }}
+                                            className="flex-1 sm:flex-initial bg-primary hover:bg-primary-hover text-white px-4 py-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-primary/20 active:scale-95"
+                                        >
+                                            <Copy size={14} />
+                                            <span>Copiar Link</span>
+                                        </button>
+                                        
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const url = `${window.location.origin}/?view=tv&club=${formData.id || user?.institution_id || ''}`;
+                                                window.open(url, '_blank');
+                                            }}
+                                            className="p-3 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center justify-center border border-white/10 active:scale-95"
+                                            title="Abrir en nueva pestaña"
+                                        >
+                                            <ExternalLink size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Compartir por WhatsApp & Código QR */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="bg-emerald-950/20 border border-emerald-500/30 p-4 rounded-2xl flex flex-col justify-between space-y-3">
+                                    <div>
+                                        <h5 className="text-sm font-bold text-white flex items-center gap-2 mb-1">
+                                            <MessageSquare size={16} className="text-emerald-400" />
+                                            Enviar al Encargado del Buffet
+                                        </h5>
+                                        <p className="text-xs text-emerald-200/80 leading-relaxed">
+                                            Compartí el link por WhatsApp con el personal del club para que lo abran en la Smart TV o pantalla principal.
+                                        </p>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const url = `${window.location.origin}/?view=tv&club=${formData.id || user?.institution_id || ''}`;
+                                            const text = `🎾 *Smash Broadcast TV - ${formData.name || 'Club'}*\n\nAccedé a la pantalla panorámica para la Smart TV del club:\n${url}`;
+                                            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                                        }}
+                                        className="w-full bg-emerald-600 hover:bg-emerald-500 text-white py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+                                    >
+                                        <Share2 size={14} />
+                                        <span>Compartir por WhatsApp</span>
+                                    </button>
+                                </div>
+
+                                <div className="bg-white/5 border border-white/10 p-4 rounded-2xl flex items-center gap-4">
+                                    <div className="bg-white p-2 rounded-xl shadow-lg shrink-0">
+                                        <QRCodeSVG
+                                            value={`${window.location.origin}/?view=tv&club=${formData.id || user?.institution_id || ''}`}
+                                            size={84}
+                                        />
+                                    </div>
+                                    <div className="min-w-0 space-y-1">
+                                        <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                                            <QrCode size={14} className="text-primary" /> Escaneo Rápido
+                                        </div>
+                                        <p className="text-[11px] text-slate-400 leading-snug">
+                                            Escaneá desde el celular o tablet del club para abrir el modo TV en el navegador al instante.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     )}
 
