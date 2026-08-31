@@ -9,7 +9,7 @@ import {
     Building, MapPin, Plus, Lightbulb, Sun, X, Save, 
     Instagram, Globe, Phone, Mail, Car, Wifi, Utensils, Droplets, ShoppingBag, Clock, ShieldCheck,
     ArrowRightLeft, Layers, Info, Award, Trash2, Power, AlertTriangle, Gift, Sparkles,
-    Tv, Copy, ExternalLink, Share2, Check, MessageSquare
+    Tv, Copy, ExternalLink, Share2, Check, MessageSquare, QrCode
 } from 'lucide-react';
 import { CATEGORY_EQUIVALENCES } from '../utils/categories';
 
