@@ -325,19 +325,44 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         return matches.filter(m => !m.is_played);
     }, [matches]);
 
-    const currentSlide = slides[currentSlideIndex].id;
+    // Check if active tournament registration is closed
+    const isRegClosed = useMemo(() => {
+        if (!activeTournament) return true;
+        return Boolean(
+            activeTournament.registration_closed || 
+            activeTournament.status === 'finished' ||
+            (activeTournament.registration_deadline && new Date() > new Date(activeTournament.registration_deadline + 'T23:59:59'))
+        );
+    }, [activeTournament]);
+
+    // Open tournaments in current club
+    const openTournamentsInClub = useMemo(() => {
+        return tournaments.filter(t => {
+            const closed = Boolean(
+                t.registration_closed || 
+                t.status === 'finished' ||
+                (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
+            );
+            return !closed;
+        });
+    }, [tournaments]);
 
     // QR Target URL
     const qrUrl = useMemo(() => {
         const base = typeof window !== 'undefined' ? window.location.origin : 'https://smashtenis.lnx.com.ar';
-        if (activeTournament?.id) {
+        
+        // If current tournament has open registration, link directly to it
+        if (activeTournament?.id && !isRegClosed) {
             return `${base}/?view=tournament-detail&tournament=${activeTournament.id}`;
         }
-        if (selectedInstitutionId && selectedInstitutionId !== 'all') {
-            return `${base}/?view=tournaments&club=${selectedInstitutionId}`;
+        
+        // If registration is closed or general, link to club's tournaments list
+        const clubId = selectedInstitutionId !== 'all' ? selectedInstitutionId : (activeTournament?.institution_id || '');
+        if (clubId) {
+            return `${base}/?view=tournaments&club=${clubId}`;
         }
-        return `${base}/inicio`;
-    }, [activeTournament?.id, selectedInstitutionId]);
+        return `${base}/?view=tournaments`;
+    }, [activeTournament?.id, isRegClosed, selectedInstitutionId, activeTournament?.institution_id]);
 
     // Helper to format score cleanly
     const parseScoreDisplay = (score: any) => {
@@ -931,10 +956,10 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-white/10 pb-4 gap-4">
                             <div>
                                 <span className="text-xs font-black uppercase tracking-widest text-primary flex items-center gap-2">
-                                    <QrCode size={16} /> Acceso Rápido Móvil
+                                    <QrCode size={16} /> {isRegClosed ? 'Próximos Torneos & Actividades' : 'Inscripción Inmediata'}
                                 </span>
                                 <h1 className="text-3xl sm:text-4xl font-black text-white tracking-tight mt-1">
-                                    ¡Sumate a {clubName}!
+                                    {!isRegClosed ? `¡Inscribite a ${activeTournament?.name}!` : `¡Torneos Abiertos en ${clubName}!`}
                                 </h1>
                             </div>
                             {renderTournamentHeaderCard()}
@@ -942,27 +967,79 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center bg-gradient-to-r from-slate-900 via-slate-900 to-slate-950 border-2 border-primary/40 rounded-3xl p-8 sm:p-12 shadow-2xl">
                             <div className="space-y-5">
-                                <div className="inline-flex items-center gap-2 px-3 py-1 bg-yellow-400/10 border border-yellow-400/20 text-yellow-400 rounded-full text-xs font-bold">
-                                    <Sparkles size={13} /> {activeTournament ? activeTournament.name : 'Inscripciones Abiertas'}
-                                </div>
-                                <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight">
-                                    Escaneá el código QR con tu celular y jugá en nuestro club
-                                </h2>
-                                <ul className="space-y-2.5 text-sm text-slate-300">
-                                    <li className="flex items-center gap-2.5">
-                                        <CheckCircle2 size={16} className="text-primary shrink-0" />
-                                        <span>Seguí tus partidos, resultados y horarios en vivo.</span>
-                                    </li>
-                                    <li className="flex items-center gap-2.5">
-                                        <CheckCircle2 size={16} className="text-primary shrink-0" />
-                                        <span>Sumá puntos al Ranking Oficial de 1ra a 7ma categoría.</span>
-                                    </li>
-                                    <li className="flex items-center gap-2.5">
-                                        <CheckCircle2 size={16} className="text-primary shrink-0" />
-                                        <span>Desafiá a otros socios y reservá canchas desde tu teléfono.</span>
-                                    </li>
-                                </ul>
-                                <div className="text-xs text-slate-400 font-mono truncate">
+                                {!isRegClosed ? (
+                                    <>
+                                        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full text-xs font-black uppercase tracking-wider">
+                                            <Sparkles size={14} className="animate-spin-slow" /> Inscripción Abierta • Cupos Disponibles
+                                        </div>
+                                        <h2 className="text-3xl sm:text-4xl font-black text-white leading-tight">
+                                            Escaneá el código QR con tu celular y sumate a este torneo
+                                        </h2>
+                                        <ul className="space-y-2.5 text-sm text-slate-300">
+                                            <li className="flex items-center gap-2.5">
+                                                <CheckCircle2 size={16} className="text-primary shrink-0" />
+                                                <span>Inscripción en 1 clic con selección de categoría y turno.</span>
+                                            </li>
+                                            <li className="flex items-center gap-2.5">
+                                                <CheckCircle2 size={16} className="text-primary shrink-0" />
+                                                <span>Puntaje válido para el Ranking Oficial {activeTier ? `(${activeTier.label})` : ''}.</span>
+                                            </li>
+                                            <li className="flex items-center gap-2.5">
+                                                <CheckCircle2 size={16} className="text-primary shrink-0" />
+                                                <span>Fixture en vivo y notificaciones de partidos en tu celular.</span>
+                                            </li>
+                                        </ul>
+                                    </>
+                                ) : (
+                                    <>
+                                        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full text-xs font-black uppercase tracking-wider">
+                                            <Clock size={14} /> Inscripción de {activeTournament?.name || 'este torneo'} cerrada
+                                        </div>
+                                        <h2 className="text-2xl sm:text-3xl font-black text-white leading-tight">
+                                            {openTournamentsInClub.length > 0 
+                                                ? `Hay ${openTournamentsInClub.length} torneo(s) con inscripción abierta en ${clubName}` 
+                                                : `Explorá los próximos torneos y sumate a ${clubName}`}
+                                        </h2>
+
+                                        {openTournamentsInClub.length > 0 ? (
+                                            <div className="space-y-2.5 py-1">
+                                                <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                                                    Torneos con cupos disponibles para inscribirte:
+                                                </span>
+                                                <div className="grid grid-cols-1 gap-2">
+                                                    {openTournamentsInClub.slice(0, 3).map(ot => (
+                                                        <div key={ot.id} className="bg-black/40 border border-white/10 rounded-xl p-3 flex items-center justify-between">
+                                                            <div className="min-w-0">
+                                                                <div className="text-sm font-black text-white truncate">{ot.name}</div>
+                                                                <div className="text-xs text-primary font-bold">{ot.category} • {ot.gender}</div>
+                                                            </div>
+                                                            <span className="px-2.5 py-1 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-black rounded-lg uppercase tracking-wider shrink-0">
+                                                                Abierto
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <ul className="space-y-2.5 text-sm text-slate-300">
+                                                <li className="flex items-center gap-2.5">
+                                                    <CheckCircle2 size={16} className="text-primary shrink-0" />
+                                                    <span>Consultá el fixture completo, zonas y llaves en tiempo real.</span>
+                                                </li>
+                                                <li className="flex items-center gap-2.5">
+                                                    <CheckCircle2 size={16} className="text-primary shrink-0" />
+                                                    <span>Seguí la tabla del Ranking Oficial de 1ra a 7ma categoría.</span>
+                                                </li>
+                                                <li className="flex items-center gap-2.5">
+                                                    <CheckCircle2 size={16} className="text-primary shrink-0" />
+                                                    <span>Desafiá a socios y reservá canchas desde tu teléfono.</span>
+                                                </li>
+                                            </ul>
+                                        )}
+                                    </>
+                                )}
+                                
+                                <div className="text-xs text-slate-400 font-mono truncate pt-2">
                                     {qrUrl}
                                 </div>
                             </div>
@@ -973,8 +1050,8 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     size={240}
                                     className="border-4 border-primary shadow-2xl shadow-primary/40 p-3 bg-white"
                                 />
-                                <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">
-                                    Apuntá tu cámara aquí
+                                <span className="text-xs font-bold text-slate-300 uppercase tracking-widest text-center">
+                                    {!isRegClosed ? 'Apuntá tu cámara para inscribirte' : 'Apuntá tu cámara para ver torneos abiertos'}
                                 </span>
                             </div>
                         </div>
