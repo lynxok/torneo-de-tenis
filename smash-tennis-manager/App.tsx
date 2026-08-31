@@ -53,6 +53,7 @@ const AdminSettings = lazyRetry(() => import('./pages/AdminSettings').then(m => 
 const PricingAndCommissions = lazyRetry(() => import('./pages/PricingAndCommissions').then(m => ({ default: m.PricingAndCommissions })), 'PricingAndCommissions');
 const LandingPage = lazyRetry(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage');
 const CoachDashboard = lazyRetry(() => import('./pages/CoachDashboard').then(m => ({ default: m.CoachDashboard })), 'CoachDashboard');
+const BroadcastTV = lazyRetry(() => import('./pages/BroadcastTV').then(m => ({ default: m.BroadcastTV })), 'BroadcastTV');
 
 export const VALID_VIEWS = [
   'dashboard',
@@ -73,7 +74,9 @@ export const VALID_VIEWS = [
   'admin-settings',
   'tutorials',
   'landing',
-  'inicio'
+  'inicio',
+  'tv',
+  'broadcast'
 ];
 
 const AppContent = () => {
@@ -156,6 +159,13 @@ const AppContent = () => {
     const clubParam = params.get('club') || params.get('c');
     const viewParam = params.get('view');
 
+    const isExplicitTv = pathname.includes('/tv') || pathname.includes('/broadcast') || viewParam === 'tv' || viewParam === 'broadcast';
+    if (isExplicitTv) {
+      setUnauthView('tv' as any);
+      setActiveView('tv');
+      return;
+    }
+
     const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
 
     if (isExplicitInicio) {
@@ -181,6 +191,13 @@ const AppContent = () => {
     const tournamentId = params.get('tournament') || params.get('t');
     const clubId = params.get('club') || params.get('institution') || params.get('c');
     const viewParam = params.get('view');
+
+    const isExplicitTv = pathname.includes('/tv') || pathname.includes('/broadcast') || viewParam === 'tv' || viewParam === 'broadcast';
+    if (isExplicitTv) {
+      setActiveView('tv');
+      if (tournamentId) setNavData(tournamentId);
+      return;
+    }
 
     const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
 
@@ -337,6 +354,20 @@ const AppContent = () => {
   if (loading) return <div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando aplicación...</div>;
 
   if (!session || !userProfile || !effectiveUser) {
+    if ((unauthView as any) === 'tv' || activeView === 'tv' || activeView === 'broadcast') {
+      return (
+        <Suspense fallback={<div className="h-screen bg-slate-950 flex items-center justify-center text-primary font-bold">Cargando Smash Broadcast...</div>}>
+          <BroadcastTV
+            initialTournamentId={navData}
+            onExit={() => {
+              setUnauthView('landing');
+              setActiveView('landing');
+            }}
+          />
+        </Suspense>
+      );
+    }
+
     if (unauthView === 'landing') {
       return (
         <Suspense fallback={<div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando Smash Tenis...</div>}>
@@ -361,6 +392,19 @@ const AppContent = () => {
           setActiveView('landing');
         }}
       />
+    );
+  }
+
+  // Standalone Fullscreen View: Broadcast TV
+  if (activeView === 'tv' || activeView === 'broadcast') {
+    return (
+      <Suspense fallback={<div className="h-screen bg-slate-950 flex items-center justify-center text-primary font-bold">Cargando Smash Broadcast...</div>}>
+        <BroadcastTV
+          user={effectiveUser}
+          initialTournamentId={navData}
+          onExit={() => setActiveView('dashboard')}
+        />
+      </Suspense>
     );
   }
 

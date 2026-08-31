@@ -15,7 +15,7 @@ import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 import { formatPlayerName, formatMatchScore } from '../utils/formatters';
 import { exportTournamentPlayersToCSV } from '../utils/exportHelper';
-import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
+import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, buildPlayoffTreeFromZones, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { ShareGraphicModal } from '../components/ShareGraphicModal';
 import { soundEffects } from '../services/soundEffects';
@@ -1220,14 +1220,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const playoffMatches = matches.filter(m => m.round !== 'Fase de Grupos' && !m.group_number);
     const displayedMatches = activeTab === 'groups' ? groupMatches : activeTab === 'playoffs' ? playoffMatches : matches;
 
+    const unplayedGroupMatches = groupMatches.filter(m => !m.is_played && !m.winner_id && m.scheduling_status !== 'finished');
+    const isGroupStageComplete = groupMatches.length > 0 && unplayedGroupMatches.length === 0;
+
     const zones = calculateGroupStandings(groupMatches, players);
     const playoffRounds = organizePlayoffRounds(playoffMatches);
     const projectedPlayoffRounds = getProjectedPlayoffRounds(zones);
 
-    const finalMatch = playoffMatches.find(m => m.round === 'Final');
-    const championName = finalMatch?.winner_id ? (
+    const finalMatch = playoffMatches.find(m => m.round === 'Final' || m.round === 'Gran Final');
+    const championName = tournament?.champion_name || (finalMatch?.winner_id ? (
         finalMatch.winner_id === finalMatch.player1_id ? finalMatch.player1_name : finalMatch.player2_name
-    ) : null;
+    ) : null);
 
     const handleConfirmAllGroupMatches = async () => {
         const pending = groupMatches.filter(m => (m.score || m.is_played) && m.score_status !== 'confirmed');
@@ -1251,7 +1254,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const handleGeneratePlayoffsFromZones = async () => {
         if (!tournament || zones.length === 0) return;
 
-        // Auto-validate all group matches that have scores loaded but are still pending or disputed
+        // Si la fase de grupos aún tiene partidos pendientes, requerir confirmación explícita del organizador
+        if (unplayedGroupMatches.length > 0) {
+            const proceed = window.confirm(
+                `⚠️ ATENCIÓN: Aún restan ${unplayedGroupMatches.length} partido(s) de la Fase de Grupos por disputarse.\n\n` +
+                `Si continúas, la fase de grupos se dará por concluida y se armarán las llaves con las posiciones actuales de la tabla.\n\n` +
+                `¿Deseas dar por finalizada la fase de grupos y oficializar las llaves de todas formas?`
+            );
+            if (!proceed) return;
+        }
+
+        // Auto-validar partidos de grupo que tengan marcador cargado pero sigan pendientes
         const pendingGroupMatches = groupMatches.filter(m => (m.score || m.is_played) && m.score_status !== 'confirmed');
         if (pendingGroupMatches.length > 0) {
             try {
@@ -1286,53 +1299,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
         setGeneratingPlayoffs(true);
         try {
-            const customMatches: { round: string; player1: { id: string; name: string }; player2: { id: string; name: string } }[] = [];
-
-            if (zones.length === 4) {
-                const zA = zones[0]?.players;
-                const zB = zones[1]?.players;
-                const zC = zones[2]?.players;
-                const zD = zones[3]?.players;
-
-                if (zA?.[0] && zB?.[1]) {
-                    customMatches.push({ round: 'Cuartos de Final', player1: { id: zA[0].playerId, name: zA[0].playerName }, player2: { id: zB[1].playerId, name: zB[1].playerName } });
-                }
-                if (zC?.[0] && zD?.[1]) {
-                    customMatches.push({ round: 'Cuartos de Final', player1: { id: zC[0].playerId, name: zC[0].playerName }, player2: { id: zD[1].playerId, name: zD[1].playerName } });
-                }
-                if (zB?.[0] && zA?.[1]) {
-                    customMatches.push({ round: 'Cuartos de Final', player1: { id: zB[0].playerId, name: zB[0].playerName }, player2: { id: zA[1].playerId, name: zA[1].playerName } });
-                }
-                if (zD?.[0] && zC?.[1]) {
-                    customMatches.push({ round: 'Cuartos de Final', player1: { id: zD[0].playerId, name: zD[0].playerName }, player2: { id: zC[1].playerId, name: zC[1].playerName } });
-                }
-            } else if (zones.length === 2) {
-                const zA = zones[0]?.players;
-                const zB = zones[1]?.players;
-                if (zA?.[0] && zB?.[1]) {
-                    customMatches.push({ round: 'Semifinal', player1: { id: zA[0].playerId, name: zA[0].playerName }, player2: { id: zB[1].playerId, name: zB[1].playerName } });
-                }
-                if (zB?.[0] && zA?.[1]) {
-                    customMatches.push({ round: 'Semifinal', player1: { id: zB[0].playerId, name: zB[0].playerName }, player2: { id: zA[1].playerId, name: zA[1].playerName } });
-                }
-            } else {
-                const topP = qualifiers.slice(0, 8);
-                const roundName = topP.length > 4 ? 'Cuartos de Final' : 'Semifinal';
-                for (let i = 0; i < topP.length; i += 2) {
-                    if (i + 1 < topP.length) {
-                        customMatches.push({
-                            round: roundName,
-                            player1: { id: topP[i].player.playerId, name: topP[i].player.playerName },
-                            player2: { id: topP[i + 1].player.playerId, name: topP[i + 1].player.playerName }
-                        });
-                    }
-                }
-            }
-
-            await api.tournaments.generatePlayoffs(tournament.id, customMatches);
-            addToast("¡Cuadro de llaves generado exitosamente con los clasificados de cada zona!", "success");
+            const seeds = buildPlayoffTreeFromZones(zones);
+            await api.tournaments.generatePlayoffs(tournament.id, seeds);
+            addToast("¡Cuadro de llaves oficializado y generado exitosamente!", "success");
             setActiveTab('playoffs');
-            loadTournament();
+            await loadTournament();
         } catch (e: any) {
             addToast("Error al armar llaves: " + e.message, "error");
         } finally {
@@ -2348,20 +2319,30 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     projectedPlayoffRounds.length > 0 ? (
                                         <div className="space-y-6">
                                             {/* Projected Notice Banner */}
-                                            <div className="p-4 bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-transparent border border-amber-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                            <div className={`p-4 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 border ${
+                                                isGroupStageComplete 
+                                                    ? 'bg-gradient-to-r from-emerald-500/15 via-green-500/10 to-transparent border-emerald-500/30' 
+                                                    : 'bg-gradient-to-r from-amber-500/15 via-yellow-500/10 to-transparent border-amber-500/30'
+                                            }`}>
                                                 <div className="flex items-start gap-3">
-                                                    <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400 shrink-0 mt-0.5">
-                                                        <Sparkles size={18} />
+                                                    <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                                                        isGroupStageComplete ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
+                                                    }`}>
+                                                        {isGroupStageComplete ? <CheckCircle2 size={20} /> : <Sparkles size={18} />}
                                                     </div>
                                                     <div>
                                                         <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                                                            Previsualización de Cruces Proyectados
-                                                            <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold uppercase">
-                                                                En Vivo
+                                                            {isGroupStageComplete ? 'Fase de Grupos Finalizada' : 'Previsualización de Cruces Proyectados'}
+                                                            <span className={`text-[10px] border px-2 py-0.5 rounded-full font-bold uppercase ${
+                                                                isGroupStageComplete ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                                            }`}>
+                                                                {isGroupStageComplete ? 'Listo para Oficializar' : 'En Vivo'}
                                                             </span>
                                                         </h4>
-                                                        <p className="text-xs text-amber-200/80 mt-0.5 leading-relaxed">
-                                                            Las llaves se proyectan y actualizan automáticamente según las posiciones de la fase de zonas. Una vez concluidos los grupos, el organizador oficializará los partidos finales.
+                                                        <p className="text-xs text-slate-300 mt-0.5 leading-relaxed">
+                                                            {isGroupStageComplete 
+                                                                ? 'Todos los partidos de grupos han finalizado y las posiciones están 100% definidas. Ya puedes oficializar el cuadro de llaves definitivo.'
+                                                                : `Las llaves se proyectan y actualizan automáticamente según las posiciones de la fase de zonas (restan ${unplayedGroupMatches.length} partido(s) por jugarse).`}
                                                         </p>
                                                     </div>
                                                 </div>
@@ -2370,10 +2351,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     <button
                                                         onClick={handleGeneratePlayoffsFromZones}
                                                         disabled={generatingPlayoffs}
-                                                        className="px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-dark font-black rounded-xl text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2 shrink-0"
+                                                        className={`px-4 py-2.5 text-dark font-black rounded-xl text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2 shrink-0 ${
+                                                            isGroupStageComplete
+                                                                ? 'bg-gradient-to-r from-emerald-400 to-green-500 text-slate-950 font-extrabold shadow-emerald-500/20'
+                                                                : 'bg-gradient-to-r from-amber-500 to-yellow-500 text-dark'
+                                                        }`}
                                                     >
                                                         <Trophy size={14} className={generatingPlayoffs ? "animate-spin" : ""} />
-                                                        🏆 Oficializar y Armar Llaves
+                                                        {isGroupStageComplete ? '🏆 Oficializar y Armar Llaves' : `🏆 Oficializar Llaves (${unplayedGroupMatches.length} pend.)`}
                                                     </button>
                                                 )}
                                             </div>
@@ -2461,13 +2446,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                                                     <div className="space-y-4 flex flex-col justify-around flex-1">
                                                         {round.matches.map((m) => {
-                                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
+                                                            const hasBothPlayers = !!(m.player1_id && m.player2_id);
+                                                            const isUserInMatch = hasBothPlayers && (m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id);
                                                             const isMatchFinishedAndConfirmed = !!(m.is_played && m.score_status === 'confirmed');
-                                                            const canEditScore = isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed);
+                                                            const canEditScore = hasBothPlayers && (isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed));
+                                                            const canSchedule = hasBothPlayers && (isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id;
                                                             const formattedScore = formatMatchScore(m.score);
                                                             const isFinished = !!m.winner_id || (m.score && m.scheduling_status === 'finished');
-                                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
-                                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || m.proposal_data?.slot1_label || 'A definir';
+                                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || m.proposal_data?.slot2_label || 'A definir';
                                                             
                                                             // Accurate team separation for Singles and Doubles
                                                             const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
@@ -2496,13 +2483,19 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             ? 'border-primary/40' 
                                                                             : isUserInMatch && scheduledInfo 
                                                                             ? 'border-blue-500/40 bg-blue-950/20' 
+                                                                            : !hasBothPlayers
+                                                                            ? 'border-dashed border-amber-500/20 bg-slate-950/40 opacity-90'
                                                                             : 'border-white/10 hover:border-white/20'
                                                                     }`}
                                                                 >
                                                                     <div className="space-y-2">
                                                                         {/* Contender 1 */}
                                                                         <div className={`flex items-center justify-between p-2 rounded-xl text-xs ${
-                                                                            m.winner_id === m.player1_id ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' : 'bg-white/5 text-white'
+                                                                            m.winner_id === m.player1_id 
+                                                                                ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' 
+                                                                                : m.player1_id
+                                                                                ? 'bg-white/5 text-white'
+                                                                                : 'bg-white/[0.02] text-slate-400 italic border border-white/5'
                                                                         }`}>
                                                                             <span className="truncate font-semibold">{p1DisplayName}</span>
                                                                             {m.winner_id === m.player1_id && <Check size={14} className="text-green-400 shrink-0" />}
@@ -2510,7 +2503,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                                                                         {/* Contender 2 */}
                                                                         <div className={`flex items-center justify-between p-2 rounded-xl text-xs ${
-                                                                            m.winner_id === m.player2_id ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' : 'bg-white/5 text-white'
+                                                                            m.winner_id === m.player2_id 
+                                                                                ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' 
+                                                                                : m.player2_id
+                                                                                ? 'bg-white/5 text-white'
+                                                                                : 'bg-white/[0.02] text-slate-400 italic border border-white/5'
                                                                         }`}>
                                                                             <span className="truncate font-semibold">{p2DisplayName}</span>
                                                                             {m.winner_id === m.player2_id && <Check size={14} className="text-green-400 shrink-0" />}
@@ -2581,16 +2578,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                         </span>
                                                                                     )}
                                                                                 </div>
-                                                                            ) : (
+                                                                            ) : hasBothPlayers ? (
                                                                                 <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
                                                                                     Por Jugar
+                                                                                </span>
+                                                                            ) : (
+                                                                                <span className="text-[10px] text-amber-300/80 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-medium flex items-center gap-1">
+                                                                                    <Clock size={10} /> Esperando clasificados
                                                                                 </span>
                                                                             )}
                                                                         </div>
 
                                                                         <div className="flex items-center gap-1">
-                                                                            {/* Schedule Button for Admin or Assigned Players (Solo si el partido NO fue jugado aún) */}
-                                                                            {(isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
+                                                                            {/* Schedule Button for Admin or Assigned Players (Solo si ambos jugadores están definidos y el partido NO fue jugado aún) */}
+                                                                            {canSchedule && (
                                                                                 <button
                                                                                     onClick={() => openScheduleModal(m)}
                                                                                     className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${

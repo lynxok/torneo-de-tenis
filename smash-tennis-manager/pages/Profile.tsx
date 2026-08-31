@@ -6,7 +6,7 @@ import { useToast } from '../components/ui/Toast';
 import { 
     User, Mail, Award, MapPin, Phone, Edit2, Shield, CreditCard, Calendar, X, Check, Save, 
     AlertTriangle, Camera, UploadCloud, Loader2, Star, Plus, Trash2, Sparkles, Building as BuildingIcon, CheckCircle2, Smartphone, Trophy,
-    Volume2, VolumeX, Flame, Zap, TrendingUp, Activity, Crown, Medal, Target, ChevronRight, Lock
+    Volume2, VolumeX, Flame, Zap, TrendingUp, Activity, Crown, Medal, Target, ChevronRight, Lock, Bell, BellOff, Send
 } from 'lucide-react';
 import ImageCropper from '../components/ImageCropper';
 import imageCompression from 'browser-image-compression';
@@ -17,6 +17,8 @@ import { calculatePlayerAchievements, getTierColorClasses } from '../utils/achie
 import { PlayerCardModal } from '../components/PlayerCardModal';
 import { RankingEvolutionChart } from '../components/RankingEvolutionChart';
 import { soundEffects } from '../services/soundEffects';
+import { pushNotificationService, PushPermissionStatus } from '../services/pushNotificationService';
+import { triggerPWAInstall } from '../components/PWAInstallPrompt';
 
 interface ProfileProps {
     user: UserProfile;
@@ -87,6 +89,71 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             .catch(console.error)
             .finally(() => setLoadingStats(false));
     }, [user.id]);
+
+    // Push Notifications State
+    const [pushStatus, setPushStatus] = useState<PushPermissionStatus>('default');
+    const [pushLoading, setPushLoading] = useState(false);
+    const [testingPush, setTestingPush] = useState(false);
+
+    useEffect(() => {
+        setPushStatus(pushNotificationService.getPermissionStatus());
+    }, []);
+
+    const handleEnablePush = async () => {
+        setPushLoading(true);
+        try {
+            const granted = await pushNotificationService.requestPermission();
+            const currentStatus = pushNotificationService.getPermissionStatus();
+            setPushStatus(currentStatus);
+
+            if (granted) {
+                await pushNotificationService.subscribeUser(user.id);
+                soundEffects.playTennisHit();
+                addToast("🔔 ¡Notificaciones Push activadas con éxito!", "success");
+            } else if (currentStatus === 'ios_pwa_required') {
+                triggerPWAInstall();
+            } else if (currentStatus === 'denied') {
+                addToast("Las notificaciones están bloqueadas en tu navegador. Habilítalas en el candado de la barra de direcciones.", "error");
+            }
+        } catch (e: any) {
+            addToast(e.message || "Error al solicitar permisos", "error");
+        } finally {
+            setPushLoading(false);
+        }
+    };
+
+    const handleDisablePush = async () => {
+        setPushLoading(true);
+        try {
+            await pushNotificationService.unsubscribeUser(user.id);
+            setPushStatus(pushNotificationService.getPermissionStatus());
+            addToast("Notificaciones desactivadas en este dispositivo", "info");
+        } catch (e: any) {
+            addToast("Error al desactivar notificaciones", "error");
+        } finally {
+            setPushLoading(false);
+        }
+    };
+
+    const handleSendTestPush = async () => {
+        setTestingPush(true);
+        try {
+            const sent = await pushNotificationService.sendTestNotification(
+                '🎾 Smash Tenis — Notificación de Prueba',
+                `¡Hola ${user.name}! Tu dispositivo está listo para recibir alertas de partidos y torneos.`
+            );
+            if (sent) {
+                soundEffects.playScoreBeep();
+                addToast("✓ Notificación de prueba enviada al dispositivo", "success");
+            } else {
+                addToast("No se pudo emitir la notificación. Verifica permisos del sistema.", "error");
+            }
+        } catch (err) {
+            addToast("Error al emitir notificación de prueba", "error");
+        } finally {
+            setTestingPush(false);
+        }
+    };
 
     const handleToggleSound = () => {
         const next = !soundEnabled;
@@ -583,6 +650,99 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                 })}
                             </div>
                         )}
+                    </Card>
+
+                    {/* Push Notifications Device Card */}
+                    <Card className="bg-card border-white/10 space-y-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-white/10 pb-4">
+                            <div>
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                    <Bell className="text-primary" size={20} /> Notificaciones Push en este Dispositivo
+                                </h3>
+                                <p className="text-xs text-muted mt-0.5">
+                                    Recibe alertas instantáneas de desafíos, confirmación de partidos y nuevos resultados sin necesidad de abrir la app.
+                                </p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                {pushStatus === 'granted' ? (
+                                    <span className="text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                        <CheckCircle2 size={13} /> Activas
+                                    </span>
+                                ) : pushStatus === 'ios_pwa_required' ? (
+                                    <span className="text-[11px] bg-amber-500/10 text-amber-300 border border-amber-500/20 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                        <Smartphone size={13} /> Requiere PWA en iPhone
+                                    </span>
+                                ) : pushStatus === 'denied' ? (
+                                    <span className="text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 font-bold px-2.5 py-1 rounded-lg flex items-center gap-1">
+                                        <BellOff size={13} /> Bloqueadas
+                                    </span>
+                                ) : (
+                                    <span className="text-[11px] bg-white/5 text-muted border border-white/10 font-bold px-2.5 py-1 rounded-lg">
+                                        Inactivas
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="bg-sidebar/50 border border-white/5 p-4 rounded-2xl space-y-3">
+                            <div className="text-xs text-slate-300 space-y-1.5">
+                                {pushStatus === 'granted' ? (
+                                    <p className="flex items-center gap-2 text-emerald-400">
+                                        <Sparkles size={14} /> Tu dispositivo está listo para recibir avisos y alertas de la comunidad de Smash Tenis.
+                                    </p>
+                                ) : pushStatus === 'ios_pwa_required' ? (
+                                    <p className="text-amber-200">
+                                        En iPhone / iPad, Apple requiere guardar la app en la pantalla de inicio para habilitar notificaciones push.
+                                    </p>
+                                ) : pushStatus === 'denied' ? (
+                                    <p className="text-red-300">
+                                        El permiso fue denegado en este navegador. Haz clic en el ícono de candado o configuración del sitio en tu navegador para habilitarlo.
+                                    </p>
+                                ) : (
+                                    <p className="text-slate-400">
+                                        Habilita las notificaciones en este celular o navegador para enterarte inmediatamente cuando alguien te desafíe o cargue un resultado.
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 pt-1">
+                                {pushStatus === 'granted' ? (
+                                    <>
+                                        <button
+                                            onClick={handleSendTestPush}
+                                            disabled={testingPush}
+                                            className="px-3.5 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
+                                        >
+                                            {testingPush ? <Loader2 size={13} className="animate-spin" /> : <Send size={13} />}
+                                            Probar Notificación
+                                        </button>
+                                        <button
+                                            onClick={handleDisablePush}
+                                            disabled={pushLoading}
+                                            className="px-3.5 py-2 bg-white/5 hover:bg-white/10 text-muted hover:text-white border border-white/10 rounded-xl text-xs font-semibold transition-all flex items-center gap-1.5"
+                                        >
+                                            <BellOff size={13} /> Desactivar en este dispositivo
+                                        </button>
+                                    </>
+                                ) : pushStatus === 'ios_pwa_required' ? (
+                                    <button
+                                        onClick={() => triggerPWAInstall()}
+                                        className="px-4 py-2 bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-dark text-xs font-black rounded-xl transition-all shadow-md flex items-center gap-1.5"
+                                    >
+                                        <Smartphone size={14} /> Ver cómo Instalar en iPhone
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={handleEnablePush}
+                                        disabled={pushLoading || pushStatus === 'denied'}
+                                        className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-primary/25 flex items-center gap-1.5"
+                                    >
+                                        {pushLoading ? <Loader2 size={14} className="animate-spin" /> : <Bell size={14} />}
+                                        Activar Notificaciones Push
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </Card>
                 </div>
 

@@ -108,3 +108,76 @@ self.addEventListener('fetch', (event) => {
     })
   );
 });
+
+// ==========================================
+// PWA WEB PUSH NOTIFICATION LISTENERS
+// ==========================================
+
+// Push Event: Received from Web Push Server
+self.addEventListener('push', (event) => {
+  let notificationData = {
+    title: '🎾 Smash Tenis',
+    body: 'Tienes una nueva actualización deportiva.',
+    icon: '/Smash.png',
+    badge: '/favicon.png',
+    tag: 'smash-notification',
+    data: {
+      url: '/'
+    }
+  };
+
+  if (event.data) {
+    try {
+      const payload = event.data.json();
+      notificationData = {
+        ...notificationData,
+        ...payload,
+        data: {
+          ...notificationData.data,
+          ...(payload.data || {})
+        }
+      };
+    } catch (e) {
+      notificationData.body = event.data.text() || notificationData.body;
+    }
+  }
+
+  const options = {
+    body: notificationData.body,
+    icon: notificationData.icon || '/Smash.png',
+    badge: notificationData.badge || '/favicon.png',
+    tag: notificationData.tag || 'smash-general',
+    vibrate: [200, 100, 200],
+    renotify: true,
+    data: notificationData.data
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(notificationData.title, options)
+  );
+});
+
+// Notification Click: Focus existing window or open target URL
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const targetUrl = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          client.focus();
+          if (targetUrl && client.navigate) {
+            return client.navigate(targetUrl);
+          }
+          return;
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+

@@ -3,7 +3,7 @@ import { Tournament, UserProfile, Institution, TournamentSaga } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List, Tv } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, TIER_META, TIER_ORDER, getEffectiveTournamentTier, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
 import { TournamentsMap } from '../components/TournamentsMap';
@@ -337,8 +337,8 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                     <p className="text-muted text-sm">Calendario y mapa interactivo de competencias oficiales.</p>
                 </div>
 
-                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-                    {/* View Switcher: List vs Map */}
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap">
+                    {/* View Switcher: List vs Map vs TV */}
                     <div className="flex bg-slate-900/90 p-1 rounded-2xl border border-white/10 shadow-lg">
                         <button
                             onClick={() => setViewMode('list')}
@@ -363,6 +363,17 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                             <span>Mapa</span>
                         </button>
                     </div>
+
+                    {onNavigate && (
+                        <button
+                            onClick={() => onNavigate('tv')}
+                            className="bg-slate-900/90 hover:bg-white/10 text-primary hover:text-white border border-primary/30 px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-md group"
+                            title="Abrir pantalla panorámica optimizada para Smart TV del club"
+                        >
+                            <Tv size={15} className="text-primary group-hover:scale-110 transition-transform" />
+                            <span>Modo TV Buffet</span>
+                        </button>
+                    )}
 
                     {(user.role === 'admin' || user.role === 'superadmin') && (
                         <button

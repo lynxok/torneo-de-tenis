@@ -1,5 +1,4 @@
 
-import React from 'react';
 import {
   LayoutGrid,
   Trophy,
@@ -14,7 +13,8 @@ import {
   Smartphone,
   Wallet,
   Globe,
-  GraduationCap
+  GraduationCap,
+  Tv
 } from 'lucide-react';
 import { UserRole } from '../types';
 import packageInfo from '../package.json';
@@ -122,6 +122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Competición</p>
           <NavButton view="tournaments" icon={Trophy} label="Torneos" id="nav-tournaments" />
           <NavButton view="rankings" icon={Trophy} label="Ranking" />
+          <NavButton view="tv" icon={Tv} label="Modo TV Buffet" />
         </div>
 
         <div className="pt-2 pb-1">

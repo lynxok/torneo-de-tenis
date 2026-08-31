@@ -956,19 +956,28 @@ export const api = {
 
             return true;
         },
-        async generatePlayoffs(tournamentId: string, customMatches?: { round: string; player1: { id: string; name: string }; player2: { id: string; name: string } }[]) {
+        async generatePlayoffs(tournamentId: string, customMatches?: any[]) {
+            // Limpiar partidos de llaves previos del torneo para permitir regeneración limpia
+            await supabase.from('matches').delete().eq('tournament_id', tournamentId).neq('round', 'Fase de Grupos');
+
             const matchesToInsert: any[] = [];
 
             if (customMatches && customMatches.length > 0) {
                 for (const cm of customMatches) {
+                    const p1Id = cm.player1?.id || cm.player1_id || null;
+                    const p1Name = cm.player1?.name ? formatPlayerName(cm.player1.name) : (cm.player1_name ? formatPlayerName(cm.player1_name) : null);
+                    const p2Id = cm.player2?.id || cm.player2_id || null;
+                    const p2Name = cm.player2?.name ? formatPlayerName(cm.player2.name) : (cm.player2_name ? formatPlayerName(cm.player2_name) : null);
+
                     matchesToInsert.push({
                         tournament_id: tournamentId,
-                        player1_id: cm.player1.id,
-                        player1_name: formatPlayerName(cm.player1.name),
-                        player2_id: cm.player2.id,
-                        player2_name: formatPlayerName(cm.player2.name),
+                        player1_id: p1Id,
+                        player1_name: p1Name,
+                        player2_id: p2Id,
+                        player2_name: p2Name,
                         round: cm.round,
-                        scheduling_status: 'confirmed'
+                        proposal_data: cm.proposal_data || null,
+                        scheduling_status: (p1Id && p2Id) ? 'confirmed' : 'proposed'
                     });
                 }
             } else {
@@ -1510,6 +1519,9 @@ export const api = {
                             year: new Date().getFullYear()
                         });
                     }
+
+                    // Auto-advance winner in playoff bracket tree
+                    await api.matches.advancePlayoffWinner(matchId, winnerId, isDoubles, winnerPartnerId);
                 } catch (rankingErr) {
                     console.log("Ranking point auto-update fallback (non-blocking):", rankingErr);
                 }
@@ -1528,6 +1540,10 @@ export const api = {
                         if (oldPartner && (oldPartner.matches_won || 0) > 0) {
                             await supabase.from('profiles').update({ matches_won: oldPartner.matches_won - 1 }).eq('id', matchData.winner_partner_id);
                         }
+                    }
+                    // Update next round with new winner if confirmed
+                    if (scoreStatus === 'confirmed') {
+                        await api.matches.advancePlayoffWinner(matchId, winnerId, isDoubles, winnerPartnerId);
                     }
                 } catch (revertErr) {
                     console.warn("Revert old winner stats fallback:", revertErr);
@@ -1558,6 +1574,9 @@ export const api = {
                     console.warn("Could not revert winner matches_won on reset:", revertStatsErr);
                 }
             }
+
+            // Revert playoff bracket advancement
+            await api.matches.revertPlayoffWinner(matchId);
 
             const resetPayload: any = {
                 score: null,
@@ -1601,7 +1620,7 @@ export const api = {
         },
 
         async confirmScore(matchId: string, user: UserProfile) {
-            const { data: matchData } = await supabase.from('matches').select('*, tournaments(name)').eq('id', matchId).single();
+            const { data: matchData } = await supabase.from('matches').select('*, tournaments(name, type)').eq('id', matchId).single();
             if (!matchData) throw new Error("Partido no encontrado");
 
             const nowIso = new Date().toISOString();
@@ -1625,6 +1644,7 @@ export const api = {
 
             // Award wins and points to winner(s)
             if (matchData.winner_id) {
+                const isDoubles = matchData.tournaments?.type === 'doubles' || !!matchData.winner_partner_id || !!matchData.player1_partner_id;
                 try {
                     const { data: winnerProfile } = await supabase.from('profiles').select('matches_won').eq('id', matchData.winner_id).single();
                     if (winnerProfile) {
@@ -1656,6 +1676,9 @@ export const api = {
                             year: new Date().getFullYear()
                         });
                     }
+
+                    // Auto-advance winner in playoff bracket tree
+                    await api.matches.advancePlayoffWinner(matchId, matchData.winner_id, isDoubles, matchData.winner_partner_id);
                 } catch (e) {
                     console.warn("Error awarding points on confirmation:", e);
                 }
@@ -1667,6 +1690,154 @@ export const api = {
             }
 
             return true;
+        },
+
+        async advancePlayoffWinner(matchId: string, winnerId: string, isDoubles?: boolean, winnerPartnerId?: string) {
+            try {
+                const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+                if (!matchData || !matchData.tournament_id || matchData.round === 'Fase de Grupos') return;
+
+                const pData = matchData.proposal_data;
+                const tournamentId = matchData.tournament_id;
+
+                const isWinnerP1 = winnerId === matchData.player1_id;
+                const winnerName = isWinnerP1 ? matchData.player1_name : matchData.player2_name;
+                const winnerPartnerName = isDoubles ? (isWinnerP1 ? matchData.player1_partner_name : matchData.player2_partner_name) : null;
+                const winnerTeamName = isDoubles ? (isWinnerP1 ? matchData.team1_name : matchData.team2_name) : winnerName;
+
+                // 1. Caso Gran Final: Declarar Campeón del torneo
+                if (matchData.round === 'Final' || matchData.round === 'Gran Final' || pData?.bracket_round === 'Final') {
+                    const championDisplay = winnerTeamName || winnerName;
+                    await supabase.from('tournaments').update({
+                        champion_name: championDisplay,
+                        status: 'finished'
+                    }).eq('id', tournamentId);
+
+                    try {
+                        const nowIso = new Date().toISOString();
+                        await supabase.from('ranking_history').insert({
+                            player_id: winnerId,
+                            points: 100,
+                            tournament_name: `🏆 Campeón: Torneo Oficial`,
+                            date_obtained: nowIso,
+                            year: new Date().getFullYear()
+                        });
+                        if (isDoubles && winnerPartnerId) {
+                            await supabase.from('ranking_history').insert({
+                                player_id: winnerPartnerId,
+                                points: 100,
+                                tournament_name: `🏆 Campeón: Torneo Oficial (Dobles)`,
+                                date_obtained: nowIso,
+                                year: new Date().getFullYear()
+                            });
+                        }
+                    } catch (e) {
+                        console.warn("Champion ranking bonus fallback:", e);
+                    }
+                    return;
+                }
+
+                // 2. Caso Rondas Previas (Cuartos -> Semis -> Final)
+                if (pData?.next_round !== undefined && pData?.next_match_index !== undefined && pData?.next_slot) {
+                    const nextRound = pData.next_round;
+                    const nextMatchIdx = pData.next_match_index;
+                    const nextSlot = pData.next_slot;
+
+                    const { data: nextMatches } = await supabase
+                        .from('matches')
+                        .select('*')
+                        .eq('tournament_id', tournamentId)
+                        .eq('round', nextRound);
+
+                    if (nextMatches && nextMatches.length > 0) {
+                        const targetMatch = nextMatches.find(m => m.proposal_data?.bracket_match_index === nextMatchIdx) || nextMatches[nextMatchIdx];
+                        if (targetMatch) {
+                            const updatePayload: any = {};
+                            if (nextSlot === 'player1') {
+                                updatePayload.player1_id = winnerId;
+                                updatePayload.player1_name = winnerName;
+                                if (isDoubles) {
+                                    updatePayload.player1_partner_id = winnerPartnerId || null;
+                                    updatePayload.player1_partner_name = winnerPartnerName || null;
+                                    updatePayload.team1_name = winnerTeamName || null;
+                                }
+                            } else {
+                                updatePayload.player2_id = winnerId;
+                                updatePayload.player2_name = winnerName;
+                                if (isDoubles) {
+                                    updatePayload.player2_partner_id = winnerPartnerId || null;
+                                    updatePayload.player2_partner_name = winnerPartnerName || null;
+                                    updatePayload.team2_name = winnerTeamName || null;
+                                }
+                            }
+
+                            const willHaveP1 = nextSlot === 'player1' ? !!winnerId : !!targetMatch.player1_id;
+                            const willHaveP2 = nextSlot === 'player2' ? !!winnerId : !!targetMatch.player2_id;
+                            if (willHaveP1 && willHaveP2) {
+                                updatePayload.scheduling_status = 'confirmed';
+                            }
+
+                            await supabase.from('matches').update(updatePayload).eq('id', targetMatch.id);
+                        }
+                    }
+                }
+            } catch (advErr) {
+                console.warn("Playoff progression auto-advance fallback:", advErr);
+            }
+        },
+
+        async revertPlayoffWinner(matchId: string) {
+            try {
+                const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+                if (!matchData || !matchData.tournament_id || matchData.round === 'Fase de Grupos') return;
+
+                const pData = matchData.proposal_data;
+                const tournamentId = matchData.tournament_id;
+
+                if (matchData.round === 'Final' || matchData.round === 'Gran Final' || pData?.bracket_round === 'Final') {
+                    await supabase.from('tournaments').update({
+                        champion_name: null,
+                        status: 'active'
+                    }).eq('id', tournamentId);
+                    return;
+                }
+
+                if (pData?.next_round !== undefined && pData?.next_match_index !== undefined && pData?.next_slot) {
+                    const nextRound = pData.next_round;
+                    const nextMatchIdx = pData.next_match_index;
+                    const nextSlot = pData.next_slot;
+
+                    const { data: nextMatches } = await supabase
+                        .from('matches')
+                        .select('*')
+                        .eq('tournament_id', tournamentId)
+                        .eq('round', nextRound);
+
+                    if (nextMatches && nextMatches.length > 0) {
+                        const targetMatch = nextMatches.find(m => m.proposal_data?.bracket_match_index === nextMatchIdx) || nextMatches[nextMatchIdx];
+                        if (targetMatch && !targetMatch.is_played) {
+                            const updatePayload: any = {};
+                            if (nextSlot === 'player1') {
+                                updatePayload.player1_id = null;
+                                updatePayload.player1_name = null;
+                                updatePayload.player1_partner_id = null;
+                                updatePayload.player1_partner_name = null;
+                                updatePayload.team1_name = null;
+                            } else {
+                                updatePayload.player2_id = null;
+                                updatePayload.player2_name = null;
+                                updatePayload.player2_partner_id = null;
+                                updatePayload.player2_partner_name = null;
+                                updatePayload.team2_name = null;
+                            }
+                            updatePayload.scheduling_status = 'proposed';
+                            await supabase.from('matches').update(updatePayload).eq('id', targetMatch.id);
+                        }
+                    }
+                }
+            } catch (revErr) {
+                console.warn("Playoff progression revert fallback:", revErr);
+            }
         },
 
         async disputeScore(matchId: string, reason: string, user: UserProfile) {
