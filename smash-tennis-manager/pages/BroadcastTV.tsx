@@ -1281,6 +1281,13 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 <div className="max-h-48 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                                     {tournaments.map(t => {
                                         const isChecked = customSelectedIds.includes(t.id);
+                                        const isClosed = Boolean(
+                                            t.registration_closed || 
+                                            t.status === 'finished' ||
+                                            (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
+                                        );
+                                        const isOngoing = t.status === 'ongoing' || t.status === 'in_progress';
+
                                         return (
                                             <div
                                                 key={t.id}
@@ -1308,11 +1315,23 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                                         <div className="text-[11px] text-slate-400">{t.category} • {t.gender} • {t.type === 'doubles' ? 'Dobles' : 'Singles'}</div>
                                                     </div>
                                                 </div>
-                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 ${
-                                                    t.status === 'ongoing' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-slate-400'
-                                                }`}>
-                                                    {t.status === 'ongoing' ? 'En Juego' : t.status === 'finished' ? 'Finalizado' : 'Abierto'}
-                                                </span>
+                                                {isOngoing ? (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                                        🎾 En Juego
+                                                    </span>
+                                                ) : t.status === 'finished' ? (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-white/10 text-slate-400">
+                                                        🏁 Finalizado
+                                                    </span>
+                                                ) : isClosed ? (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                                        🔒 Inscr. Cerrada
+                                                    </span>
+                                                ) : (
+                                                    <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                                        🟢 Inscr. Abierta
+                                                    </span>
+                                                )}
                                             </div>
                                         );
                                     })}
