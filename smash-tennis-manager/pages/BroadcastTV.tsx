@@ -9,7 +9,8 @@ import { getTournamentCoordinates } from '../utils/geoUtils';
 import { 
     Tv, Play, Pause, Maximize, Minimize, Volume2, VolumeX, ArrowLeft,
     Clock, Calendar, CloudSun, Trophy, Swords, Users, Sparkles,
-    MapPin, Wind, Droplets, CheckCircle2, ShieldCheck, QrCode, Building, Layers, RotateCw
+    MapPin, Wind, Droplets, CheckCircle2, ShieldCheck, QrCode, Building, Layers, RotateCw,
+    Sliders, CheckSquare, Square, X, Check, Eye
 } from 'lucide-react';
 
 interface BroadcastTVProps {
@@ -19,6 +20,7 @@ interface BroadcastTVProps {
 }
 
 type TVSlide = 'live' | 'order_of_play' | 'standings' | 'playoffs' | 'weather' | 'qr';
+type RotationMode = 'single' | 'all' | 'custom';
 
 export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamentId, onExit }) => {
     const isSuperAdmin = user?.role === 'superadmin';
@@ -43,13 +45,30 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
 
     // Tournaments & Rotation State
     const [tournaments, setTournaments] = useState<Tournament[]>([]);
-    const [activeTournamentIndex, setActiveTournamentIndex] = useState<number>(0);
     const [selectedTournamentId, setSelectedTournamentId] = useState<string>(urlTournamentParam || '');
     const [activeTournament, setActiveTournament] = useState<Tournament | null>(null);
     const [matches, setMatches] = useState<Match[]>([]);
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
     const [loading, setLoading] = useState(true);
-    const [autoRotateTournaments, setAutoRotateTournaments] = useState(true);
+
+    // Advanced Multi-Tournament Rotation Settings
+    const [rotationMode, setRotationMode] = useState<RotationMode>(() => {
+        try {
+            const saved = localStorage.getItem('smash_tv_rotation_mode');
+            if (saved === 'single' || saved === 'all' || saved === 'custom') return saved;
+        } catch (e) {}
+        return 'all';
+    });
+
+    const [customSelectedIds, setCustomSelectedIds] = useState<string[]>(() => {
+        try {
+            const saved = localStorage.getItem('smash_tv_custom_selected');
+            if (saved) return JSON.parse(saved);
+        } catch (e) {}
+        return [];
+    });
+
+    const [showRotationModal, setShowRotationModal] = useState<boolean>(false);
 
     // TV Slides & Timing
     const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
@@ -113,14 +132,17 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
 
             setTournaments(filteredTourneys);
 
+            // Default custom selected IDs to all if empty
+            if (customSelectedIds.length === 0 && filteredTourneys.length > 0) {
+                setCustomSelectedIds(filteredTourneys.map(t => t.id));
+            }
+
             // Find current active tournament
             let targetTourney = filteredTourneys.find(t => t.id === selectedTournamentId) || 
                                 filteredTourneys.find(t => t.status === 'ongoing' || t.status === 'in_progress') ||
                                 filteredTourneys[0] || null;
 
             if (targetTourney) {
-                const idx = filteredTourneys.findIndex(t => t.id === targetTourney!.id);
-                if (idx !== -1) setActiveTournamentIndex(idx);
                 setSelectedTournamentId(targetTourney.id);
                 const fullTourney = await api.tournaments.getById(targetTourney.id);
                 setActiveTournament(fullTourney);
@@ -145,15 +167,8 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
     }, [selectedInstitutionId]);
 
     // When tournament selector changes manually or automatically
-    const handleSelectTournament = async (tId: string, indexHint?: number) => {
+    const handleSelectTournament = async (tId: string) => {
         setSelectedTournamentId(tId);
-        if (indexHint !== undefined) {
-            setActiveTournamentIndex(indexHint);
-        } else {
-            const idx = tournaments.findIndex(t => t.id === tId);
-            if (idx !== -1) setActiveTournamentIndex(idx);
-        }
-
         if (!tId) return;
         setLoading(true);
         try {
@@ -166,6 +181,30 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         } finally {
             setLoading(false);
         }
+    };
+
+    // Calculate effective pool of tournaments to rotate based on mode
+    const rotatingTournaments = useMemo(() => {
+        if (rotationMode === 'single') {
+            return activeTournament ? [activeTournament] : tournaments.slice(0, 1);
+        }
+        if (rotationMode === 'custom') {
+            const list = tournaments.filter(t => customSelectedIds.includes(t.id));
+            return list.length > 0 ? list : tournaments;
+        }
+        // rotationMode === 'all'
+        return tournaments;
+    }, [rotationMode, tournaments, customSelectedIds, activeTournament]);
+
+    // Save rotation settings
+    const handleSaveRotationConfig = (mode: RotationMode, selected: string[]) => {
+        setRotationMode(mode);
+        setCustomSelectedIds(selected);
+        try {
+            localStorage.setItem('smash_tv_rotation_mode', mode);
+            localStorage.setItem('smash_tv_custom_selected', JSON.stringify(selected));
+        } catch (e) {}
+        setShowRotationModal(false);
     };
 
     // Active Institution Details
@@ -237,13 +276,15 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
             .catch(err => console.warn("OpenMeteo fetch notice in BroadcastTV:", err));
     }, [currentInstitution?.id, currentInstitution?.name, currentInstitution?.city]);
 
-    // Keep ref of tournaments for timer rotation without stale closures
-    const tournamentsRef = useRef(tournaments);
-    tournamentsRef.current = tournaments;
-    const activeTournamentIndexRef = useRef(activeTournamentIndex);
-    activeTournamentIndexRef.current = activeTournamentIndex;
+    // Keep ref of rotating tournaments for timer rotation without stale closures
+    const rotatingTournamentsRef = useRef(rotatingTournaments);
+    rotatingTournamentsRef.current = rotatingTournaments;
+    const selectedTournamentIdRef = useRef(selectedTournamentId);
+    selectedTournamentIdRef.current = selectedTournamentId;
+    const rotationModeRef = useRef(rotationMode);
+    rotationModeRef.current = rotationMode;
 
-    // Slide Carousel Timer with smooth progress bar & multi-tournament rotation
+    // Slide Carousel Timer with smooth progress bar & configurable multi-tournament rotation
     useEffect(() => {
         if (!isPlaying) return;
 
@@ -257,12 +298,14 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                         const next = (curr + 1) % slides.length;
                         if (soundEnabled) soundEffects.playScoreBeep();
 
-                        // When completing a full carousel loop (back to Slide 0), advance to the next tournament if club has multiple
-                        if (next === 0 && autoRotateTournaments && tournamentsRef.current.length > 1) {
-                            const nextTIndex = (activeTournamentIndexRef.current + 1) % tournamentsRef.current.length;
-                            const nextTourney = tournamentsRef.current[nextTIndex];
+                        // When completing a full carousel loop (back to Slide 0), advance to the next tournament in rotation pool
+                        if (next === 0 && rotationModeRef.current !== 'single' && rotatingTournamentsRef.current.length > 1) {
+                            const pool = rotatingTournamentsRef.current;
+                            const currentIdx = pool.findIndex(t => t.id === selectedTournamentIdRef.current);
+                            const nextIdx = (currentIdx + 1) % pool.length;
+                            const nextTourney = pool[nextIdx];
                             if (nextTourney) {
-                                handleSelectTournament(nextTourney.id, nextTIndex);
+                                handleSelectTournament(nextTourney.id);
                             }
                         }
 
@@ -275,7 +318,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         }, intervalMs);
 
         return () => clearInterval(timer);
-    }, [isPlaying, slideDuration, slides.length, soundEnabled, autoRotateTournaments]);
+    }, [isPlaying, slideDuration, slides.length, soundEnabled]);
 
     // Fullscreen toggle
     const toggleFullscreen = () => {
@@ -324,6 +367,8 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
     const scheduledMatches = useMemo(() => {
         return matches.filter(m => !m.is_played);
     }, [matches]);
+
+    const currentSlide = slides[currentSlideIndex].id;
 
     // Check if active tournament registration is closed
     const isRegClosed = useMemo(() => {
@@ -389,6 +434,9 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
     // Reusable Tournament Banner on Slide Headers
     const renderTournamentHeaderCard = () => {
         if (!activeTournament) return null;
+        const currentPosInPool = rotatingTournaments.findIndex(t => t.id === activeTournament.id);
+        const posLabel = currentPosInPool !== -1 ? currentPosInPool + 1 : 1;
+
         return (
             <div className="bg-gradient-to-r from-white/10 via-slate-900 to-black/60 border border-primary/40 px-4 py-2.5 rounded-2xl flex items-center gap-3 shadow-xl backdrop-blur shrink-0 animate-in fade-in duration-300">
                 <div className="w-10 h-10 rounded-xl bg-primary/20 text-primary flex items-center justify-center font-black border border-primary/30 shrink-0">
@@ -411,9 +459,9 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                         <span>{activeTournament.gender}</span>
                         <span>•</span>
                         <span>{activeTournament.type === 'doubles' ? 'Modalidad Dobles' : 'Singles'}</span>
-                        {tournaments.length > 1 && (
+                        {rotationMode !== 'single' && rotatingTournaments.length > 1 && (
                             <span className="text-slate-400 text-[11px] font-normal hidden md:inline">
-                                ({activeTournamentIndex + 1} de {tournaments.length} torneos)
+                                ({posLabel} de {rotatingTournaments.length} en rotación)
                             </span>
                         )}
                     </div>
@@ -421,6 +469,32 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
             </div>
         );
     };
+
+    // Helper for rotation mode label in top bar
+    const getRotationBadge = () => {
+        if (rotationMode === 'single') {
+            return {
+                label: 'Fijo',
+                icon: Layers,
+                color: 'text-amber-400 bg-amber-500/10 border-amber-500/30'
+            };
+        }
+        if (rotationMode === 'custom') {
+            return {
+                label: `Selección (${rotatingTournaments.length})`,
+                icon: Sliders,
+                color: 'text-purple-400 bg-purple-500/10 border-purple-500/30'
+            };
+        }
+        return {
+            label: `Todos (${tournaments.length})`,
+            icon: RotateCw,
+            color: 'text-primary bg-primary/10 border-primary/30'
+        };
+    };
+
+    const rotationBadge = getRotationBadge();
+    const RotationIcon = rotationBadge.icon;
 
     return (
         <div className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white flex flex-col select-none overflow-hidden font-sans">
@@ -453,7 +527,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                 </span>
                             </div>
 
-                            {/* Institution Display / Selector */}
+                            {/* Institution & Tournament Selectors */}
                             <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-300">
                                 {isSuperAdmin ? (
                                     /* Super Admin: Can select any institution */
@@ -464,7 +538,6 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                             onChange={(e) => {
                                                 setSelectedInstitutionId(e.target.value);
                                                 setSelectedTournamentId('');
-                                                setActiveTournamentIndex(0);
                                             }}
                                             className="bg-transparent text-orange-200 font-bold text-xs outline-none cursor-pointer"
                                         >
@@ -487,31 +560,34 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     </div>
                                 )}
 
-                                {/* Tournament switcher */}
+                                {/* Tournament switcher dropdown */}
                                 {tournaments.length > 0 && (
                                     <div className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded-lg border border-white/10">
                                         <Layers size={11} className="text-primary shrink-0" />
                                         <select
                                             value={selectedTournamentId}
                                             onChange={(e) => handleSelectTournament(e.target.value)}
-                                            className="bg-transparent text-slate-300 text-xs font-bold outline-none cursor-pointer max-w-[140px] sm:max-w-[200px] truncate"
+                                            className="bg-transparent text-slate-300 text-xs font-bold outline-none cursor-pointer max-w-[140px] sm:max-w-[180px] truncate"
                                         >
-                                            {tournaments.map((t, idx) => (
+                                            {tournaments.map(t => (
                                                 <option key={t.id} value={t.id} className="bg-slate-900 text-white">
                                                     🏆 {t.name} ({t.category})
                                                 </option>
                                             ))}
                                         </select>
-                                        {tournaments.length > 1 && (
-                                            <button
-                                                onClick={() => setAutoRotateTournaments(!autoRotateTournaments)}
-                                                className={`p-1 rounded transition-colors ${autoRotateTournaments ? 'text-primary' : 'text-slate-500'}`}
-                                                title={autoRotateTournaments ? "Rotación automática de torneos activada" : "Rotación de torneos pausada"}
-                                            >
-                                                <RotateCw size={11} className={autoRotateTournaments ? "animate-spin-slow" : ""} />
-                                            </button>
-                                        )}
                                     </div>
+                                )}
+
+                                {/* Multi-Tournament Rotation Mode Config Button */}
+                                {tournaments.length > 1 && (
+                                    <button
+                                        onClick={() => setShowRotationModal(true)}
+                                        className={`flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs font-bold border transition-all hover:scale-105 ${rotationBadge.color}`}
+                                        title="Configurar modo de rotación de torneos (Fijo / Todos / Seleccionados)"
+                                    >
+                                        <RotationIcon size={11} className={rotationMode !== 'single' ? "animate-spin-slow" : ""} />
+                                        <span>{rotationBadge.label}</span>
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -1073,6 +1149,195 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                     <span className="text-slate-500 font-mono text-[11px]">v1.6.4</span>
                 </div>
             </footer>
+
+            {/* ROTATION CONFIGURATION MODAL */}
+            {showRotationModal && (
+                <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200">
+                    <div className="bg-gradient-to-b from-slate-900 to-slate-950 border border-white/15 rounded-3xl max-w-xl w-full p-6 sm:p-8 space-y-6 shadow-2xl relative">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-primary/20 rounded-2xl text-primary border border-primary/30">
+                                    <Sliders size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg sm:text-xl font-black text-white">Rotación de Torneos en Pantalla</h3>
+                                    <p className="text-xs text-slate-400">Configurá qué torneos se proyectarán en el buffet / Smart TV</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowRotationModal(false)}
+                                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Mode Selectors */}
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold uppercase tracking-wider text-slate-400">Modo de Visualización:</label>
+                            
+                            {/* Option 1: Single */}
+                            <div
+                                onClick={() => setRotationMode('single')}
+                                className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3.5 ${
+                                    rotationMode === 'single'
+                                        ? 'bg-amber-500/10 border-amber-500/50 ring-1 ring-amber-500/40'
+                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                }`}
+                            >
+                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                                    rotationMode === 'single' ? 'border-amber-400 bg-amber-400 text-slate-950' : 'border-slate-500'
+                                }`}>
+                                    {rotationMode === 'single' && <Check size={12} strokeWidth={3} />}
+                                </div>
+                                <div>
+                                    <div className="text-sm font-black text-white flex items-center gap-2">
+                                        <span>📌 Torneo Fijo Actual</span>
+                                        <span className="text-xs text-amber-400 font-bold">({activeTournament?.name || 'Seleccionado'})</span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        La pantalla permanecerá siempre en este torneo y no cambiará automáticamente al completar el ciclo.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Option 2: All */}
+                            <div
+                                onClick={() => setRotationMode('all')}
+                                className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3.5 ${
+                                    rotationMode === 'all'
+                                        ? 'bg-primary/10 border-primary/50 ring-1 ring-primary/40'
+                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                }`}
+                            >
+                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                                    rotationMode === 'all' ? 'border-primary bg-primary text-slate-950' : 'border-slate-500'
+                                }`}>
+                                    {rotationMode === 'all' && <Check size={12} strokeWidth={3} />}
+                                </div>
+                                <div>
+                                    <div className="text-sm font-black text-white flex items-center gap-2">
+                                        <span>🔄 Todos los Torneos de la Sede</span>
+                                        <span className="text-xs text-primary font-bold">({tournaments.length} torneos)</span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        Rotará en bucle continuo pasando por todos los torneos activos de {clubName}.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Option 3: Custom Checklist */}
+                            <div
+                                onClick={() => setRotationMode('custom')}
+                                className={`p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3.5 ${
+                                    rotationMode === 'custom'
+                                        ? 'bg-purple-500/10 border-purple-500/50 ring-1 ring-purple-500/40'
+                                        : 'bg-white/5 border-white/10 hover:bg-white/10'
+                                }`}
+                            >
+                                <div className={`w-5 h-5 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                                    rotationMode === 'custom' ? 'border-purple-400 bg-purple-400 text-slate-950' : 'border-slate-500'
+                                }`}>
+                                    {rotationMode === 'custom' && <Check size={12} strokeWidth={3} />}
+                                </div>
+                                <div>
+                                    <div className="text-sm font-black text-white flex items-center gap-2">
+                                        <span>🎛️ Selección Personalizada</span>
+                                        <span className="text-xs text-purple-400 font-bold">({customSelectedIds.length} seleccionados)</span>
+                                    </div>
+                                    <p className="text-xs text-slate-400 mt-0.5">
+                                        Elegí con casillas de verificación exactamente qué torneos querés incluir en la rotación.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Checklist if Custom Mode */}
+                        {rotationMode === 'custom' && (
+                            <div className="space-y-3 pt-2 border-t border-white/10 animate-in fade-in duration-200">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-xs font-bold uppercase tracking-wider text-slate-300">
+                                        Marcar Torneos a Incluir:
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCustomSelectedIds(tournaments.map(t => t.id))}
+                                            className="text-[11px] text-primary hover:underline font-bold"
+                                        >
+                                            Todos
+                                        </button>
+                                        <span className="text-slate-600">•</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => setCustomSelectedIds([])}
+                                            className="text-[11px] text-slate-400 hover:underline"
+                                        >
+                                            Ninguno
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="max-h-48 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                                    {tournaments.map(t => {
+                                        const isChecked = customSelectedIds.includes(t.id);
+                                        return (
+                                            <div
+                                                key={t.id}
+                                                onClick={() => {
+                                                    if (isChecked) {
+                                                        setCustomSelectedIds(customSelectedIds.filter(id => id !== t.id));
+                                                    } else {
+                                                        setCustomSelectedIds([...customSelectedIds, t.id]);
+                                                    }
+                                                }}
+                                                className={`p-3 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                                                    isChecked
+                                                        ? 'bg-purple-500/10 border-purple-500/40 text-white'
+                                                        : 'bg-white/5 border-white/5 text-slate-400 hover:bg-white/10'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-3 min-w-0">
+                                                    {isChecked ? (
+                                                        <CheckSquare size={18} className="text-purple-400 shrink-0" />
+                                                    ) : (
+                                                        <Square size={18} className="text-slate-500 shrink-0" />
+                                                    )}
+                                                    <div className="min-w-0">
+                                                        <div className="text-xs sm:text-sm font-bold text-white truncate">{t.name}</div>
+                                                        <div className="text-[11px] text-slate-400">{t.category} • {t.gender} • {t.type === 'doubles' ? 'Dobles' : 'Singles'}</div>
+                                                    </div>
+                                                </div>
+                                                <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider shrink-0 ${
+                                                    t.status === 'ongoing' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/10 text-slate-400'
+                                                }`}>
+                                                    {t.status === 'ongoing' ? 'En Juego' : t.status === 'finished' ? 'Finalizado' : 'Abierto'}
+                                                </span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/10">
+                            <button
+                                onClick={() => setShowRotationModal(false)}
+                                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-400 hover:text-white bg-white/5 hover:bg-white/10 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={() => handleSaveRotationConfig(rotationMode, customSelectedIds)}
+                                className="px-6 py-2.5 rounded-xl text-xs font-black text-slate-950 bg-primary hover:bg-primary-hover transition-all shadow-lg shadow-primary/30 flex items-center gap-2"
+                            >
+                                <Check size={16} /> Aplicar Configuración
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
