@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/api';
-import { Tournament, Match, Institution, UserProfile } from '../types';
+import { Tournament, Match, Institution, UserProfile, TournamentPlayer } from '../types';
 import { QRCodeSVG } from '../components/QRCodeSVG';
 import { soundEffects } from '../services/soundEffects';
-import { calculateGroupStandings, organizePlayoffRounds } from '../utils/bracketHelper';
+import { calculateGroupStandings, organizePlayoffRounds, GroupZone } from '../utils/bracketHelper';
 import { getTournamentTier } from '../utils/tournamentTiers';
 import { getTournamentCoordinates } from '../utils/geoUtils';
 import { 
@@ -46,6 +46,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
     const [selectedTournamentId, setSelectedTournamentId] = useState<string>(urlTournamentParam || '');
     const [activeTournament, setActiveTournament] = useState<Tournament | null>(null);
     const [matches, setMatches] = useState<Match[]>([]);
+    const [players, setPlayers] = useState<TournamentPlayer[]>([]);
     const [loading, setLoading] = useState(true);
 
     // TV Slides & Timing
@@ -111,18 +112,20 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
             setTournaments(filteredTourneys);
 
             // Find current active tournament
-            let active = filteredTourneys.find(t => t.id === selectedTournamentId) || 
-                         filteredTourneys.find(t => t.status === 'ongoing' || t.status === 'in_progress') ||
-                         filteredTourneys[0] || null;
+            let targetTourney = filteredTourneys.find(t => t.id === selectedTournamentId) || 
+                                filteredTourneys.find(t => t.status === 'ongoing' || t.status === 'in_progress') ||
+                                filteredTourneys[0] || null;
 
-            if (active) {
-                setSelectedTournamentId(active.id);
-                const fullTourney = await api.tournaments.getById(active.id);
+            if (targetTourney) {
+                setSelectedTournamentId(targetTourney.id);
+                const fullTourney = await api.tournaments.getById(targetTourney.id);
                 setActiveTournament(fullTourney);
                 setMatches(fullTourney?.matches || []);
+                setPlayers(fullTourney?.tournament_players || []);
             } else {
                 setActiveTournament(null);
                 setMatches([]);
+                setPlayers([]);
             }
         } catch (e) {
             console.error("Error fetching broadcast data:", e);
@@ -133,9 +136,26 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
 
     useEffect(() => {
         fetchData();
-        const pollInterval = setInterval(fetchData, 20000);
+        const pollInterval = setInterval(fetchData, 25000);
         return () => clearInterval(pollInterval);
-    }, [selectedInstitutionId, selectedTournamentId]);
+    }, [selectedInstitutionId]);
+
+    // When tournament selector changes manually
+    const handleSelectTournament = async (tId: string) => {
+        setSelectedTournamentId(tId);
+        if (!tId) return;
+        setLoading(true);
+        try {
+            const full = await api.tournaments.getById(tId);
+            setActiveTournament(full);
+            setMatches(full?.matches || []);
+            setPlayers(full?.tournament_players || []);
+        } catch (e) {
+            console.error("Error changing tournament in BroadcastTV:", e);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     // Active Institution Details
     const currentInstitution = useMemo(() => {
@@ -233,41 +253,43 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         }
     };
 
-    // Filter matches
+    // Filter matches robustly for group stage and playoffs
+    const groupMatches = useMemo(() => {
+        return matches.filter(m => 
+            m.round === 'Fase de Grupos' || 
+            Boolean(m.group_number) || 
+            Boolean(m.zone) || 
+            (m.round && (m.round.toLowerCase().includes('grupo') || m.round.toLowerCase().includes('zona')))
+        );
+    }, [matches]);
+
+    const playoffMatches = useMemo(() => {
+        return matches.filter(m => 
+            m.round !== 'Fase de Grupos' && 
+            !m.group_number && 
+            !m.zone && 
+            !(m.round && (m.round.toLowerCase().includes('grupo') || m.round.toLowerCase().includes('zona')))
+        );
+    }, [matches]);
+
+    // Group calculations (Standings)
+    const zones: GroupZone[] = useMemo(() => {
+        const effectivePlayers = players.length > 0 ? players : (activeTournament?.tournament_players || []);
+        return calculateGroupStandings(groupMatches, effectivePlayers);
+    }, [groupMatches, players, activeTournament?.tournament_players]);
+
+    // Playoff rounds
+    const playoffRounds = useMemo(() => {
+        return organizePlayoffRounds(playoffMatches);
+    }, [playoffMatches]);
+
+    // Live matches: either in court right now or scheduled
     const liveMatches = useMemo(() => {
         return matches.filter(m => !m.is_played && (m.scheduling_status === 'scheduled' || m.court || m.round?.includes('Semifinal') || m.round?.includes('Final')));
     }, [matches]);
 
     const scheduledMatches = useMemo(() => {
         return matches.filter(m => !m.is_played);
-    }, [matches]);
-
-    // Group calculations
-    const zones = useMemo(() => {
-        const zoneMap = new Map<string, Match[]>();
-        matches.forEach(m => {
-            if (m.zone || (m.round && m.round.toLowerCase().includes('zona'))) {
-                const zName = m.zone || m.round || 'Zona A';
-                if (!zoneMap.has(zName)) zoneMap.set(zName, []);
-                zoneMap.get(zName)!.push(m);
-            }
-        });
-
-        const list: { name: string; standings: any[]; matches: Match[] }[] = [];
-        zoneMap.forEach((zMatches, name) => {
-            list.push({
-                name,
-                standings: calculateGroupStandings(zMatches),
-                matches: zMatches
-            });
-        });
-        return list;
-    }, [matches]);
-
-    // Playoff rounds
-    const playoffRounds = useMemo(() => {
-        const pMatches = matches.filter(m => m.round && !m.round.toLowerCase().includes('zona') && !m.round.toLowerCase().includes('grupo'));
-        return organizePlayoffRounds(pMatches);
     }, [matches]);
 
     const currentSlide = slides[currentSlideIndex].id;
@@ -283,6 +305,28 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         }
         return `${base}/inicio`;
     }, [activeTournament?.id, selectedInstitutionId]);
+
+    // Helper to format score cleanly
+    const parseScoreDisplay = (score: any) => {
+        if (!score) return { p1: '-', p2: '-' };
+        if (typeof score === 'object') {
+            const p1s: string[] = [];
+            const p2s: string[] = [];
+            ['set1', 'set2', 'set3'].forEach(k => {
+                if (score[k]) {
+                    const match = String(score[k]).match(/^(\d+)\s*[-/]\s*(\d+)/);
+                    if (match) {
+                        p1s.push(match[1]);
+                        p2s.push(match[2]);
+                    }
+                }
+            });
+            if (p1s.length > 0) {
+                return { p1: p1s.join('  '), p2: p2s.join('  ') };
+            }
+        }
+        return { p1: '6', p2: '4' };
+    };
 
     return (
         <div className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white flex flex-col select-none overflow-hidden font-sans">
@@ -348,18 +392,18 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                     </div>
                                 )}
 
-                                {/* Tournament switcher if club has multiple tournaments */}
-                                {tournaments.length > 1 && (
-                                    <div className="hidden xl:flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded-lg border border-white/10">
-                                        <Layers size={11} className="text-primary" />
+                                {/* Tournament switcher */}
+                                {tournaments.length > 0 && (
+                                    <div className="flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded-lg border border-white/10">
+                                        <Layers size={11} className="text-primary shrink-0" />
                                         <select
                                             value={selectedTournamentId}
-                                            onChange={(e) => setSelectedTournamentId(e.target.value)}
-                                            className="bg-transparent text-slate-300 text-xs font-bold outline-none cursor-pointer"
+                                            onChange={(e) => handleSelectTournament(e.target.value)}
+                                            className="bg-transparent text-slate-300 text-xs font-bold outline-none cursor-pointer max-w-[140px] sm:max-w-[220px] truncate"
                                         >
                                             {tournaments.map(t => (
                                                 <option key={t.id} value={t.id} className="bg-slate-900 text-white">
-                                                    {t.name} ({t.category})
+                                                    🏆 {t.name} ({t.category})
                                                 </option>
                                             ))}
                                         </select>
@@ -444,7 +488,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 ></div>
             </div>
 
-            {/* MAIN STAGE CONTENT (RESPONSIVE FOR 1080p / 4K) */}
+            {/* MAIN STAGE CONTENT */}
             <main className="flex-1 p-6 sm:p-8 overflow-y-auto flex flex-col justify-center relative">
                 
                 {/* 1. SLIDE: LIVE COURTS */}
@@ -479,57 +523,60 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {liveMatches.slice(0, 4).map((m, idx) => (
-                                    <div key={m.id || idx} className="bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 border-2 border-primary/40 rounded-3xl p-6 shadow-2xl shadow-primary/10 flex flex-col justify-between relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 bg-primary text-slate-950 font-black text-xs px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest flex items-center gap-1.5 shadow-md">
-                                            <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span> Cancha {m.court || (idx + 1)}
-                                        </div>
-
-                                        <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
-                                            {m.round || 'Fase de Zonas'} • {activeTournament?.category || 'Torneo'}
-                                        </div>
-
-                                        {/* Scoreboard Block */}
-                                        <div className="space-y-4 my-2">
-                                            {/* Player 1 */}
-                                            <div className="flex items-center justify-between p-4 bg-black/40 rounded-2xl border border-white/5">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-base border border-primary/30">
-                                                        {m.player1_name?.charAt(0) || '1'}
-                                                    </div>
-                                                    <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                                                        {m.player1_name || 'Jugador 1'}
-                                                    </span>
-                                                </div>
-                                                <span className="text-2xl sm:text-3xl font-black text-primary font-mono px-3">
-                                                    {m.score?.p1_set1 !== undefined ? `${m.score.p1_set1} ${m.score.p1_set2 ?? ''} ${m.score.p1_stb ?? ''}` : '6'}
-                                                </span>
+                                {liveMatches.slice(0, 4).map((m, idx) => {
+                                    const parsed = parseScoreDisplay(m.score);
+                                    return (
+                                        <div key={m.id || idx} className="bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 border-2 border-primary/40 rounded-3xl p-6 shadow-2xl shadow-primary/10 flex flex-col justify-between relative overflow-hidden">
+                                            <div className="absolute top-0 right-0 bg-primary text-slate-950 font-black text-xs px-4 py-1.5 rounded-bl-2xl uppercase tracking-widest flex items-center gap-1.5 shadow-md">
+                                                <span className="w-2 h-2 rounded-full bg-red-600 animate-ping"></span> Cancha {m.court || (idx + 1)}
                                             </div>
 
-                                            {/* Player 2 */}
-                                            <div className="flex items-center justify-between p-4 bg-black/40 rounded-2xl border border-white/5">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-full bg-white/10 text-white font-bold flex items-center justify-center text-base border border-white/10">
-                                                        {m.player2_name?.charAt(0) || '2'}
+                                            <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">
+                                                {m.round || 'Fase de Zonas'} • {activeTournament?.category || 'Torneo'}
+                                            </div>
+
+                                            {/* Scoreboard Block */}
+                                            <div className="space-y-4 my-2">
+                                                {/* Player 1 */}
+                                                <div className="flex items-center justify-between p-4 bg-black/40 rounded-2xl border border-white/5">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <div className="w-10 h-10 rounded-full bg-primary/20 text-primary font-bold flex items-center justify-center text-base border border-primary/30 shrink-0">
+                                                            {m.player1_name?.charAt(0) || '1'}
+                                                        </div>
+                                                        <span className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
+                                                            {m.player1_name || 'Jugador 1'}
+                                                        </span>
                                                     </div>
-                                                    <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                                                        {m.player2_name || 'Jugador 2'}
+                                                    <span className="text-2xl sm:text-3xl font-black text-primary font-mono px-3 shrink-0">
+                                                        {parsed.p1}
                                                     </span>
                                                 </div>
-                                                <span className="text-2xl sm:text-3xl font-black text-white font-mono px-3">
-                                                    {m.score?.p2_set1 !== undefined ? `${m.score.p2_set1} ${m.score.p2_set2 ?? ''} ${m.score.p2_stb ?? ''}` : '4'}
+
+                                                {/* Player 2 */}
+                                                <div className="flex items-center justify-between p-4 bg-black/40 rounded-2xl border border-white/5">
+                                                    <div className="flex items-center gap-3 min-w-0">
+                                                        <div className="w-10 h-10 rounded-full bg-white/10 text-white font-bold flex items-center justify-center text-base border border-white/10 shrink-0">
+                                                            {m.player2_name?.charAt(0) || '2'}
+                                                        </div>
+                                                        <span className="text-xl sm:text-2xl font-black text-white tracking-tight truncate">
+                                                            {m.player2_name || 'Jugador 2'}
+                                                        </span>
+                                                    </div>
+                                                    <span className="text-2xl sm:text-3xl font-black text-white font-mono px-3 shrink-0">
+                                                        {parsed.p2}
+                                                    </span>
+                                                </div>
+                                            </div>
+
+                                            <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center text-xs text-slate-400">
+                                                <span>Formato: Al mejor de 3 sets (STB a 10)</span>
+                                                <span className="text-emerald-400 font-bold flex items-center gap-1">
+                                                    <Sparkles size={12} /> Punto de Oro
                                                 </span>
                                             </div>
                                         </div>
-
-                                        <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-center text-xs text-slate-400">
-                                            <span>Formato: Al mejor de 3 sets (STB a 10)</span>
-                                            <span className="text-emerald-400 font-bold flex items-center gap-1">
-                                                <Sparkles size={12} /> Punto de Oro
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         )}
                     </div>
@@ -592,7 +639,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                     </div>
                 )}
 
-                {/* 3. SLIDE: STANDINGS */}
+                {/* 3. SLIDE: STANDINGS (FASE DE GRUPOS) */}
                 {currentSlide === 'standings' && (
                     <div className="w-full max-w-7xl mx-auto space-y-6 animate-in fade-in zoom-in-95 duration-300">
                         <div className="flex justify-between items-end border-b border-white/10 pb-4">
@@ -610,18 +657,18 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                         </div>
 
                         {zones.length === 0 ? (
-                            <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-12 text-center space-y-4">
+                            <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-12 text-center space-y-4 shadow-xl">
                                 <Users size={40} className="text-primary mx-auto opacity-70" />
                                 <h3 className="text-xl font-bold text-white">Sin fase de grupos activa en este torneo</h3>
                                 <p className="text-slate-400 text-xs">El torneo se disputa en formato de cuadro directo o aún no ha conformado zonas.</p>
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {zones.slice(0, 4).map((z, idx) => (
-                                    <div key={idx} className="bg-slate-900/80 border border-white/10 rounded-2xl overflow-hidden shadow-xl">
+                                {zones.map((z, idx) => (
+                                    <div key={z.groupNumber || idx} className="bg-slate-900/80 border border-white/10 rounded-2xl overflow-hidden shadow-xl">
                                         <div className="bg-slate-950 p-3.5 border-b border-white/10 flex justify-between items-center">
-                                            <span className="text-sm font-black text-white uppercase tracking-wider">{z.name}</span>
-                                            <span className="text-xs text-primary font-bold">{z.standings.length} Jugadores</span>
+                                            <span className="text-sm font-black text-white uppercase tracking-wider">{z.groupName}</span>
+                                            <span className="text-xs text-primary font-bold">{z.players.length} Jugadores</span>
                                         </div>
                                         <table className="w-full text-xs text-left">
                                             <thead className="bg-black/30 text-slate-400 font-bold uppercase text-[10px]">
@@ -630,27 +677,33 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                                     <th className="p-3 text-center">PJ</th>
                                                     <th className="p-3 text-center">PG</th>
                                                     <th className="p-3 text-center">PP</th>
-                                                    <th className="p-3 text-center">Sets</th>
+                                                    <th className="p-3 text-center">Sets (Dif)</th>
                                                     <th className="p-3 text-center text-primary font-black">Pts</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="divide-y divide-white/5">
-                                                {z.standings.map((st, sIdx) => {
+                                                {z.players.map((st, sIdx) => {
                                                     const isQualified = sIdx < 2;
                                                     return (
-                                                        <tr key={sIdx} className={isQualified ? 'bg-primary/5 font-semibold text-white' : 'text-slate-300'}>
+                                                        <tr key={st.playerId || sIdx} className={isQualified ? 'bg-primary/5 font-semibold text-white' : 'text-slate-300'}>
                                                             <td className="p-3 flex items-center gap-2">
                                                                 <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
                                                                     isQualified ? 'bg-primary text-slate-950' : 'bg-white/10 text-slate-400'
                                                                 }`}>
-                                                                    {sIdx + 1}
+                                                                    {st.rank || sIdx + 1}
                                                                 </span>
-                                                                <span className="font-bold truncate max-w-[140px] sm:max-w-[180px]">{st.name}</span>
+                                                                <span className="font-bold truncate max-w-[140px] sm:max-w-[180px]">{st.playerName}</span>
                                                             </td>
-                                                            <td className="p-3 text-center text-slate-400">{st.played}</td>
-                                                            <td className="p-3 text-center text-emerald-400 font-bold">{st.won}</td>
-                                                            <td className="p-3 text-center text-slate-400">{st.lost}</td>
-                                                            <td className="p-3 text-center font-mono">{st.diffSets > 0 ? `+${st.diffSets}` : st.diffSets}</td>
+                                                            <td className="p-3 text-center text-slate-400">{st.matchesPlayed}</td>
+                                                            <td className="p-3 text-center text-emerald-400 font-bold">{st.matchesWon}</td>
+                                                            <td className="p-3 text-center text-slate-400">{st.matchesLost}</td>
+                                                            <td className="p-3 text-center font-mono">
+                                                                {st.setsWon}-{st.setsLost} {st.diffSets !== 0 && (
+                                                                    <span className={st.diffSets > 0 ? 'text-emerald-400' : 'text-slate-500'}>
+                                                                        ({st.diffSets > 0 ? `+${st.diffSets}` : st.diffSets})
+                                                                    </span>
+                                                                )}
+                                                            </td>
                                                             <td className="p-3 text-center text-primary font-black text-sm">{st.points}</td>
                                                         </tr>
                                                     );
@@ -679,7 +732,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                         </div>
 
                         {playoffRounds.length === 0 ? (
-                            <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-12 text-center space-y-4">
+                            <div className="bg-slate-900/60 border border-white/10 rounded-3xl p-12 text-center space-y-4 shadow-xl">
                                 <Trophy size={48} className="text-yellow-400 mx-auto" />
                                 <h3 className="text-2xl font-bold text-white">Las llaves se conformarán al finalizar la fase de grupos</h3>
                                 <p className="text-slate-400 text-sm">Los mejores 2 clasificados de cada zona disputarán las semifinales y finales.</p>
@@ -692,18 +745,21 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                                             {round.roundName}
                                         </div>
                                         <div className="space-y-4">
-                                            {round.matches.map((m, mIdx) => (
-                                                <div key={m.id || mIdx} className="bg-slate-900 border border-white/10 rounded-2xl p-4 space-y-2 shadow-lg">
-                                                    <div className={`flex justify-between items-center text-sm ${m.winner_id === m.player1_id ? 'text-primary font-black' : 'text-white'}`}>
-                                                        <span className="truncate">{m.player1_name || 'TBD'}</span>
-                                                        <span className="font-mono text-xs">{m.score?.p1_set1 ?? '-'}</span>
+                                            {round.matches.map((m, mIdx) => {
+                                                const parsed = parseScoreDisplay(m.score);
+                                                return (
+                                                    <div key={m.id || mIdx} className="bg-slate-900 border border-white/10 rounded-2xl p-4 space-y-2 shadow-lg">
+                                                        <div className={`flex justify-between items-center text-sm ${m.winner_id === m.player1_id ? 'text-primary font-black' : 'text-white'}`}>
+                                                            <span className="truncate">{m.player1_name || 'TBD'}</span>
+                                                            <span className="font-mono text-xs">{parsed.p1 !== '-' ? parsed.p1 : ''}</span>
+                                                        </div>
+                                                        <div className={`flex justify-between items-center text-sm border-t border-white/5 pt-1.5 ${m.winner_id === m.player2_id ? 'text-primary font-black' : 'text-white'}`}>
+                                                            <span className="truncate">{m.player2_name || 'TBD'}</span>
+                                                            <span className="font-mono text-xs">{parsed.p2 !== '-' ? parsed.p2 : ''}</span>
+                                                        </div>
                                                     </div>
-                                                    <div className={`flex justify-between items-center text-sm border-t border-white/5 pt-1.5 ${m.winner_id === m.player2_id ? 'text-primary font-black' : 'text-white'}`}>
-                                                        <span className="truncate">{m.player2_name || 'TBD'}</span>
-                                                        <span className="font-mono text-xs">{m.score?.p2_set1 ?? '-'}</span>
-                                                    </div>
-                                                </div>
-                                            ))}
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 ))}
@@ -864,7 +920,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 <div className="flex items-center gap-3">
                     <span className="text-[11px] font-bold text-primary">Rotación: {slideDuration}s</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                    <span className="text-slate-500 font-mono text-[11px]">v1.6.3</span>
+                    <span className="text-slate-500 font-mono text-[11px]">v1.6.4</span>
                 </div>
             </footer>
         </div>
