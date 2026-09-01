@@ -247,6 +247,68 @@ export function calculateGroupStandings(groupMatches: Match[], players: Tourname
     return resultZones;
 }
 
+export function calculateUnifiedStandings(zones: GroupZone[], allPlayers?: TournamentPlayer[]): GroupStandingRow[] {
+    const playerMap = new Map<string, GroupStandingRow>();
+
+    for (const z of zones) {
+        for (const p of z.players) {
+            if (!playerMap.has(p.playerId)) {
+                playerMap.set(p.playerId, { ...p });
+            } else {
+                const existing = playerMap.get(p.playerId)!;
+                existing.matchesPlayed += p.matchesPlayed;
+                existing.matchesWon += p.matchesWon;
+                existing.matchesLost += p.matchesLost;
+                existing.setsWon += p.setsWon;
+                existing.setsLost += p.setsLost;
+                existing.diffSets = existing.setsWon - existing.setsLost;
+                existing.gamesWon += p.gamesWon;
+                existing.gamesLost += p.gamesLost;
+                existing.diffGames = existing.gamesWon - existing.gamesLost;
+                existing.points += p.points;
+            }
+        }
+    }
+
+    if (allPlayers) {
+        for (const tp of allPlayers) {
+            const pId = tp.player_id || tp.id;
+            if (pId && !playerMap.has(pId)) {
+                playerMap.set(pId, {
+                    playerId: pId,
+                    playerName: tp.player_name || tp.name || 'Jugador',
+                    matchesPlayed: 0,
+                    matchesWon: 0,
+                    matchesLost: 0,
+                    setsWon: 0,
+                    setsLost: 0,
+                    diffSets: 0,
+                    gamesWon: 0,
+                    gamesLost: 0,
+                    diffGames: 0,
+                    points: 0
+                });
+            }
+        }
+    }
+
+    const rows = Array.from(playerMap.values());
+
+    rows.sort((a, b) => {
+        if (b.points !== a.points) return b.points - a.points;
+        if (b.matchesWon !== a.matchesWon) return b.matchesWon - a.matchesWon;
+        if (b.diffSets !== a.diffSets) return b.diffSets - a.diffSets;
+        if (b.diffGames !== a.diffGames) return b.diffGames - a.diffGames;
+        return a.playerName.localeCompare(b.playerName);
+    });
+
+    return rows.map((r, idx) => ({
+        ...r,
+        rank: idx + 1,
+        isQualified: true
+    }));
+}
+
 export interface PlayoffRound {
     name: string;
     matches: Match[];
@@ -264,8 +326,17 @@ export function organizePlayoffRounds(playoffMatches: Match[]): PlayoffRound[] {
     }
 
     const rounds: PlayoffRound[] = [];
+    const orderedStandardNames = [
+        'Octavos de Final',
+        'Pre-Cuartos',
+        'Cuartos de Final',
+        'Semifinal',
+        'Semifinales',
+        'Final',
+        'Gran Final'
+    ];
 
-    for (const standardName of ['Cuartos de Final', 'Semifinal', 'Semifinales', 'Final']) {
+    for (const standardName of orderedStandardNames) {
         const matchingKey = Array.from(roundsMap.keys()).find(k => k.toLowerCase() === standardName.toLowerCase());
         if (matchingKey) {
             const list = roundsMap.get(matchingKey)!;
@@ -306,6 +377,7 @@ export interface ProjectedMatch {
     slotP2Label: string;
     p2Name?: string;
     p2Id?: string;
+    isBye?: boolean;
 }
 
 export interface ProjectedRound {
@@ -313,13 +385,24 @@ export interface ProjectedRound {
     matches: ProjectedMatch[];
 }
 
-export function getProjectedPlayoffRounds(zones: GroupZone[]): ProjectedRound[] {
-    if (!zones || zones.length < 2) return [];
+export function getProjectedPlayoffRounds(
+    zones: GroupZone[],
+    competitionFormat?: string,
+    allowByes: boolean = true,
+    allPlayers?: TournamentPlayer[]
+): ProjectedRound[] {
+    if (!zones || zones.length === 0) return [];
+
+    const isTablaGeneral = competitionFormat === 'tabla_general_byes';
+
+    if (isTablaGeneral) {
+        const unified = calculateUnifiedStandings(zones, allPlayers);
+        return getProjectedRoundsFromUnified(unified, allowByes);
+    }
 
     const rounds: ProjectedRound[] = [];
 
     if (zones.length === 4) {
-        // 4 Zones -> Cuartos de Final (4 matches), Semifinal (2 matches), Final (1 match)
         const zA = zones[0];
         const zB = zones[1];
         const zC = zones[2];
@@ -398,7 +481,6 @@ export function getProjectedPlayoffRounds(zones: GroupZone[]): ProjectedRound[] 
             { name: 'Gran Final', matches: finalMatch }
         );
     } else if (zones.length === 2) {
-        // 2 Zones -> Semifinales (2 matches), Final (1 match)
         const zA = zones[0];
         const zB = zones[1];
 
@@ -439,38 +521,175 @@ export function getProjectedPlayoffRounds(zones: GroupZone[]): ProjectedRound[] 
             { name: 'Gran Final', matches: finalMatch }
         );
     } else {
-        const qualifiers: { label: string; pName?: string; pId?: string }[] = [];
-        for (let i = 0; i < zones.length; i++) {
-            const z = zones[i];
-            qualifiers.push({
-                label: `1° ${z.groupName}`,
-                pName: z.players[0]?.playerName,
-                pId: z.players[0]?.playerId
-            });
-            if (z.players.length > 1) {
-                qualifiers.push({
-                    label: `2° ${z.groupName}`,
-                    pName: z.players[1]?.playerName,
-                    pId: z.players[1]?.playerId
-                });
-            }
-        }
+        const unified = calculateUnifiedStandings(zones, allPlayers);
+        return getProjectedRoundsFromUnified(unified, allowByes);
+    }
 
-        const topQ = qualifiers.slice(0, 8);
-        const roundName = topQ.length > 4 ? 'Cuartos de Final (Proyectado)' : 'Semifinales (Proyectado)';
+    return rounds;
+}
+
+function getProjectedRoundsFromUnified(standings: GroupStandingRow[], allowByes: boolean = true): ProjectedRound[] {
+    const rounds: ProjectedRound[] = [];
+    const N = standings.length;
+    if (N < 2) return rounds;
+
+    if (N === 9 && allowByes) {
+        // Exact 9-player structure with BYEs (Photo reference)
+        const s1 = standings[0];
+        const s2 = standings[1];
+        const s3 = standings[2];
+        const s4 = standings[3];
+        const s5 = standings[4];
+        const s6 = standings[5];
+        const s7 = standings[6];
+        const s8 = standings[7];
+        const s9 = standings[8];
+
+        const octMatch: ProjectedMatch = {
+            id: 'proj-oct-1',
+            round: 'Octavos de Final',
+            slotP1Label: '5° Clasificación General',
+            p1Name: s5?.playerName,
+            p1Id: s5?.playerId,
+            slotP2Label: '9° Clasificación General',
+            p2Name: s9?.playerName,
+            p2Id: s9?.playerId
+        };
+
+        const qfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-qf-1',
+                round: 'Cuartos de Final',
+                slotP1Label: '3° Clasificación (BYE)',
+                p1Name: s3?.playerName,
+                p1Id: s3?.playerId,
+                slotP2Label: 'Ganador 5° vs 9°'
+            },
+            {
+                id: 'proj-qf-2',
+                round: 'Cuartos de Final',
+                slotP1Label: '7° Clasificación',
+                p1Name: s7?.playerName,
+                p1Id: s7?.playerId,
+                slotP2Label: '6° Clasificación',
+                p2Name: s6?.playerName,
+                p2Id: s6?.playerId
+            },
+            {
+                id: 'proj-qf-3',
+                round: 'Cuartos de Final',
+                slotP1Label: '8° Clasificación',
+                p1Name: s8?.playerName,
+                p1Id: s8?.playerId,
+                slotP2Label: '4° Clasificación',
+                p2Name: s4?.playerName,
+                p2Id: s4?.playerId
+            }
+        ];
+
+        const sfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-sf-1',
+                round: 'Semifinal',
+                slotP1Label: '1° Clasificación (BYE a Semifinal)',
+                p1Name: s1?.playerName,
+                p1Id: s1?.playerId,
+                slotP2Label: 'Ganador Cuartos 1 (3° vs [5°/9°])'
+            },
+            {
+                id: 'proj-sf-2',
+                round: 'Semifinal',
+                slotP1Label: '2° Clasificación (BYE a Semifinal)',
+                p1Name: s2?.playerName,
+                p1Id: s2?.playerId,
+                slotP2Label: 'Ganador Cuartos 3 (8° vs 4°)'
+            }
+        ];
+
+        const finalMatch: ProjectedMatch = {
+            id: 'proj-f-1',
+            round: 'Final',
+            slotP1Label: 'Ganador Semifinal 1',
+            slotP2Label: 'Ganador Semifinal 2'
+        };
+
+        rounds.push(
+            { name: 'Octavos de Final / Pre-Cuartos', matches: [octMatch] },
+            { name: 'Cuartos de Final (Proyectado)', matches: qfMatches },
+            { name: 'Semifinales (Proyectado)', matches: sfMatches },
+            { name: 'Gran Final', matches: [finalMatch] }
+        );
+    } else if (N === 6 && allowByes) {
+        const s1 = standings[0];
+        const s2 = standings[1];
+        const s3 = standings[2];
+        const s4 = standings[3];
+        const s5 = standings[4];
+        const s6 = standings[5];
+
+        const qfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-qf-1',
+                round: 'Cuartos de Final',
+                slotP1Label: '4° Clasificación',
+                p1Name: s4?.playerName,
+                p1Id: s4?.playerId,
+                slotP2Label: '5° Clasificación',
+                p2Name: s5?.playerName,
+                p2Id: s5?.playerId
+            },
+            {
+                id: 'proj-qf-2',
+                round: 'Cuartos de Final',
+                slotP1Label: '3° Clasificación',
+                p1Name: s3?.playerName,
+                p1Id: s3?.playerId,
+                slotP2Label: '6° Clasificación',
+                p2Name: s6?.playerName,
+                p2Id: s6?.playerId
+            }
+        ];
+
+        const sfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-sf-1',
+                round: 'Semifinal',
+                slotP1Label: '1° Clasificación (BYE)',
+                p1Name: s1?.playerName,
+                p1Id: s1?.playerId,
+                slotP2Label: 'Ganador 4° vs 5°'
+            },
+            {
+                id: 'proj-sf-2',
+                round: 'Semifinal',
+                slotP1Label: '2° Clasificación (BYE)',
+                p1Name: s2?.playerName,
+                p1Id: s2?.playerId,
+                slotP2Label: 'Ganador 3° vs 6°'
+            }
+        ];
+
+        rounds.push(
+            { name: 'Cuartos de Final (Proyectado)', matches: qfMatches },
+            { name: 'Semifinales (Proyectado)', matches: sfMatches },
+            { name: 'Gran Final', matches: [{ id: 'proj-f-1', round: 'Final', slotP1Label: 'Ganador Semifinal 1', slotP2Label: 'Ganador Semifinal 2' }] }
+        );
+    } else {
+        const topCount = Math.min(N, 8);
+        const roundName = topCount > 4 ? 'Cuartos de Final (Proyectado)' : 'Semifinales (Proyectado)';
         const matches: ProjectedMatch[] = [];
 
-        for (let i = 0; i < topQ.length; i += 2) {
-            if (i + 1 < topQ.length) {
+        for (let i = 0; i < topCount; i += 2) {
+            if (i + 1 < topCount) {
                 matches.push({
                     id: `proj-m-${i}`,
                     round: roundName,
-                    slotP1Label: topQ[i].label,
-                    p1Name: topQ[i].pName,
-                    p1Id: topQ[i].pId,
-                    slotP2Label: topQ[i + 1].label,
-                    p2Name: topQ[i + 1].pName,
-                    p2Id: topQ[i + 1].pId
+                    slotP1Label: `${i + 1}° Clasificación`,
+                    p1Name: standings[i]?.playerName,
+                    p1Id: standings[i]?.playerId,
+                    slotP2Label: `${i + 2}° Clasificación`,
+                    p2Name: standings[i + 1]?.playerName,
+                    p2Id: standings[i + 1]?.playerId
                 });
             }
         }
@@ -501,19 +720,331 @@ export interface PlayoffMatchSeed {
     player1?: { id: string; name: string };
     player2?: { id: string; name: string };
     proposal_data?: {
-        bracket_round: 'Cuartos de Final' | 'Semifinal' | 'Final' | string;
+        bracket_round: 'Octavos de Final' | 'Pre-Cuartos' | 'Cuartos de Final' | 'Semifinal' | 'Final' | string;
         bracket_match_index: number;
         next_round?: string;
         next_match_index?: number;
         next_slot?: 'player1' | 'player2';
         slot1_label?: string;
         slot2_label?: string;
+        is_bye?: boolean;
     };
 }
 
-export function buildPlayoffTreeFromZones(zones: GroupZone[]): PlayoffMatchSeed[] {
+export function buildPlayoffTreeWithByes(
+    standings: GroupStandingRow[],
+    options?: { allowByes?: boolean }
+): PlayoffMatchSeed[] {
+    const seeds: PlayoffMatchSeed[] = [];
+    const N = standings.length;
+    if (N < 2) return seeds;
+
+    const allowByes = options?.allowByes ?? true;
+
+    if (N === 9 && allowByes) {
+        // Exact 9-player structure with BYEs (Photo reference)
+        const s1 = standings[0];
+        const s2 = standings[1];
+        const s3 = standings[2];
+        const s4 = standings[3];
+        const s5 = standings[4];
+        const s6 = standings[5];
+        const s7 = standings[6];
+        const s8 = standings[7];
+        const s9 = standings[8];
+
+        // 1. Octavos / Pre-cuartos: 5° vs 9°
+        seeds.push({
+            round: 'Octavos de Final',
+            player1: s5 ? { id: s5.playerId, name: s5.playerName } : undefined,
+            player2: s9 ? { id: s9.playerId, name: s9.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Octavos de Final',
+                bracket_match_index: 0,
+                next_round: 'Cuartos de Final',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: `5° ${s5?.playerName || '5° General'}`,
+                slot2_label: `9° ${s9?.playerName || '9° General'}`
+            }
+        });
+
+        // 2. Cuartos de Final: 3 Matches
+        // Match 0: 3° (BYE) vs Winner(5° vs 9°) -> Goes to Semifinal 0 (player2)
+        seeds.push({
+            round: 'Cuartos de Final',
+            player1: s3 ? { id: s3.playerId, name: s3.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Cuartos de Final',
+                bracket_match_index: 0,
+                next_round: 'Semifinal',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: `3° ${s3?.playerName || '3° General'} (BYE)`,
+                slot2_label: 'Ganador 5° vs 9°'
+            }
+        });
+
+        // Match 1: 7° vs 6° -> Goes to Semifinal 1 (player1)
+        seeds.push({
+            round: 'Cuartos de Final',
+            player1: s7 ? { id: s7.playerId, name: s7.playerName } : undefined,
+            player2: s6 ? { id: s6.playerId, name: s6.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Cuartos de Final',
+                bracket_match_index: 1,
+                next_round: 'Semifinal',
+                next_match_index: 1,
+                next_slot: 'player1',
+                slot1_label: `7° ${s7?.playerName || '7° General'}`,
+                slot2_label: `6° ${s6?.playerName || '6° General'}`
+            }
+        });
+
+        // Match 2: 8° vs 4° -> Goes to Semifinal 1 (player2)
+        seeds.push({
+            round: 'Cuartos de Final',
+            player1: s8 ? { id: s8.playerId, name: s8.playerName } : undefined,
+            player2: s4 ? { id: s4.playerId, name: s4.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Cuartos de Final',
+                bracket_match_index: 2,
+                next_round: 'Semifinal',
+                next_match_index: 1,
+                next_slot: 'player2',
+                slot1_label: `8° ${s8?.playerName || '8° General'}`,
+                slot2_label: `4° ${s4?.playerName || '4° General'}`
+            }
+        });
+
+        // 3. Semifinales: 2 Matches
+        // Semi 0: 1° (BYE) vs Winner Cuartos 0 -> Goes to Final (player1)
+        seeds.push({
+            round: 'Semifinal',
+            player1: s1 ? { id: s1.playerId, name: s1.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 0,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player1',
+                slot1_label: `1° ${s1?.playerName || '1° General'} (BYE a Semifinal)`,
+                slot2_label: 'Ganador Cuartos 1 (3° vs [5°/9°])'
+            }
+        });
+
+        // Semi 1: 2° (BYE) vs Winner Cuartos 2 -> Goes to Final (player2)
+        seeds.push({
+            round: 'Semifinal',
+            player1: s2 ? { id: s2.playerId, name: s2.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 1,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: `2° ${s2?.playerName || '2° General'} (BYE a Semifinal)`,
+                slot2_label: 'Ganador Cuartos 3 (8° vs 4°)'
+            }
+        });
+
+        // 4. Gran Final
+        seeds.push({
+            round: 'Final',
+            proposal_data: {
+                bracket_round: 'Final',
+                bracket_match_index: 0,
+                slot1_label: 'Ganador Semifinal 1',
+                slot2_label: 'Ganador Semifinal 2'
+            }
+        });
+
+        return seeds;
+    }
+
+    if (N === 6 && allowByes) {
+        const s1 = standings[0];
+        const s2 = standings[1];
+        const s3 = standings[2];
+        const s4 = standings[3];
+        const s5 = standings[4];
+        const s6 = standings[5];
+
+        // Cuartos 0: 4° vs 5° -> Goes to Semi 0 (player2)
+        seeds.push({
+            round: 'Cuartos de Final',
+            player1: s4 ? { id: s4.playerId, name: s4.playerName } : undefined,
+            player2: s5 ? { id: s5.playerId, name: s5.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Cuartos de Final',
+                bracket_match_index: 0,
+                next_round: 'Semifinal',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: `4° ${s4?.playerName}`,
+                slot2_label: `5° ${s5?.playerName}`
+            }
+        });
+
+        // Cuartos 1: 3° vs 6° -> Goes to Semi 1 (player2)
+        seeds.push({
+            round: 'Cuartos de Final',
+            player1: s3 ? { id: s3.playerId, name: s3.playerName } : undefined,
+            player2: s6 ? { id: s6.playerId, name: s6.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Cuartos de Final',
+                bracket_match_index: 1,
+                next_round: 'Semifinal',
+                next_match_index: 1,
+                next_slot: 'player2',
+                slot1_label: `3° ${s3?.playerName}`,
+                slot2_label: `6° ${s6?.playerName}`
+            }
+        });
+
+        // Semi 0: 1° (BYE) vs Winner Cuartos 0 -> Goes to Final (player1)
+        seeds.push({
+            round: 'Semifinal',
+            player1: s1 ? { id: s1.playerId, name: s1.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 0,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player1',
+                slot1_label: `1° ${s1?.playerName} (BYE)`,
+                slot2_label: 'Ganador 4° vs 5°'
+            }
+        });
+
+        // Semi 1: 2° (BYE) vs Winner Cuartos 1 -> Goes to Final (player2)
+        seeds.push({
+            round: 'Semifinal',
+            player1: s2 ? { id: s2.playerId, name: s2.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 1,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: `2° ${s2?.playerName} (BYE)`,
+                slot2_label: 'Ganador 3° vs 6°'
+            }
+        });
+
+        // Final
+        seeds.push({
+            round: 'Final',
+            proposal_data: {
+                bracket_round: 'Final',
+                bracket_match_index: 0,
+                slot1_label: 'Ganador Semifinal 1',
+                slot2_label: 'Ganador Semifinal 2'
+            }
+        });
+
+        return seeds;
+    }
+
+    // Default top 4 or top 8
+    const topQ = standings.slice(0, 8);
+    if (topQ.length > 4) {
+        for (let i = 0; i < 4; i++) {
+            const p1 = topQ[i * 2];
+            const p2 = topQ[i * 2 + 1];
+            seeds.push({
+                round: 'Cuartos de Final',
+                player1: p1?.playerId ? { id: p1.playerId, name: p1.playerName || '' } : undefined,
+                player2: p2?.playerId ? { id: p2.playerId, name: p2.playerName || '' } : undefined,
+                proposal_data: {
+                    bracket_round: 'Cuartos de Final',
+                    bracket_match_index: i,
+                    next_round: 'Semifinal',
+                    next_match_index: Math.floor(i / 2),
+                    next_slot: i % 2 === 0 ? 'player1' : 'player2',
+                    slot1_label: `${i * 2 + 1}° ${p1?.playerName || ''}`,
+                    slot2_label: `${i * 2 + 2}° ${p2?.playerName || ''}`
+                }
+            });
+        }
+        seeds.push({
+            round: 'Semifinal',
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 0,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player1',
+                slot1_label: 'Ganador Llave 1',
+                slot2_label: 'Ganador Llave 2'
+            }
+        });
+        seeds.push({
+            round: 'Semifinal',
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 1,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: 'Ganador Llave 3',
+                slot2_label: 'Ganador Llave 4'
+            }
+        });
+        seeds.push({
+            round: 'Final',
+            proposal_data: {
+                bracket_round: 'Final',
+                bracket_match_index: 0,
+                slot1_label: 'Ganador Semifinal 1',
+                slot2_label: 'Ganador Semifinal 2'
+            }
+        });
+    } else {
+        for (let i = 0; i < 2; i++) {
+            const p1 = topQ[i * 2];
+            const p2 = topQ[i * 2 + 1];
+            seeds.push({
+                round: 'Semifinal',
+                player1: p1?.playerId ? { id: p1.playerId, name: p1.playerName || '' } : undefined,
+                player2: p2?.playerId ? { id: p2.playerId, name: p2.playerName || '' } : undefined,
+                proposal_data: {
+                    bracket_round: 'Semifinal',
+                    bracket_match_index: i,
+                    next_round: 'Final',
+                    next_match_index: 0,
+                    next_slot: i === 0 ? 'player1' : 'player2',
+                    slot1_label: `${i * 2 + 1}° ${p1?.playerName || ''}`,
+                    slot2_label: `${i * 2 + 2}° ${p2?.playerName || ''}`
+                }
+            });
+        }
+        seeds.push({
+            round: 'Final',
+            proposal_data: {
+                bracket_round: 'Final',
+                bracket_match_index: 0,
+                slot1_label: 'Ganador Semifinal 1',
+                slot2_label: 'Ganador Semifinal 2'
+            }
+        });
+    }
+
+    return seeds;
+}
+
+export function buildPlayoffTreeFromZones(
+    zones: GroupZone[],
+    competitionFormat?: string,
+    allowByes: boolean = true
+): PlayoffMatchSeed[] {
     const seeds: PlayoffMatchSeed[] = [];
     if (!zones || zones.length === 0) return seeds;
+
+    if (competitionFormat === 'tabla_general_byes') {
+        const unified = calculateUnifiedStandings(zones);
+        return buildPlayoffTreeWithByes(unified, { allowByes });
+    }
 
     if (zones.length === 4) {
         const zA = zones[0]?.players;
@@ -521,7 +1052,7 @@ export function buildPlayoffTreeFromZones(zones: GroupZone[]): PlayoffMatchSeed[
         const zC = zones[2]?.players;
         const zD = zones[3]?.players;
 
-        // 4 Cuartos de Final
+        // 4 Cuartos de Final (Separación de grupos: 1A y 2A en mitades opuestas)
         seeds.push({
             round: 'Cuartos de Final',
             player1: zA?.[0] ? { id: zA[0].playerId, name: zA[0].playerName } : undefined,
@@ -579,7 +1110,7 @@ export function buildPlayoffTreeFromZones(zones: GroupZone[]): PlayoffMatchSeed[
             }
         });
 
-        // 2 Semifinales (inicialmente esperando ganadores)
+        // 2 Semifinales
         seeds.push({
             round: 'Semifinal',
             proposal_data: {
@@ -673,99 +1204,8 @@ export function buildPlayoffTreeFromZones(zones: GroupZone[]): PlayoffMatchSeed[
             }
         });
     } else {
-        // Zonas genéricas (ej: 3 zonas)
-        const qualifiers: { label: string; pName?: string; pId?: string }[] = [];
-        for (let i = 0; i < zones.length; i++) {
-            const z = zones[i];
-            if (z.players.length > 0) {
-                qualifiers.push({ label: `1° ${z.groupName}`, pName: z.players[0]?.playerName, pId: z.players[0]?.playerId });
-            }
-            if (z.players.length > 1) {
-                qualifiers.push({ label: `2° ${z.groupName}`, pName: z.players[1]?.playerName, pId: z.players[1]?.playerId });
-            }
-        }
-        const topQ = qualifiers.slice(0, 8);
-        if (topQ.length > 4) {
-            for (let i = 0; i < 4; i++) {
-                const p1 = topQ[i * 2];
-                const p2 = topQ[i * 2 + 1];
-                seeds.push({
-                    round: 'Cuartos de Final',
-                    player1: p1?.pId ? { id: p1.pId, name: p1.pName || '' } : undefined,
-                    player2: p2?.pId ? { id: p2.pId, name: p2.pName || '' } : undefined,
-                    proposal_data: {
-                        bracket_round: 'Cuartos de Final',
-                        bracket_match_index: i,
-                        next_round: 'Semifinal',
-                        next_match_index: Math.floor(i / 2),
-                        next_slot: i % 2 === 0 ? 'player1' : 'player2',
-                        slot1_label: p1?.label || `Clasificado ${i * 2 + 1}`,
-                        slot2_label: p2?.label || `Clasificado ${i * 2 + 2}`
-                    }
-                });
-            }
-            seeds.push({
-                round: 'Semifinal',
-                proposal_data: {
-                    bracket_round: 'Semifinal',
-                    bracket_match_index: 0,
-                    next_round: 'Final',
-                    next_match_index: 0,
-                    next_slot: 'player1',
-                    slot1_label: 'Ganador Llave 1',
-                    slot2_label: 'Ganador Llave 2'
-                }
-            });
-            seeds.push({
-                round: 'Semifinal',
-                proposal_data: {
-                    bracket_round: 'Semifinal',
-                    bracket_match_index: 1,
-                    next_round: 'Final',
-                    next_match_index: 0,
-                    next_slot: 'player2',
-                    slot1_label: 'Ganador Llave 3',
-                    slot2_label: 'Ganador Llave 4'
-                }
-            });
-            seeds.push({
-                round: 'Final',
-                proposal_data: {
-                    bracket_round: 'Final',
-                    bracket_match_index: 0,
-                    slot1_label: 'Ganador Semifinal 1',
-                    slot2_label: 'Ganador Semifinal 2'
-                }
-            });
-        } else {
-            for (let i = 0; i < 2; i++) {
-                const p1 = topQ[i * 2];
-                const p2 = topQ[i * 2 + 1];
-                seeds.push({
-                    round: 'Semifinal',
-                    player1: p1?.pId ? { id: p1.pId, name: p1.pName || '' } : undefined,
-                    player2: p2?.pId ? { id: p2.pId, name: p2.pName || '' } : undefined,
-                    proposal_data: {
-                        bracket_round: 'Semifinal',
-                        bracket_match_index: i,
-                        next_round: 'Final',
-                        next_match_index: 0,
-                        next_slot: i === 0 ? 'player1' : 'player2',
-                        slot1_label: p1?.label || `Clasificado ${i * 2 + 1}`,
-                        slot2_label: p2?.label || `Clasificado ${i * 2 + 2}`
-                    }
-                });
-            }
-            seeds.push({
-                round: 'Final',
-                proposal_data: {
-                    bracket_round: 'Final',
-                    bracket_match_index: 0,
-                    slot1_label: 'Ganador Semifinal 1',
-                    slot2_label: 'Ganador Semifinal 2'
-                }
-            });
-        }
+        const unified = calculateUnifiedStandings(zones);
+        return buildPlayoffTreeWithByes(unified, { allowByes });
     }
 
     return seeds;

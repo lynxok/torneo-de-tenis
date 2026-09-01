@@ -15,7 +15,7 @@ import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
 import { getTournamentTier, calculateTournamentFinances } from '../utils/tournamentTiers';
 import { formatPlayerName, formatMatchScore } from '../utils/formatters';
 import { exportTournamentPlayersToCSV } from '../utils/exportHelper';
-import { calculateGroupStandings, organizePlayoffRounds, getProjectedPlayoffRounds, buildPlayoffTreeFromZones, GroupZone, GroupStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
+import { calculateGroupStandings, calculateUnifiedStandings, organizePlayoffRounds, getProjectedPlayoffRounds, buildPlayoffTreeFromZones, GroupZone, GroupStandingRow, UnifiedStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { ShareGraphicModal } from '../components/ShareGraphicModal';
 import { soundEffects } from '../services/soundEffects';
@@ -32,6 +32,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [loading, setLoading] = useState(true);
     const [isEnrolling, setIsEnrolling] = useState(false);
     const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('groups');
+    const [standingsViewMode, setStandingsViewMode] = useState<'unified' | 'zones'>('unified');
     const { addToast } = useToast();
 
     // Edit Tournament State (Organizador & Superadmin)
@@ -44,7 +45,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         category: '4ta',
         registration_price: 0,
         registration_closed: false,
-        status: 'draft'
+        status: 'draft',
+        competition_format: 'tabla_general_byes',
+        min_guaranteed_matches: 3,
+        allow_byes: true,
+        qualifiers_mode: 'all'
     });
     const [isUpdatingTournament, setIsUpdatingTournament] = useState(false);
 
@@ -1223,9 +1228,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const unplayedGroupMatches = groupMatches.filter(m => !m.is_played && !m.winner_id && m.scheduling_status !== 'finished');
     const isGroupStageComplete = groupMatches.length > 0 && unplayedGroupMatches.length === 0;
 
+    const competitionFormat = tournament?.competition_format || tournament?.rules?.competition_format || 'tabla_general_byes';
+    const allowByes = tournament?.allow_byes ?? tournament?.rules?.allow_byes ?? true;
+    const minGuaranteedMatches = tournament?.min_guaranteed_matches ?? tournament?.rules?.min_guaranteed_matches ?? 3;
+
     const zones = calculateGroupStandings(groupMatches, players);
+    const unifiedStandings = calculateUnifiedStandings(zones, players);
     const playoffRounds = organizePlayoffRounds(playoffMatches);
-    const projectedPlayoffRounds = getProjectedPlayoffRounds(zones);
+    const projectedPlayoffRounds = getProjectedPlayoffRounds(zones, competitionFormat, allowByes, players);
 
     const finalMatch = playoffMatches.find(m => m.round === 'Final' || m.round === 'Gran Final');
     const championName = tournament?.champion_name || (finalMatch?.winner_id ? (
@@ -1286,20 +1296,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             }
         }
 
-        if (qualifiers.length < 2) {
+        if (qualifiers.length < 2 && unifiedStandings.length < 2) {
             addToast("Se necesitan al menos 2 jugadores clasificados para armar los playoffs.", "warning");
             return;
         }
 
         if (playoffMatches.length > 0) {
-            if (!confirm("Ya existen llaves de playoffs generadas. ¿Deseas regenerarlas con los clasificados actuales de cada zona?")) {
+            if (!confirm("Ya existen llaves de playoffs generadas. ¿Deseas regenerarlas con los clasificados actuales?")) {
                 return;
             }
         }
 
         setGeneratingPlayoffs(true);
         try {
-            const seeds = buildPlayoffTreeFromZones(zones);
+            const seeds = buildPlayoffTreeFromZones(zones, competitionFormat, allowByes);
             await api.tournaments.generatePlayoffs(tournament.id, seeds);
             addToast("¡Cuadro de llaves oficializado y generado exitosamente!", "success");
             setActiveTab('playoffs');
@@ -1389,6 +1399,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const handleOpenEditTournament = () => {
         if (!tournament) return;
+        const existingRules = tournament.rules || {};
         setEditTournamentForm({
             name: tournament.name || '',
             start_date: tournament.start_date ? tournament.start_date.split('T')[0] : '',
@@ -1397,7 +1408,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             category: tournament.category || '4ta',
             registration_price: tournament.registration_price || 0,
             registration_closed: !!tournament.registration_closed,
-            status: tournament.status || 'draft'
+            status: tournament.status || 'draft',
+            competition_format: tournament.competition_format || existingRules.competition_format || 'tabla_general_byes',
+            min_guaranteed_matches: tournament.min_guaranteed_matches ?? existingRules.min_guaranteed_matches ?? 3,
+            allow_byes: tournament.allow_byes ?? existingRules.allow_byes ?? true,
+            qualifiers_mode: tournament.qualifiers_mode || existingRules.qualifiers_mode || 'all'
         });
         setShowEditTournamentModal(true);
     };
@@ -1412,6 +1427,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
         setIsUpdatingTournament(true);
         try {
+            const existingRules = (typeof tournament.rules === 'object' && tournament.rules !== null) ? tournament.rules : {};
+            const updatedRules = {
+                ...existingRules,
+                competition_format: editTournamentForm.competition_format || 'tabla_general_byes',
+                min_guaranteed_matches: Number(editTournamentForm.min_guaranteed_matches) || 3,
+                allow_byes: editTournamentForm.allow_byes !== false,
+                qualifiers_mode: editTournamentForm.qualifiers_mode || 'all'
+            };
+
             const updates: Partial<Tournament> = {
                 name: editTournamentForm.name?.trim(),
                 start_date: editTournamentForm.start_date,
@@ -1420,12 +1444,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 category: editTournamentForm.category,
                 registration_price: Number(editTournamentForm.registration_price) || 0,
                 registration_closed: editTournamentForm.registration_closed,
-                status: editTournamentForm.status
+                status: editTournamentForm.status,
+                competition_format: editTournamentForm.competition_format || 'tabla_general_byes',
+                min_guaranteed_matches: Number(editTournamentForm.min_guaranteed_matches) || 3,
+                allow_byes: editTournamentForm.allow_byes !== false,
+                qualifiers_mode: editTournamentForm.qualifiers_mode || 'all',
+                rules: updatedRules
             };
 
             await api.tournaments.update(tournament.id, updates);
             setTournament(prev => prev ? ({ ...prev, ...updates }) : null);
-            addToast("¡Torneo y fecha de inicio actualizados exitosamente!", 'success');
+            addToast("¡Torneo y configuración actualizados exitosamente!", 'success');
             setShowEditTournamentModal(false);
         } catch (err: any) {
             console.error("Error al actualizar torneo:", err);
@@ -1458,6 +1487,24 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                                 <span className="bg-primary text-dark font-bold px-2.5 py-1 rounded-lg text-xs uppercase shadow-sm">{tournament.category}</span>
                                 <span className="bg-white/10 text-white font-bold px-2.5 py-1 rounded-lg text-xs uppercase backdrop-blur-sm border border-white/10">{tournament.type}</span>
+                                {competitionFormat === 'tabla_general_byes' ? (
+                                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                                        🏆 Tabla General + BYEs
+                                    </span>
+                                ) : competitionFormat === 'eliminacion_directa' ? (
+                                    <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                                        ⚡ Eliminación Directa
+                                    </span>
+                                ) : (
+                                    <span className="bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                                        🎾 Zonas + Playoffs
+                                    </span>
+                                )}
+                                {minGuaranteedMatches > 0 && (
+                                    <span className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                                        🎾 {minGuaranteedMatches} Partidos Garantizados
+                                    </span>
+                                )}
                                 {countsForRanking ? (
                                     <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider border shadow-sm flex items-center gap-1.5 ${tierInfo.badgeColor} ${tierInfo.textColor} ${tierInfo.borderColor}`}>
                                         <Trophy size={12} /> {tierInfo.label} • {tierInfo.pointsWinner} pts
@@ -1961,8 +2008,155 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         <p className="text-xs text-muted">Los administradores pueden configurar y sortear las zonas desde el panel superior.</p>
                                     </div>
                                 ) : (
-                                    <div className="grid grid-cols-1 gap-6">
-                                        {zones.map((zone) => (
+                                    <div className="space-y-6">
+                                        {/* Sub-tab Switcher: Tabla General vs Zonas */}
+                                        <div className="flex items-center justify-between flex-wrap gap-2 bg-slate-900/60 p-2 rounded-2xl border border-white/5">
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    onClick={() => setStandingsViewMode('unified')}
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                        standingsViewMode === 'unified' 
+                                                            ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20' 
+                                                            : 'text-slate-400 hover:text-white bg-white/5'
+                                                    }`}
+                                                >
+                                                    <Trophy size={13} /> Tabla General ({unifiedStandings.length})
+                                                </button>
+                                                <button
+                                                    onClick={() => setStandingsViewMode('zones')}
+                                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+                                                        standingsViewMode === 'zones' 
+                                                            ? 'bg-primary text-white shadow-md shadow-primary/20' 
+                                                            : 'text-slate-400 hover:text-white bg-white/5'
+                                                    }`}
+                                                >
+                                                    <Grid size={13} /> Zonas Individuales ({zones.length})
+                                                </button>
+                                            </div>
+                                            <span className="text-[11px] text-slate-400 hidden sm:inline font-semibold">
+                                                {competitionFormat === 'tabla_general_byes' ? '🏆 Modalidad: Tabla General + BYEs' : '🎾 Modalidad: Zonas Tradicionales'}
+                                            </span>
+                                        </div>
+
+                                        {/* TABLA GENERAL UNIFICADA (Estilo Planilla Oficial) */}
+                                        {standingsViewMode === 'unified' && (
+                                            <div className="bg-slate-900/70 border border-white/10 rounded-2xl overflow-hidden shadow-lg space-y-0">
+                                                <div className="p-4 bg-gradient-to-r from-amber-500/20 via-slate-800 to-transparent border-b border-white/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2.5">
+                                                        <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-400 font-black">
+                                                            <Trophy size={16} />
+                                                        </div>
+                                                        <div>
+                                                            <h4 className="text-sm font-black text-white uppercase tracking-wider">
+                                                                Clasificación General ({unifiedStandings.length} Participantes)
+                                                            </h4>
+                                                            <span className="text-[10px] text-muted">
+                                                                Orden: Puntos &gt; Partidos Ganados &gt; Dif. Sets &gt; Dif. Games
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    <span className="text-[11px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-2.5 py-1 rounded-lg">
+                                                        {competitionFormat === 'tabla_general_byes' ? 'Tabla General Unificada' : 'Tabla General Oficial'}
+                                                    </span>
+                                                </div>
+
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left text-xs">
+                                                        <thead>
+                                                            <tr className="border-b border-white/10 bg-black/30 text-slate-400 font-bold uppercase text-[10px]">
+                                                                <th className="py-2.5 px-3">#</th>
+                                                                <th className="py-2.5 px-3">Jugador</th>
+                                                                <th className="py-2.5 px-2 text-center" title="Partidos Jugados">PJ</th>
+                                                                <th className="py-2.5 px-2 text-center text-green-400" title="Partidos Ganados">PG</th>
+                                                                <th className="py-2.5 px-2 text-center text-red-400" title="Partidos Perdidos">PP</th>
+                                                                <th className="py-2.5 px-2 text-center" title="Sets Ganados / Perdidos / Diferencia">Sets (Dif)</th>
+                                                                <th className="py-2.5 px-2 text-center" title="Games Ganados / Perdidos / Diferencia">Games (Dif)</th>
+                                                                <th className="py-2.5 px-3 text-right text-primary font-black" title="Puntos en la tabla">PTS</th>
+                                                                <th className="py-2.5 px-3 text-center">Destino en Cuadro</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-white/5">
+                                                            {unifiedStandings.map((p) => {
+                                                                const isTopSeed = p.rank === 1 || p.rank === 2;
+                                                                const isByeQuarter = p.rank === 3;
+                                                                return (
+                                                                    <tr 
+                                                                        key={p.playerId}
+                                                                        className={`transition-colors hover:bg-white/5 ${
+                                                                            p.rank === 1 ? 'bg-amber-500/10' :
+                                                                            p.rank === 2 ? 'bg-slate-400/10' :
+                                                                            p.rank === 3 ? 'bg-amber-700/10' : ''
+                                                                        }`}
+                                                                    >
+                                                                        <td className="py-2.5 px-3">
+                                                                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                                                                                p.rank === 1 ? 'bg-yellow-500 text-dark font-black shadow-sm' :
+                                                                                p.rank === 2 ? 'bg-slate-300 text-dark font-black' :
+                                                                                p.rank === 3 ? 'bg-amber-600 text-white font-bold' :
+                                                                                'bg-slate-800 text-slate-400'
+                                                                            }`}>
+                                                                                {p.rank}°
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="py-2.5 px-3">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="font-bold text-white">{formatPlayerName(p.playerName)}</span>
+                                                                                {p.groupName && (
+                                                                                    <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10">
+                                                                                        {p.groupName}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                        </td>
+                                                                        <td className="py-2.5 px-2 text-center text-slate-300 font-mono">{p.matchesPlayed}</td>
+                                                                        <td className="py-2.5 px-2 text-center text-green-400 font-mono font-bold">{p.matchesWon}</td>
+                                                                        <td className="py-2.5 px-2 text-center text-slate-400 font-mono">{p.matchesLost}</td>
+                                                                        <td className="py-2.5 px-2 text-center text-slate-300 font-mono text-[11px]">
+                                                                            {p.setsWon}-{p.setsLost} <span className={p.diffSets > 0 ? 'text-green-400 font-bold' : p.diffSets < 0 ? 'text-red-400' : 'text-slate-500'}>({p.diffSets > 0 ? `+${p.diffSets}` : p.diffSets})</span>
+                                                                        </td>
+                                                                        <td className={`py-2.5 px-2 text-center font-mono text-[11px] ${p.diffGames > 0 ? 'text-green-400 font-bold' : p.diffGames < 0 ? 'text-red-400' : 'text-slate-500'}`}>
+                                                                            {p.gamesWon}-{p.gamesLost} ({p.diffGames > 0 ? `+${p.diffGames}` : p.diffGames})
+                                                                        </td>
+                                                                        <td className="py-2.5 px-3 text-right font-mono font-black text-sm text-primary">
+                                                                            {p.points}
+                                                                        </td>
+                                                                        <td className="py-2.5 px-3 text-center">
+                                                                            {competitionFormat === 'tabla_general_byes' ? (
+                                                                                isTopSeed ? (
+                                                                                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                                                                                        BYE a Semis ⚡
+                                                                                    </span>
+                                                                                ) : isByeQuarter && unifiedStandings.length === 9 ? (
+                                                                                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-300 border border-purple-500/30 font-bold">
+                                                                                        BYE a Cuartos 🎾
+                                                                                    </span>
+                                                                                ) : p.rank === 5 || p.rank === 9 ? (
+                                                                                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-blue-500/20 text-blue-300 border border-blue-500/30 font-semibold">
+                                                                                        Pre-Cuartos
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 font-semibold">
+                                                                                        Cuartos de Final
+                                                                                    </span>
+                                                                                )
+                                                                            ) : (
+                                                                                <span className="text-[10px] px-2 py-0.5 rounded-md bg-green-500/20 text-green-300 border border-green-500/30 font-semibold">
+                                                                                    {p.rank <= 4 ? 'Clasifica a Playoffs ✓' : 'Fase de Zonas'}
+                                                                                </span>
+                                                                            )}
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Individual Zones Grid */}
+                                        <div className="grid grid-cols-1 gap-6">
+                                            {zones.map((zone) => (
                                             <div key={zone.groupNumber} className="bg-slate-900/70 border border-white/10 rounded-2xl overflow-hidden shadow-lg">
                                                 {/* Zone Header */}
                                                 <div className="p-4 bg-gradient-to-r from-primary/20 via-slate-800 to-transparent border-b border-white/10 flex items-center justify-between">
@@ -2295,6 +2489,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                 </div>
                                             </div>
                                         ))}
+                                        </div>
                                     </div>
                                 )}
                             </div>
@@ -4928,6 +5123,51 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             <option key={c} value={c}>{c}</option>
                                         ))}
                                     </select>
+                                </div>
+                            </div>
+
+                            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-3">
+                                <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                                    <Layers size={14} /> Formato de Competencia y Cuadros
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Esquema de Cuadro</label>
+                                    <select 
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-semibold focus:outline-none focus:border-primary" 
+                                        value={editTournamentForm.competition_format || 'tabla_general_byes'} 
+                                        onChange={e => setEditTournamentForm({ ...editTournamentForm, competition_format: e.target.value as any })}
+                                    >
+                                        <option value="tabla_general_byes">🏆 Tabla General + Playoff con BYEs (Todos clasifican por mérito)</option>
+                                        <option value="zonas_playoffs">🎾 Zonas Tradicionales (Clasifican 1° y 2° por grupo)</option>
+                                        <option value="eliminacion_directa">⚡ Eliminación Directa con BYEs</option>
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] text-muted uppercase font-bold">Partidos Mínimos Asegurados</label>
+                                        <select 
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white text-xs focus:outline-none focus:border-primary"
+                                            value={editTournamentForm.min_guaranteed_matches || 3}
+                                            onChange={e => setEditTournamentForm({ ...editTournamentForm, min_guaranteed_matches: parseInt(e.target.value) })}
+                                        >
+                                            <option value={1}>1 Partido (Directo)</option>
+                                            <option value={2}>2 Partidos (Zonas de 3)</option>
+                                            <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
+                                            <option value={4}>4 Partidos (Zonas de 5)</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] text-muted uppercase font-bold">Pases Directos (BYEs)</label>
+                                        <label className="flex items-center gap-2 p-2 bg-slate-900 rounded-xl border border-white/10 cursor-pointer text-xs text-slate-200">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-primary rounded" 
+                                                checked={editTournamentForm.allow_byes !== false} 
+                                                onChange={e => setEditTournamentForm({ ...editTournamentForm, allow_byes: e.target.checked })} 
+                                            />
+                                            <span>Activar BYEs en cuadro</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 

@@ -45,7 +45,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
         category: '4ta',
         registration_price: 0,
         registration_closed: false,
-        status: 'draft'
+        status: 'draft',
+        competition_format: 'tabla_general_byes',
+        min_guaranteed_matches: 3,
+        allow_byes: true,
+        qualifiers_mode: 'all'
     });
     const [isUpdating, setIsUpdating] = useState(false);
     const [currentInstitution, setCurrentInstitution] = useState<Institution | null>(null);
@@ -64,7 +68,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
         category: '4ta',
         start_date: '',
         registration_price: 0,
-        status: 'draft'
+        status: 'draft',
+        competition_format: 'tabla_general_byes',
+        min_guaranteed_matches: 3,
+        allow_byes: true,
+        qualifiers_mode: 'all'
     });
 
     const { addToast } = useToast();
@@ -188,8 +196,20 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                 user
             );
 
+            const formatRules = {
+                competition_format: newTournament.competition_format || 'tabla_general_byes',
+                min_guaranteed_matches: Number(newTournament.min_guaranteed_matches) || 3,
+                allow_byes: newTournament.allow_byes !== false,
+                qualifiers_mode: newTournament.qualifiers_mode || 'all'
+            };
+
             await api.tournaments.create({ 
                 ...newTournament, 
+                rules: formatRules,
+                competition_format: formatRules.competition_format,
+                min_guaranteed_matches: formatRules.min_guaranteed_matches,
+                allow_byes: formatRules.allow_byes,
+                qualifiers_mode: formatRules.qualifiers_mode,
                 institution_id: targetInstitutionId,
                 created_by: user.id,
                 saga_id: selectedSagaId || null,
@@ -205,6 +225,19 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             setShowCreateModal(false);
             setSelectedSagaId('');
             setSelectedTierKey('challenger');
+            setNewTournament({
+                name: '',
+                type: 'singles',
+                gender: 'Caballeros',
+                category: '4ta',
+                start_date: '',
+                registration_price: 0,
+                status: 'draft',
+                competition_format: 'tabla_general_byes',
+                min_guaranteed_matches: 3,
+                allow_byes: true,
+                qualifiers_mode: 'all'
+            });
             loadTournaments();
         } catch (e: any) {
             console.error("Error al crear torneo:", e);
@@ -231,6 +264,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
     const handleOpenEdit = (t: Tournament, e: React.MouseEvent) => {
         e.stopPropagation();
         setEditingTournament(t);
+        const existingRules = t.rules || {};
         setEditFormData({
             name: t.name || '',
             start_date: t.start_date ? t.start_date.split('T')[0] : '',
@@ -239,7 +273,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             category: t.category || '4ta',
             registration_price: t.registration_price || 0,
             registration_closed: !!t.registration_closed,
-            status: t.status || 'draft'
+            status: t.status || 'draft',
+            competition_format: t.competition_format || existingRules.competition_format || 'tabla_general_byes',
+            min_guaranteed_matches: t.min_guaranteed_matches ?? existingRules.min_guaranteed_matches ?? 3,
+            allow_byes: t.allow_byes ?? existingRules.allow_byes ?? true,
+            qualifiers_mode: t.qualifiers_mode || existingRules.qualifiers_mode || 'all'
         });
     };
 
@@ -253,6 +291,15 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
 
         setIsUpdating(true);
         try {
+            const existingRules = (typeof editingTournament.rules === 'object' && editingTournament.rules !== null) ? editingTournament.rules : {};
+            const updatedRules = {
+                ...existingRules,
+                competition_format: editFormData.competition_format || 'tabla_general_byes',
+                min_guaranteed_matches: Number(editFormData.min_guaranteed_matches) || 3,
+                allow_byes: editFormData.allow_byes !== false,
+                qualifiers_mode: editFormData.qualifiers_mode || 'all'
+            };
+
             const updates: Partial<Tournament> = {
                 name: editFormData.name?.trim(),
                 start_date: editFormData.start_date,
@@ -261,11 +308,16 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                 category: editFormData.category,
                 registration_price: Number(editFormData.registration_price) || 0,
                 registration_closed: editFormData.registration_closed,
-                status: editFormData.status
+                status: editFormData.status,
+                competition_format: editFormData.competition_format || 'tabla_general_byes',
+                min_guaranteed_matches: Number(editFormData.min_guaranteed_matches) || 3,
+                allow_byes: editFormData.allow_byes !== false,
+                qualifiers_mode: editFormData.qualifiers_mode || 'all',
+                rules: updatedRules
             };
 
             await api.tournaments.update(editingTournament.id, updates);
-            addToast("¡Torneo y fecha de inicio actualizados exitosamente!", 'success');
+            addToast("¡Torneo y configuración actualizados exitosamente!", 'success');
             setEditingTournament(null);
             await loadTournaments();
         } catch (err: any) {
@@ -563,6 +615,28 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                             </div>
                                                         )}
                                                     </div>
+
+                                                    {/* Format & Guaranteed Matches Badge */}
+                                                    <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                                                        {t.competition_format === 'tabla_general_byes' || t.rules?.competition_format === 'tabla_general_byes' ? (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20 flex items-center gap-1">
+                                                                🏆 Tabla General + BYEs
+                                                            </span>
+                                                        ) : t.competition_format === 'eliminacion_directa' || t.rules?.competition_format === 'eliminacion_directa' ? (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-500/10 text-purple-300 border border-purple-500/20 flex items-center gap-1">
+                                                                ⚡ Eliminación Directa
+                                                            </span>
+                                                        ) : (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-300 border border-blue-500/20 flex items-center gap-1">
+                                                                🎾 Zonas + Playoffs
+                                                            </span>
+                                                        )}
+                                                        {(t.min_guaranteed_matches || t.rules?.min_guaranteed_matches) && (
+                                                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                                                                🎾 Mín. {t.min_guaranteed_matches || t.rules?.min_guaranteed_matches} partidos
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 </div>
 
                                                 <div className="space-y-2 text-sm border-t border-white/5 pt-3 mt-auto">
@@ -811,6 +885,56 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                     <input type="number" className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.registration_price} onChange={e => setNewTournament({ ...newTournament, registration_price: parseInt(e.target.value) })} required />
                                 </div>
                             </div>
+                            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-3">
+                                <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                                    <Layers size={14} /> Formato de Competencia y Cuadros
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Esquema de Cuadro</label>
+                                    <select 
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-semibold focus:outline-none focus:border-primary"
+                                        value={newTournament.competition_format || 'tabla_general_byes'}
+                                        onChange={e => setNewTournament({ ...newTournament, competition_format: e.target.value as any })}
+                                    >
+                                        <option value="tabla_general_byes">🏆 Tabla General + Playoff con BYEs (Todos clasifican por mérito)</option>
+                                        <option value="zonas_playoffs">🎾 Zonas Tradicionales (Clasifican 1° y 2° por grupo)</option>
+                                        <option value="eliminacion_directa">⚡ Eliminación Directa con BYEs</option>
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] text-muted uppercase font-bold">Partidos Mínimos Asegurados</label>
+                                        <select 
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white text-xs focus:outline-none focus:border-primary"
+                                            value={newTournament.min_guaranteed_matches || 3}
+                                            onChange={e => setNewTournament({ ...newTournament, min_guaranteed_matches: parseInt(e.target.value) })}
+                                        >
+                                            <option value={1}>1 Partido (Directo)</option>
+                                            <option value={2}>2 Partidos (Zonas de 3)</option>
+                                            <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
+                                            <option value={4}>4 Partidos (Zonas de 5)</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] text-muted uppercase font-bold">Pases Directos (BYEs)</label>
+                                        <label className="flex items-center gap-2 p-2 bg-slate-900 rounded-xl border border-white/10 cursor-pointer text-xs text-slate-200">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-primary rounded" 
+                                                checked={newTournament.allow_byes !== false} 
+                                                onChange={e => setNewTournament({ ...newTournament, allow_byes: e.target.checked })} 
+                                            />
+                                            <span>Activar BYEs en cuadro</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <p className="text-[10px] text-slate-400">
+                                    {newTournament.competition_format === 'tabla_general_byes' 
+                                        ? '✨ Todos los inscriptos juegan fase previa y avanzan al cuadro final; los mejores clasificados obtienen BYE a Semis o Cuartos.' 
+                                        : 'Organiza partidos por zonas clásicas con llaves eliminatorias.'}
+                                </p>
+                            </div>
+
                             <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl shadow-lg mt-4">Crear Torneo</button>
                         </form>
                     </div>
@@ -877,7 +1001,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                     <Calendar size={18} />
                                 </div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-white">Editar Torneo y Fechas</h3>
+                                    <h3 className="text-lg font-bold text-white">Editar Torneo y Configuración</h3>
                                     <p className="text-xs text-muted">{editingTournament.institutions?.name || 'Torneo propio'}</p>
                                 </div>
                             </div>
@@ -941,10 +1065,55 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                     >
                                         {getCategoriesForInstitution(
                                             user.role === 'superadmin' && editingTournament.institution_id 
-                                                ? institutions.find(i => i.id === editingTournament.institution_id) 
-                                                : currentInstitution
+                                                 ? institutions.find(i => i.id === editingTournament.institution_id) 
+                                                 : currentInstitution
                                         ).map(c => <option key={c} value={c}>{c}</option>)}
                                     </select>
+                                </div>
+                            </div>
+
+                            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-3">
+                                <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                                    <Layers size={14} /> Formato de Competencia y Cuadros
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[11px] text-muted uppercase font-bold">Esquema de Cuadro</label>
+                                    <select 
+                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-semibold focus:outline-none focus:border-primary" 
+                                        value={editFormData.competition_format || 'tabla_general_byes'} 
+                                        onChange={e => setEditFormData({ ...editFormData, competition_format: e.target.value as any })}
+                                    >
+                                        <option value="tabla_general_byes">🏆 Tabla General + Playoff con BYEs (Todos clasifican por mérito)</option>
+                                        <option value="zonas_playoffs">🎾 Zonas Tradicionales (Clasifican 1° y 2° por grupo)</option>
+                                        <option value="eliminacion_directa">⚡ Eliminación Directa con BYEs</option>
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] text-muted uppercase font-bold">Partidos Mínimos Asegurados</label>
+                                        <select 
+                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white text-xs focus:outline-none focus:border-primary"
+                                            value={editFormData.min_guaranteed_matches || 3}
+                                            onChange={e => setEditFormData({ ...editFormData, min_guaranteed_matches: parseInt(e.target.value) })}
+                                        >
+                                            <option value={1}>1 Partido (Directo)</option>
+                                            <option value={2}>2 Partidos (Zonas de 3)</option>
+                                            <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
+                                            <option value={4}>4 Partidos (Zonas de 5)</option>
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[11px] text-muted uppercase font-bold">Pases Directos (BYEs)</label>
+                                        <label className="flex items-center gap-2 p-2 bg-slate-900 rounded-xl border border-white/10 cursor-pointer text-xs text-slate-200">
+                                            <input 
+                                                type="checkbox" 
+                                                className="accent-primary rounded" 
+                                                checked={editFormData.allow_byes !== false} 
+                                                onChange={e => setEditFormData({ ...editFormData, allow_byes: e.target.checked })} 
+                                            />
+                                            <span>Activar BYEs en cuadro</span>
+                                        </label>
+                                    </div>
                                 </div>
                             </div>
 

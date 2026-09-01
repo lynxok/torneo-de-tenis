@@ -14,7 +14,8 @@ import {
   Wallet,
   Globe,
   GraduationCap,
-  Tv
+  Tv,
+  Sparkles
 } from 'lucide-react';
 import { UserRole } from '../types';
 import packageInfo from '../package.json';
@@ -154,6 +155,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {role === 'superadmin' && (
               <NavButton view="admin-settings" icon={Sliders} label="Ajustes Globales" />
             )}
+            <button
+              onClick={() => {
+                if (onCloseMobile) onCloseMobile();
+                window.dispatchEvent(new CustomEvent('open-organizer-improvements'));
+              }}
+              className="flex items-center gap-3 w-full p-2.5 rounded-xl transition-all duration-200 text-xs font-bold text-amber-300 hover:bg-amber-500/15 hover:text-amber-200 hover:translate-x-1 border border-amber-500/30 bg-amber-500/10 group mt-2"
+              title="Ver las mejoras y novedades recientes para organizadores"
+            >
+              <Sparkles size={16} className="text-amber-400 group-hover:scale-110 transition-transform shrink-0 animate-pulse" />
+              <span className="flex-1 text-left truncate">Novedades</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 font-mono shrink-0">v{packageInfo.version}</span>
+            </button>
           </div>
         )}
 

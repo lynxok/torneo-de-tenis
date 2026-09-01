@@ -214,7 +214,19 @@ export interface Institution {
   free_tournaments_disputed?: number;
 }
 
-// New Interface for Sub-Competitions (Merged Categories)
+export type TournamentCompetitionFormat = 'tabla_general_byes' | 'zonas_playoffs' | 'eliminacion_directa';
+export type TournamentQualifiersMode = 'all' | 'top_2_per_group' | 'top_n';
+
+export interface TournamentRules {
+  competition_format?: TournamentCompetitionFormat;
+  min_guaranteed_matches?: number; // e.g. 1, 2, 3, 4
+  allow_byes?: boolean;
+  qualifiers_mode?: TournamentQualifiersMode;
+  qualifiers_count?: number;
+  is_commission_waived?: boolean;
+  [key: string]: any;
+}
+
 export interface TournamentCompetition {
     id: string;
     name: string; // e.g. "Primera + Segunda" or "Categoría A"
@@ -245,7 +257,11 @@ export interface Tournament {
   institutions?: { name: string };
   registration_price?: number;
   payment_link?: string;
-  rules?: any;
+  rules?: TournamentRules | any;
+  competition_format?: TournamentCompetitionFormat;
+  min_guaranteed_matches?: number;
+  allow_byes?: boolean;
+  qualifiers_mode?: TournamentQualifiersMode;
   groups?: TournamentGroup[];
   bracket?: any[];
   champion_name?: string;
