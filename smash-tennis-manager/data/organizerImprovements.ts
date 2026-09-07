@@ -6,7 +6,7 @@ export interface ImprovementItem {
   description: string;
   tag: string;
   tagColor?: string;
-  iconName: 'trophy' | 'layers' | 'check-circle' | 'printer' | 'image' | 'sparkles' | 'swords' | 'settings' | 'shield';
+  iconName: 'trophy' | 'layers' | 'check-circle' | 'printer' | 'image' | 'sparkles' | 'swords' | 'settings' | 'shield' | 'shopping-bag' | 'credit-card' | 'wallet';
 }
 
 export interface OrganizerRelease {
@@ -22,6 +22,58 @@ export interface OrganizerRelease {
 }
 
 export const ORGANIZER_RELEASES: OrganizerRelease[] = [
+  {
+    id: 'release_2026_w37_v1_7_0',
+    version: 'v1.7.0',
+    title: 'Novedades para Organizadores & Clubes',
+    subtitle: 'Tienda Oficial Pro-Shop, Checkout Express 0% comisión y Tablón de Partidos Abiertos',
+    badge: 'Nueva Versión v1.7.0',
+    releaseDate: '2026-09-07',
+    validityDays: 14,
+    targetRoles: ['admin', 'superadmin', 'professor', 'coordinator'],
+    items: [
+      {
+        id: 'feat_pro_shop_buffet',
+        title: 'Tienda Oficial & Buffet del Club (Pro-Shop)',
+        description: 'Monetizá los insumos de tu club: catálogo para vender tubos de pelotas, overgrips, alquiler de paletas/raquetas y refrigerios de buffet (Gatorade, agua, barritas) con carrito integrado.',
+        tag: 'Servicios del Club',
+        tagColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        iconName: 'shopping-bag'
+      },
+      {
+        id: 'feat_checkout_express_zero_fee',
+        title: 'Checkout Express Mercado Pago (0% Comisión)',
+        description: 'Recibí el 100% neto del dinero al instante. Los jugadores transfieren directamente a tu Alias o CVU de Mercado Pago / banco sin intermediarios ni retenciones del 4% al 7%.',
+        tag: '0% Comisión',
+        tagColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+        iconName: 'credit-card'
+      },
+      {
+        id: 'feat_club_alias_config',
+        title: 'Configuración de Alias / CVU por Cada Club',
+        description: 'Desde Administración > Instituciones tenés una pestaña exclusiva para registrar y validar el Alias, CVU y Titular de cuenta bancaria o Mercado Pago de cada sede.',
+        tag: 'Administración',
+        tagColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+        iconName: 'settings'
+      },
+      {
+        id: 'feat_tournament_mp_enrollment',
+        title: 'Cobro de Aranceles en Inscripción de Torneos',
+        description: 'Al inscribirse a torneos con arancel, el jugador tiene acceso directo en 1 clic para copiar tu Alias y abrir Mercado Pago para abonar antes de confirmar su lugar.',
+        tag: 'Torneos & Finanzas',
+        tagColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+        iconName: 'trophy'
+      },
+      {
+        id: 'feat_open_matches_matchmaking',
+        title: 'Tablón de Partidos Abiertos (Matchmaking)',
+        description: 'Aumentá la ocupación de canchas con partidos de Singles (2 cupos) y Dobles (4 cupos). Los jugadores ven los lugares libres, se unen con 1 clic y coordinan por WhatsApp.',
+        tag: 'Comunidad & Canchas',
+        tagColor: 'bg-blue-500/20 text-blue-300 border-blue-500/30',
+        iconName: 'swords'
+      }
+    ]
+  },
   {
     id: 'release_2026_w36_v1_6_5',
     version: 'v1.6.5',

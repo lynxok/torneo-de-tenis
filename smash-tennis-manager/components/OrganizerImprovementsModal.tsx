@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { 
-  Trophy, Layers, CheckCircle2, Printer, Sparkles, Swords, Settings, Shield, X, ArrowRight, Check
+  Trophy, Layers, CheckCircle2, Printer, Sparkles, Swords, Settings, Shield, X, ArrowRight, Check,
+  ShoppingBag, CreditCard, Wallet
 } from 'lucide-react';
 import { UserProfile } from '../types';
 import { 
@@ -74,6 +75,17 @@ export const OrganizerImprovementsModal: React.FC<OrganizerImprovementsModalProp
     }
   };
 
+  const handleGoToInstitutions = () => {
+    if (activeRelease) {
+      markReleaseAsSeen(activeRelease.id);
+    }
+    soundEffects.playBookingSuccess();
+    setIsOpen(false);
+    if (onNavigate) {
+      onNavigate('admin-institutions');
+    }
+  };
+
   if (!isOpen || !activeRelease) return null;
 
   const renderIcon = (iconName: ImprovementItem['iconName']) => {
@@ -85,6 +97,9 @@ export const OrganizerImprovementsModal: React.FC<OrganizerImprovementsModalProp
       case 'printer': return <Printer size={18} className="text-cyan-400" />;
       case 'shield': return <Shield size={18} className="text-green-400" />;
       case 'settings': return <Settings size={18} className="text-slate-400" />;
+      case 'shopping-bag': return <ShoppingBag size={18} className="text-emerald-400" />;
+      case 'credit-card': return <CreditCard size={18} className="text-sky-400" />;
+      case 'wallet': return <Wallet size={18} className="text-amber-400" />;
       default: return <Sparkles size={18} className="text-amber-400" />;
     }
   };
@@ -161,19 +176,26 @@ export const OrganizerImprovementsModal: React.FC<OrganizerImprovementsModalProp
         <div className="p-5 border-t border-white/10 bg-white/[0.02] relative z-10 flex flex-col sm:flex-row items-center justify-between gap-3">
           <div className="text-[11px] text-slate-400 flex items-center gap-1.5 self-start sm:self-auto">
             <Check size={14} className="text-emerald-400" />
-            <span>Disponible automáticamente en tu panel de torneos</span>
+            <span>Novedades activas en tu panel de control</span>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end flex-wrap sm:flex-nowrap">
             <button
               onClick={handleDismiss}
               className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl border border-white/10 text-slate-300 hover:text-white hover:bg-white/5 font-semibold text-xs transition-all"
             >
-              ¡Entendido, gracias!
+              ¡Entendido!
+            </button>
+            <button
+              onClick={handleGoToInstitutions}
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/25 transition-all"
+            >
+              <CreditCard size={14} />
+              <span>Configurar Alias MP</span>
             </button>
             <button
               onClick={handleGoToTournaments}
-              className="flex-1 sm:flex-none px-5 py-2.5 bg-gradient-to-r from-primary to-primary-hover text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-primary/25 hover:brightness-110 transition-all"
+              className="flex-1 sm:flex-none px-4 py-2.5 bg-gradient-to-r from-primary to-primary-hover text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg shadow-primary/25 hover:brightness-110 transition-all"
             >
               <span>Ver mis Torneos</span>
               <ArrowRight size={14} />
