@@ -34,6 +34,7 @@ import {
     Shield,
     Flame
 } from 'lucide-react';
+import { checkPlayerGenderEligibility } from '../utils/demographics';
 
 interface TournamentsMapProps {
     tournaments: Tournament[];
@@ -528,6 +529,8 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
             if (isSingle) {
                 const t = group.tournaments[0];
+                const tGenderElig = checkPlayerGenderEligibility(user, t);
+
                 popupHtml = `
                     <div class="p-4 bg-slate-900 text-white rounded-3xl max-w-[285px] border border-white/15 shadow-2xl">
                         <div class="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-white/10">
@@ -535,7 +538,9 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                                 ${t.tier.label}
                             </span>
                             ${t.isOpen 
-                                ? '<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">● Inscripción Abierta</span>' 
+                                ? (tGenderElig.isInformativeOnly
+                                    ? `<span class="text-[10px] font-bold ${tGenderElig.tournamentGenderLabel === 'Damas' ? 'text-pink-300 bg-pink-500/20 border-pink-500/30' : 'text-blue-300 bg-blue-500/20 border-blue-500/30'} px-2.5 py-0.5 rounded-full border">👁️ Exclusivo ${tGenderElig.tournamentGenderLabel}</span>`
+                                    : '<span class="text-[10px] font-bold text-emerald-400 bg-emerald-500/20 px-2.5 py-0.5 rounded-full border border-emerald-500/30">● Inscripción Abierta</span>')
                                 : '<span class="text-[10px] font-bold text-amber-300 bg-amber-500/20 px-2.5 py-0.5 rounded-full border border-amber-500/30">⚡ En Disputa</span>'}
                         </div>
                         <h4 class="font-extrabold text-sm text-white mb-1 leading-tight">${t.name}</h4>
@@ -549,15 +554,21 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
 
                         <div class="flex items-center justify-between text-xs font-semibold text-slate-400 py-2 border-t border-white/10 mb-3">
                             <span>Cat: <b class="text-white">${t.category}</b></span>
-                            <span class="text-primary font-bold">${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</span>
+                            <span class="text-primary font-bold">${tGenderElig.isInformativeOnly ? 'Modo Informativo' : (t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis')}</span>
                         </div>
 
                         <div class="flex gap-2">
-                            ${t.isOpen ? `
-                                <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white text-xs font-extrabold py-2 px-3 rounded-xl text-center transition-all shadow-md shadow-primary/25 cursor-pointer flex items-center justify-center gap-1">
-                                    <span>🎾 Inscribirme</span>
-                                </button>
-                            ` : `
+                            ${t.isOpen ? (
+                                tGenderElig.isInformativeOnly ? `
+                                    <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-2 px-3 rounded-xl text-center transition-all border border-white/10 shadow-md cursor-pointer flex items-center justify-center gap-1">
+                                        <span>👁️ Ver Torneo (${tGenderElig.tournamentGenderLabel})</span>
+                                    </button>
+                                ` : `
+                                    <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white text-xs font-extrabold py-2 px-3 rounded-xl text-center transition-all shadow-md shadow-primary/25 cursor-pointer flex items-center justify-center gap-1">
+                                        <span>🎾 Inscribirme</span>
+                                    </button>
+                                `
+                            ) : `
                                 <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="flex-1 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-2 px-3 rounded-xl text-center transition-all border border-white/10 shadow-md cursor-pointer flex items-center justify-center gap-1">
                                     <span>🏆 Ver Cuadros / Resultados</span>
                                 </button>
@@ -584,14 +595,18 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                         ${distanceStr ? `<div class="text-[11px] text-sky-400 font-bold mb-2 flex items-center gap-1">🧭 A ${distanceStr} de tu ubicación</div>` : ''}
 
                         <div class="space-y-2.5 max-h-[250px] overflow-y-auto pr-1 custom-scrollbar mb-3">
-                            ${group.tournaments.map((t) => `
+                            ${group.tournaments.map((t) => {
+                                const cGenderElig = checkPlayerGenderEligibility(user, t);
+                                return `
                                 <div class="p-3 bg-white/5 rounded-2xl border ${t.isOpen ? 'border-emerald-500/30' : 'border-white/10'} hover:border-primary/50 transition-all flex flex-col justify-between gap-2">
                                     <div class="flex items-center justify-between gap-1">
                                         <span class="px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider" style="background-color: ${t.tier.badgeColor}; color: ${t.tier.textColor}">
                                             ${t.tier.label}
                                         </span>
                                         ${t.isOpen 
-                                            ? '<span class="text-[9px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">● Abierto</span>' 
+                                            ? (cGenderElig.isInformativeOnly 
+                                                ? `<span class="text-[9px] font-bold ${cGenderElig.tournamentGenderLabel === 'Damas' ? 'text-pink-300 bg-pink-500/20 border-pink-500/30' : 'text-blue-300 bg-blue-500/20 border-blue-500/30'} px-2 py-0.5 rounded-full border">👁️ Informativo</span>`
+                                                : '<span class="text-[9px] font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/30">● Abierto</span>')
                                             : '<span class="text-[9px] font-bold text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded-full border border-amber-500/30">⚡ En Disputa</span>'}
                                     </div>
                                     
@@ -600,21 +615,28 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                                         <div class="flex items-center justify-between text-[10px] text-slate-300 font-semibold mt-1">
                                             <span>Cat: <b class="text-white">${t.category}</b></span>
                                             <span>📅 Inicio: <b class="text-white">${t.shortDate}</b></span>
-                                            <span class="text-primary font-bold">${t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis'}</span>
+                                            <span class="text-primary font-bold">${cGenderElig.isInformativeOnly ? 'Informativo' : (t.registration_price ? `$${t.registration_price.toLocaleString('es-AR')}` : 'Gratis')}</span>
                                         </div>
                                     </div>
 
-                                    ${t.isOpen ? `
-                                        <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white text-xs font-bold py-1.5 px-2.5 rounded-xl transition-all shadow-md shadow-primary/20 cursor-pointer">
-                                            🎾 Inscribirme
-                                        </button>
-                                    ` : `
+                                    ${t.isOpen ? (
+                                        cGenderElig.isInformativeOnly ? `
+                                            <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold py-1.5 px-2.5 rounded-xl transition-all border border-white/10 shadow-md cursor-pointer">
+                                                👁️ Ver Torneo (${cGenderElig.tournamentGenderLabel})
+                                            </button>
+                                        ` : `
+                                            <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-gradient-to-r from-primary to-primary-hover hover:opacity-90 text-white text-xs font-bold py-1.5 px-2.5 rounded-xl transition-all shadow-md shadow-primary/20 cursor-pointer">
+                                                🎾 Inscribirme
+                                            </button>
+                                        `
+                                    ) : `
                                         <button onclick="window.__handleSelectSmashTournament('${t.id}')" class="w-full bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold py-1.5 px-2.5 rounded-xl transition-all border border-white/10 shadow-md cursor-pointer">
                                             🏆 Ver Cuadros / Resultados
                                         </button>
                                     `}
                                 </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
                         </div>
 
                         <button onclick="window.__handleNavigateToVenue('${group.coords.lat}', '${group.coords.lng}', '${encodeURIComponent(group.clubName)}')" class="w-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold py-2 px-3 rounded-xl transition-all border border-white/10 flex items-center justify-center gap-1.5 cursor-pointer">

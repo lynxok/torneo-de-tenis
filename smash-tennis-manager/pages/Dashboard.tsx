@@ -31,11 +31,13 @@ import {
     UserCircle,
     X,
     Loader2,
-    Camera
+    Camera,
+    Eye
 } from 'lucide-react';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { StoriesBar } from '../components/stories/StoriesBar';
 import { formatMatchScore } from '../utils/formatters';
+import { checkPlayerGenderEligibility } from '../utils/demographics';
 
 
 interface DashboardProps {
@@ -871,28 +873,57 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                     No hay torneos abiertos compatibles con tu perfil en este momento.
                                 </div>
                             ) : (
-                                compatibleTournaments.map(t => (
-                                    <div key={t.id} className="flex items-center justify-between bg-card border border-white/10 p-4 rounded-2xl hover:border-green-500/30 transition-all group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="w-12 h-12 bg-green-900/20 text-green-400 rounded-xl flex items-center justify-center font-bold text-lg border border-green-500/20">
-                                                Go
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-white group-hover:text-green-400 transition-colors">{t.name}</h4>
-                                                <div className="flex items-center gap-3 text-xs text-muted mt-0.5">
-                                                    <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(t.start_date).toLocaleDateString()}</span>
-                                                    <span className="flex items-center gap-1"><DollarSign size={12} /> {t.registration_price || 'Consultar'}</span>
+                                compatibleTournaments.map(t => {
+                                    const genderElig = checkPlayerGenderEligibility(user, t);
+
+                                    return (
+                                        <div key={t.id} className="flex items-center justify-between bg-card border border-white/10 p-4 rounded-2xl hover:border-green-500/30 transition-all group">
+                                            <div className="flex items-center gap-4">
+                                                <div className={`w-12 h-12 rounded-xl flex items-center justify-center font-bold text-lg border ${
+                                                    genderElig.isInformativeOnly 
+                                                        ? (genderElig.tournamentGenderLabel === 'Damas' ? 'bg-pink-900/20 text-pink-400 border-pink-500/20' : 'bg-blue-900/20 text-blue-400 border-blue-500/20')
+                                                        : 'bg-green-900/20 text-green-400 border-green-500/20'
+                                                }`}>
+                                                    {genderElig.isInformativeOnly ? <Eye size={20} /> : 'Go'}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center gap-2 flex-wrap">
+                                                        <h4 className="font-bold text-white group-hover:text-green-400 transition-colors">{t.name}</h4>
+                                                        {genderElig.isInformativeOnly && (
+                                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                                                genderElig.tournamentGenderLabel === 'Damas' 
+                                                                    ? 'bg-pink-500/20 text-pink-300 border-pink-500/30' 
+                                                                    : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                                            }`}>
+                                                                {genderElig.badgeLabel} • Informativo
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-3 text-xs text-muted mt-0.5">
+                                                        <span className="flex items-center gap-1"><Calendar size={12} /> {new Date(t.start_date).toLocaleDateString()}</span>
+                                                        <span className="flex items-center gap-1"><DollarSign size={12} /> {genderElig.isInformativeOnly ? 'Modo Informativo' : (t.registration_price ? `$${t.registration_price}` : 'Consultar')}</span>
+                                                    </div>
                                                 </div>
                                             </div>
+                                            {genderElig.isInformativeOnly ? (
+                                                <button
+                                                    onClick={() => onNavigate('tournament-detail', t.id)}
+                                                    className="px-4 py-2 bg-white/5 hover:bg-white/15 text-slate-300 hover:text-white text-xs font-bold rounded-xl transition-all border border-white/10 flex items-center gap-1.5 shadow"
+                                                >
+                                                    <Eye size={13} className="text-slate-400" />
+                                                    <span>Ver Torneo</span>
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={() => onNavigate('tournament-detail', t.id)}
+                                                    className="px-4 py-2 bg-white/5 hover:bg-green-600 hover:text-white text-green-400 text-xs font-bold rounded-xl transition-all border border-white/10 group-hover:border-green-600 shadow-lg"
+                                                >
+                                                    Inscribirse
+                                                </button>
+                                            )}
                                         </div>
-                                        <button
-                                            onClick={() => onNavigate('tournament-detail', t.id)}
-                                            className="px-4 py-2 bg-white/5 hover:bg-green-600 hover:text-white text-green-400 text-xs font-bold rounded-xl transition-all border border-white/10 group-hover:border-green-600 shadow-lg"
-                                        >
-                                            Inscribirse
-                                        </button>
-                                    </div>
-                                ))
+                                    );
+                                })
                             )}
                         </div>
                     </div>

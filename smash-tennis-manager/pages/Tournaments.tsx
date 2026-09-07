@@ -3,10 +3,11 @@ import { Tournament, UserProfile, Institution, TournamentSaga } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List, Tv } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List, Tv, Eye } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, TIER_META, TIER_ORDER, getEffectiveTournamentTier, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
 import { TournamentsMap } from '../components/TournamentsMap';
+import { checkPlayerGenderEligibility } from '../utils/demographics';
 
 interface TournamentsProps {
     user: UserProfile;
@@ -125,6 +126,13 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             return;
         }
 
+        // Gender check: if tournament is informative-only for the player's gender, navigate directly
+        const genderElig = checkPlayerGenderEligibility(user, t);
+        if (genderElig.isInformativeOnly) {
+            onNavigate && onNavigate('tournament-detail', t.id);
+            return;
+        }
+
         // Updated Logic for Multi-Competition
         let isCategoryCompatible = false;
         let isHigherCategory = false;
@@ -143,7 +151,8 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             });
 
             if (matchingComps.length === 0) {
-                setWarningTournament(t);
+                // If there are competitions but none match user gender, open in informative mode
+                onNavigate && onNavigate('tournament-detail', t.id);
                 return;
             }
 
@@ -509,6 +518,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                             (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
                                         );
                                         const hasCompetitions = t.competitions && t.competitions.length > 0;
+                                        const genderElig = checkPlayerGenderEligibility(user, t);
 
                                         return (
                                             <Card key={t.id} onClick={() => handleTournamentClick(t)} className="group cursor-pointer hover:border-primary/50 transition-all flex flex-col justify-between">
@@ -518,6 +528,17 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                             <Trophy size={24} />
                                                         </div>
                                                         <div className="flex items-center gap-1.5 flex-wrap justify-end">
+                                                            {/* Gender Scope Badge */}
+                                                            <span className={`px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border flex items-center gap-1 ${
+                                                                genderElig.tournamentGenderLabel === 'Damas'
+                                                                    ? 'bg-pink-500/20 text-pink-300 border-pink-500/30'
+                                                                    : genderElig.tournamentGenderLabel === 'Mixto'
+                                                                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                                                        : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                                            }`}>
+                                                                {genderElig.badgeLabel}
+                                                            </span>
+
                                                             {/* Doubles / Singles Badge */}
                                                             {t.type === 'doubles' ? (
                                                                 <span className="px-2 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
@@ -533,6 +554,14 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                             {isRegClosed ? (
                                                                 <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
                                                                     🔴 Inscripción Cerrada
+                                                                </span>
+                                                            ) : genderElig.isInformativeOnly ? (
+                                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border flex items-center gap-1 ${
+                                                                    genderElig.tournamentGenderLabel === 'Damas'
+                                                                        ? 'bg-pink-500/20 text-pink-300 border-pink-500/30'
+                                                                        : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                                                }`} title="Torneo exclusivo para la otra rama. Puedes acceder en modo informativo.">
+                                                                    <Eye size={11} /> Exclusivo {genderElig.tournamentGenderLabel} (Informativo)
                                                                 </span>
                                                             ) : (
                                                                 <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1">
@@ -668,9 +697,15 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                         <span className="text-muted">Fecha Inicio</span>
                                                         <span className="font-bold text-white">{new Date(t.start_date + 'T00:00:00').toLocaleDateString()}</span>
                                                     </div>
-                                                    <div className="flex justify-between">
+                                                    <div className="flex justify-between items-center">
                                                         <span className="text-muted">Inscripción</span>
-                                                        <span className="font-bold text-primary">${t.registration_price}</span>
+                                                        {genderElig.isInformativeOnly ? (
+                                                            <span className="font-bold text-slate-300 text-xs flex items-center gap-1 bg-white/5 px-2 py-0.5 rounded-md border border-white/10">
+                                                                <Eye size={12} className="text-primary" /> Modo Informativo
+                                                            </span>
+                                                        ) : (
+                                                            <span className="font-bold text-primary">${t.registration_price}</span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </Card>

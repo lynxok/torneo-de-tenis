@@ -8,7 +8,7 @@ import {
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
-    Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink
+    Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink, Eye
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
@@ -20,6 +20,7 @@ import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { ShareGraphicModal } from '../components/ShareGraphicModal';
 import { soundEffects } from '../services/soundEffects';
 import { canEditTournament } from './Tournaments';
+import { checkPlayerGenderEligibility } from '../utils/demographics';
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -279,19 +280,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
 
         // Check Gender Eligibility
-        const tGender = (tournament.gender || 'Caballeros').toLowerCase();
-        const uGender = (user.gender || 'masculino').toLowerCase();
-        const isUserFemale = uGender === 'femenino' || uGender === 'f' || uGender === 'damas';
-        const isTourneyFemale = tGender === 'damas' || tGender === 'f' || tGender === 'femenino';
-        const isTourneyMale = tGender === 'caballeros' || tGender === 'm' || tGender === 'masculino';
-
-        if (isTourneyFemale && !isUserFemale) {
-            alert('🚫 Este torneo es exclusivo para la categoría Damas (Femenino).');
-            return;
-        }
-
-        if (isTourneyMale && isUserFemale) {
-            alert('🚫 Este torneo es exclusivo para la categoría Caballeros (Masculino).');
+        const genderElig = checkPlayerGenderEligibility(user, tournament);
+        if (genderElig.isInformativeOnly) {
+            alert(genderElig.reason || `🚫 Este torneo es exclusivo para la categoría ${genderElig.tournamentGenderLabel}. Estás en modo informativo.`);
             return;
         }
 
@@ -1475,6 +1466,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const tierInfo = getTournamentTier(players.length);
     const finances = calculateTournamentFinances(players.length, effectivePrice, undefined, isCommissionWaived);
+    const genderElig = checkPlayerGenderEligibility(user, tournament);
 
     return (
         <div className="space-y-6 animate-fade-up">
@@ -1496,6 +1488,20 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             <div className="flex flex-wrap items-center gap-2 mb-2">
                                 <span className="bg-primary text-dark font-bold px-2.5 py-1 rounded-lg text-xs uppercase shadow-sm">{tournament.category}</span>
                                 <span className="bg-white/10 text-white font-bold px-2.5 py-1 rounded-lg text-xs uppercase backdrop-blur-sm border border-white/10">{tournament.type}</span>
+                                <span className={`px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-wider border shadow-sm flex items-center gap-1 ${
+                                    genderElig.tournamentGenderLabel === 'Damas'
+                                        ? 'bg-pink-500/20 text-pink-300 border-pink-500/30'
+                                        : genderElig.tournamentGenderLabel === 'Mixto'
+                                            ? 'bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                            : 'bg-blue-500/20 text-blue-300 border-blue-500/30'
+                                }`}>
+                                    {genderElig.badgeLabel}
+                                </span>
+                                {genderElig.isInformativeOnly && (
+                                    <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
+                                        <Eye size={12} /> Modo Informativo
+                                    </span>
+                                )}
                                 {competitionFormat === 'tabla_general_byes' ? (
                                     <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2.5 py-1 rounded-lg text-xs font-bold flex items-center gap-1 shadow-sm">
                                         🏆 Tabla General + BYEs
@@ -1602,7 +1608,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 <MessageCircle size={16} /> WhatsApp
                             </button>
 
-                            {tournament.type === 'doubles' && !isEnrolled && !isRegClosed && (
+                            {tournament.type === 'doubles' && !isEnrolled && !isRegClosed && !genderElig.isInformativeOnly && (
                                 <button
                                     onClick={() => {
                                         soundEffects.playScoreBeep();
@@ -1622,7 +1628,24 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </button>
                             )}
 
-                            {!isEnrolled ? (
+                            {genderElig.isInformativeOnly ? (
+                                <div className={`px-4 py-2.5 rounded-xl border text-xs font-medium flex items-center gap-2.5 shadow-sm ${
+                                    genderElig.tournamentGenderLabel === 'Damas'
+                                        ? 'bg-pink-500/15 border-pink-500/30 text-pink-200'
+                                        : 'bg-blue-500/15 border-blue-500/30 text-blue-200'
+                                }`}>
+                                    <Eye size={16} className={genderElig.tournamentGenderLabel === 'Damas' ? 'text-pink-400' : 'text-blue-400'} />
+                                    <div>
+                                        <div className="font-bold flex items-center gap-1.5">
+                                            <span>Torneo Exclusivo {genderElig.tournamentGenderLabel}</span>
+                                            <span className="px-1.5 py-0.5 bg-white/10 rounded text-[9px] uppercase font-black tracking-wider">Modo Informativo</span>
+                                        </div>
+                                        <div className="text-[11px] opacity-80 font-normal">
+                                            Visualización activa · Inscripción no habilitada para tu género
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : !isEnrolled ? (
                                 !isRegClosed ? (
                                     <button onClick={handleEnrollClick} disabled={isEnrolling} className="px-6 py-3 bg-primary hover:bg-primary-hover text-white font-bold rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center gap-2 text-sm">
                                         {isEnrolling ? <Loader2 className="animate-spin" size={18} /> : <UserPlus size={18} />}
@@ -1640,6 +1663,38 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </div>
                 </div>
             </div>
+
+            {/* ── Gender Informative Mode Banner ────────────────────────────────── */}
+            {genderElig.isInformativeOnly && (
+                <div className={`border rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-md ${
+                    genderElig.tournamentGenderLabel === 'Damas'
+                        ? 'bg-gradient-to-r from-pink-950/40 via-purple-950/30 to-slate-900 border-pink-500/30 text-pink-200'
+                        : 'bg-gradient-to-r from-blue-950/40 via-slate-900 to-slate-900 border-blue-500/30 text-blue-200'
+                }`}>
+                    <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-lg border ${
+                            genderElig.tournamentGenderLabel === 'Damas'
+                                ? 'bg-pink-500/20 border-pink-500/30'
+                                : 'bg-blue-500/20 border-blue-500/30'
+                        }`}>
+                            <Eye size={20} className={genderElig.tournamentGenderLabel === 'Damas' ? 'text-pink-300' : 'text-blue-300'} />
+                        </div>
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs font-black uppercase tracking-wider">Modo Informativo</span>
+                                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                    genderElig.tournamentGenderLabel === 'Damas' ? 'bg-pink-500/20 text-pink-300 border-pink-500/40' : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                                }`}>
+                                    {genderElig.badgeLabel}
+                                </span>
+                            </div>
+                            <p className="text-xs text-slate-300 mt-0.5">
+                                Estás visualizando los cuadros, zonas y marcadores de este torneo exclusivo de {genderElig.tournamentGenderLabel}. Las inscripciones de jugadores están reservadas para dicha rama.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* ── Masters Eligibility Banner ────────────────────────────────────── */}
             {tournament.tier_applied === 'masters' && (() => {
