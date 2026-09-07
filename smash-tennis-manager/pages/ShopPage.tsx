@@ -6,9 +6,10 @@ import { useToast } from '../components/ui/Toast';
 import { 
     ShoppingBag, Plus, Minus, Trash2, CheckCircle2, CreditCard, Copy, 
     ExternalLink, X, Building, MessageCircle, Clock, Package, Sparkles,
-    Utensils, Droplets, Filter, Check, ChevronRight, Phone, User
+    Utensils, Droplets, Filter, Check, ChevronRight, Phone, User, QrCode, MapPin, Share2
 } from 'lucide-react';
 import { formatPlayerName } from '../utils/formatters';
+import { CourtQRModal } from '../components/CourtQRModal';
 
 interface ShopPageProps {
     user: UserProfile;
@@ -31,9 +32,15 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
         }
     }, [propInstitutions]);
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const courtFromUrl = urlParams.get('court') || urlParams.get('cancha');
+    const clubFromUrl = urlParams.get('club') || urlParams.get('institutionId');
+
     const [selectedInstId, setSelectedInstId] = useState<string>(() => {
-        return user.institution_id || (propInstitutions && propInstitutions[0]?.id) || 'default';
+        return clubFromUrl || user.institution_id || (propInstitutions && propInstitutions[0]?.id) || 'default';
     });
+    const [detectedCourt, setDetectedCourt] = useState<string | null>(courtFromUrl);
+    const [showCourtQRModal, setShowCourtQRModal] = useState(false);
     const [activeCategory, setActiveCategory] = useState<string>('all');
     const [products, setProducts] = useState<ClubProduct[]>([]);
     const [loading, setLoading] = useState(true);
@@ -47,7 +54,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
     // Checkout Form
     const [customerName, setCustomerName] = useState(() => formatPlayerName(user.name, user.lastname));
     const [customerPhone, setCustomerPhone] = useState(() => user.phone || '');
-    const [customerNotes, setCustomerNotes] = useState('');
+    const [customerNotes, setCustomerNotes] = useState(() => courtFromUrl ? `Cancha ${courtFromUrl}` : '');
     const [submittingOrder, setSubmittingOrder] = useState(false);
     const [transferInitiated, setTransferInitiated] = useState(false);
 
@@ -284,20 +291,57 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                         </select>
                     </div>
 
-                    {/* Admin Dashboard Button */}
+                    {/* Admin Dashboard & Court QR Buttons */}
                     {isClubAdmin && (
-                        <button
-                            onClick={() => {
-                                setShowAdminModal(true);
-                                loadOrders();
-                            }}
-                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-2xl border border-white/10 transition-all shadow-md flex items-center gap-2"
-                        >
-                            <Package size={16} className="text-primary" /> Gestión de Tienda
-                        </button>
+                        <>
+                            <button
+                                onClick={() => {
+                                    setShowAdminModal(true);
+                                    loadOrders();
+                                }}
+                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold rounded-2xl border border-white/10 transition-all shadow-md flex items-center gap-2"
+                            >
+                                <Package size={16} className="text-primary" /> Gestión de Tienda
+                            </button>
+                            <button
+                                onClick={() => setShowCourtQRModal(true)}
+                                className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 text-xs font-bold rounded-2xl border border-emerald-500/30 transition-all shadow-md flex items-center gap-2"
+                                title="Generar carteles QR para imprimir en A4 y colocar en las canchas"
+                            >
+                                <QrCode size={16} /> Carteles QR Canchas
+                            </button>
+                        </>
                     )}
                 </div>
             </div>
+
+            {/* Punto 3: Banner de Pedido Directo a Cancha si se escanea el QR */}
+            {detectedCourt && (
+                <div className="p-4 bg-gradient-to-r from-emerald-950/80 via-slate-900 to-emerald-950/80 border-2 border-emerald-500/40 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl animate-in fade-in">
+                    <div className="flex items-center gap-3">
+                        <div className="px-3 py-2 bg-emerald-500 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md shadow-emerald-500/20">
+                            <MapPin size={16} /> CANCHA {detectedCourt}
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                ¡Pedí al Buffet sin salir de la Cancha {detectedCourt}! 🎾🥤
+                            </h4>
+                            <p className="text-xs text-emerald-300">
+                                Tus bebidas, pelotas o comida se entregarán directamente en tu cancha en <strong className="text-white">{activeInstitution?.name}</strong>.
+                            </p>
+                        </div>
+                    </div>
+                    <button
+                        onClick={() => {
+                            setDetectedCourt(null);
+                            setCustomerNotes('');
+                        }}
+                        className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                    >
+                        Cambiar cancha
+                    </button>
+                </div>
+            )}
 
             {/* Mercado Pago 0% Fee Promo Card */}
             <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-lg">
@@ -704,61 +748,115 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
             )}
 
             {/* Order Confirmed Success Modal */}
-            {orderConfirmed && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
-                    <div className="bg-card border border-emerald-500/30 rounded-3xl w-full max-w-md p-6 shadow-2xl text-center space-y-5">
-                        <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
-                            <CheckCircle2 size={36} />
-                        </div>
+            {orderConfirmed && (() => {
+                const generateReceiptText = () => {
+                    const itemsText = (orderConfirmed.items || []).map(it => `• ${it.quantity}x ${it.product_name} (${formatCurrency(it.price * it.quantity)})`).join('\n');
+                    const notesLine = orderConfirmed.customer_notes ? `\n📍 *Entrega / Cancha:* ${orderConfirmed.customer_notes}` : '';
+                    return `🎾 *Comprobante de Pedido al Buffet - Smash Tenis*\n` +
+                        `📋 *Orden:* #${orderConfirmed.id.slice(-6).toUpperCase()}\n` +
+                        `🏢 *Club:* ${orderConfirmed.institution_name}\n` +
+                        `👤 *Cliente:* ${orderConfirmed.customer_name} (${orderConfirmed.customer_phone})` +
+                        notesLine + `\n\n` +
+                        `🛒 *Detalle del Pedido:*\n${itemsText}\n\n` +
+                        `💰 *Total Abonado:* ${formatCurrency(orderConfirmed.total_amount)}\n` +
+                        `⚡ *Pago:* Transferencia Mercado Pago / CVU\n\n` +
+                        `Adjunto el comprobante de transferencia bancaria. ¡Muchas gracias!`;
+                };
 
-                        <div className="space-y-1">
-                            <h3 className="text-xl font-black text-white">¡Pedido Registrado con Éxito!</h3>
-                            <p className="text-xs text-slate-300">
-                                Orden <strong className="font-mono text-emerald-400">#{orderConfirmed.id.slice(-6).toUpperCase()}</strong>
-                            </p>
-                        </div>
+                let clubWaPhone = (activeInstitution?.phone || '').replace(/[^0-9]/g, '');
+                if (clubWaPhone.startsWith('0')) clubWaPhone = clubWaPhone.substring(1);
+                if (clubWaPhone.length === 10) clubWaPhone = '549' + clubWaPhone;
 
-                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-left space-y-2 text-xs">
-                            <div className="flex justify-between">
-                                <span className="text-muted">Total abonado:</span>
-                                <span className="font-mono font-bold text-white">{formatCurrency(orderConfirmed.total_amount)}</span>
+                return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
+                        <div className="bg-card border border-emerald-500/30 rounded-3xl w-full max-w-md p-6 shadow-2xl text-center space-y-5">
+                            <div className="w-16 h-16 rounded-full bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 flex items-center justify-center mx-auto">
+                                <CheckCircle2 size={36} />
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-muted">Retiro en:</span>
-                                <span className="font-bold text-white">{orderConfirmed.institution_name}</span>
+
+                            <div className="space-y-1">
+                                <h3 className="text-xl font-black text-white">¡Pedido Registrado con Éxito!</h3>
+                                <p className="text-xs text-slate-300">
+                                    Orden <strong className="font-mono text-emerald-400">#{orderConfirmed.id.slice(-6).toUpperCase()}</strong>
+                                </p>
                             </div>
-                            {orderConfirmed.customer_notes && (
-                                <div className="text-[11px] text-slate-400 italic pt-1 border-t border-white/5">
-                                    "{orderConfirmed.customer_notes}"
+
+                            <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-left space-y-2 text-xs">
+                                <div className="flex justify-between">
+                                    <span className="text-muted">Total abonado:</span>
+                                    <span className="font-mono font-bold text-white">{formatCurrency(orderConfirmed.total_amount)}</span>
                                 </div>
-                            )}
-                        </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted">Sede / Club:</span>
+                                    <span className="font-bold text-white">{orderConfirmed.institution_name}</span>
+                                </div>
+                                {orderConfirmed.customer_notes && (
+                                    <div className="flex justify-between pt-1 border-t border-white/5 text-emerald-400 font-bold">
+                                        <span>Entrega:</span>
+                                        <span>{orderConfirmed.customer_notes}</span>
+                                    </div>
+                                )}
 
-                        {/* WhatsApp Receipt Button */}
-                        {activeInstitution?.phone && (
+                                {/* Punto 2: Desglose detallado de ítems */}
+                                <div className="space-y-1 pt-2 border-t border-white/5">
+                                    <span className="text-[10px] text-muted uppercase font-bold block">Productos:</span>
+                                    <div className="space-y-1 max-h-28 overflow-y-auto pr-1">
+                                        {orderConfirmed.items?.map((it, idx) => (
+                                            <div key={idx} className="flex justify-between text-slate-300 text-[11px]">
+                                                <span>• {it.quantity}x {it.product_name}</span>
+                                                <span className="font-mono text-white">{formatCurrency(it.price * it.quantity)}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* WhatsApp Receipt Buttons (Punto 2) */}
+                            <div className="space-y-2">
+                                {clubWaPhone ? (
+                                    <button
+                                        onClick={() => {
+                                            const msg = generateReceiptText();
+                                            window.open(`https://wa.me/${clubWaPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                                        }}
+                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-wider"
+                                    >
+                                        <MessageCircle size={16} /> Enviar Comprobante al Buffet por WhatsApp
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={() => {
+                                            const msg = generateReceiptText();
+                                            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+                                        }}
+                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/20 uppercase tracking-wider"
+                                    >
+                                        <MessageCircle size={16} /> Compartir Comprobante por WhatsApp
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        const msg = generateReceiptText();
+                                        navigator.clipboard.writeText(msg);
+                                        addToast("¡Detalle del pedido copiado al portapapeles!", "success");
+                                    }}
+                                    className="w-full py-2 bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-1.5"
+                                >
+                                    <Copy size={13} /> Copiar Resumen del Pedido
+                                </button>
+                            </div>
+
                             <button
-                                onClick={() => {
-                                    let cleanPhone = (activeInstitution.phone || '').replace(/[^0-9]/g, '');
-                                    if (cleanPhone.startsWith('0')) cleanPhone = cleanPhone.substring(1);
-                                    if (cleanPhone.length === 10) cleanPhone = '549' + cleanPhone;
-                                    const msg = `¡Hola! Acabo de realizar el pedido #${orderConfirmed.id.slice(-6).toUpperCase()} por ${formatCurrency(orderConfirmed.total_amount)} en la tienda de ${orderConfirmed.institution_name}. Adjunto mi comprobante de transferencia.`;
-                                    window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
-                                }}
-                                className="w-full py-3 bg-green-600 hover:bg-green-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-green-600/20"
+                                onClick={() => setOrderConfirmed(null)}
+                                className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-colors"
                             >
-                                <MessageCircle size={16} /> Enviar Comprobante por WhatsApp al Club
+                                Cerrar
                             </button>
-                        )}
-
-                        <button
-                            onClick={() => setOrderConfirmed(null)}
-                            className="w-full py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-colors"
-                        >
-                            Cerrar
-                        </button>
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
 
             {/* Admin Management Modal */}
             {showAdminModal && (
@@ -1031,6 +1129,15 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Punto 3: Modal de Carteles QR para Canchas */}
+            {activeInstitution && (
+                <CourtQRModal
+                    institution={activeInstitution}
+                    isOpen={showCourtQRModal}
+                    onClose={() => setShowCourtQRModal(false)}
+                />
             )}
         </div>
     );

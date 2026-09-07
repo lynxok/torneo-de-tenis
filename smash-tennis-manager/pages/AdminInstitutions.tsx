@@ -12,6 +12,7 @@ import {
     Tv, Copy, ExternalLink, Share2, Check, MessageSquare, QrCode, CreditCard
 } from 'lucide-react';
 import { CATEGORY_EQUIVALENCES } from '../utils/categories';
+import { CourtQRModal } from '../components/CourtQRModal';
 
 interface AdminInstitutionsProps {
     user?: UserProfile;
@@ -29,6 +30,7 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
   const [confirmName, setConfirmName] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
   const [copiedClubId, setCopiedClubId] = useState<string | null>(null);
+  const [qrModalInst, setQrModalInst] = useState<Institution | null>(null);
 
   useEffect(() => {
     if (user) {
@@ -428,6 +430,19 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                                     <span>Copiar Link TV Buffet</span>
                                 </>
                             )}
+                        </button>
+
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                setQrModalInst(inst);
+                            }}
+                            className="bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                            title="Generar e imprimir carteles QR para las canchas de este club"
+                        >
+                            <QrCode size={14} className="text-emerald-400" />
+                            <span>QR Canchas</span>
                         </button>
 
                         <button
@@ -1106,6 +1121,15 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                 </div>
             </div>
         </div>
+      )}
+
+      {/* Court QR Posters Modal */}
+      {qrModalInst && (
+        <CourtQRModal
+          institution={qrModalInst}
+          isOpen={!!qrModalInst}
+          onClose={() => setQrModalInst(null)}
+        />
       )}
     </div>
   );

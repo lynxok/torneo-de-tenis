@@ -10,8 +10,9 @@ import {
     Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
     ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, 
     Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning, Users, Check, Flame,
-    User
+    User, Copy
 } from 'lucide-react';
+import { SplitBillModal } from '../components/SplitBillModal';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   if (user.role === 'admin' || user.role === 'superadmin' || user.role === 'professor') {
@@ -465,6 +466,7 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [selectedClubIdForBooking, setSelectedClubIdForBooking] = useState<string | undefined>(undefined);
   const [bookingToReschedule, setBookingToReschedule] = useState<Booking | null>(null);
+  const [splitBillBooking, setSplitBillBooking] = useState<Booking | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -709,6 +711,20 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
                                         </div>
                                     )}
 
+                                    {/* Punto 4: Botón de Split Bill en cada turno activo */}
+                                    {!isCancelled && (booking.total_price > 0 || (booking as any).price > 0) && (
+                                        <div className="mt-2.5 pt-2 border-t border-white/5">
+                                            <button
+                                                type="button"
+                                                onClick={() => setSplitBillBooking(booking)}
+                                                className="w-full py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                                title="Dividir el costo del turno entre 2 o 4 jugadores y compartir por WhatsApp"
+                                            >
+                                                <Users size={13} /> Dividir Pago (Split Bill)
+                                            </button>
+                                        </div>
+                                    )}
+
                                     {/* Action Buttons */}
                                     <div className="mt-3 pt-3 border-t border-white/10 flex gap-2">
                                         {!isCancelled ? (
@@ -942,6 +958,21 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
             }}
           />
       )}
+
+      {/* Punto 4: Modal de Split Bill para Turnos Activos */}
+      {splitBillBooking && (
+          <SplitBillModal
+              isOpen={!!splitBillBooking}
+              onClose={() => setSplitBillBooking(null)}
+              totalPrice={splitBillBooking.total_price || (splitBillBooking as any).price || 0}
+              courtName={splitBillBooking.court_name}
+              clubName={splitBillBooking.institutions?.name || 'Club'}
+              clubAlias={splitBillBooking.institutions?.alias_mp || 'parqueespana.tenis'}
+              date={formatFriendlyDate(splitBillBooking.date)}
+              timeSlot={`${splitBillBooking.start_time} - ${splitBillBooking.end_time}`}
+              initialPlayersCount={splitBillBooking.match_type === 'doubles' || (splitBillBooking.participants && splitBillBooking.participants.length > 2) ? 4 : 2}
+          />
+      )}
     </div>
   );
 };
@@ -975,6 +1006,8 @@ const PlayerNewBookingModal = ({
     // Payment Flow State
     const [paymentStep, setPaymentStep] = useState<'select' | 'processing' | 'success'>('select');
     const [paymentMethod, setPaymentMethod] = useState<'mp' | 'cash'>('mp');
+    const [successSplitCount, setSuccessSplitCount] = useState<number>(2);
+    const [copiedSuccessAlias, setCopiedSuccessAlias] = useState(false);
 
     const isReschedule = !!existingBooking;
 
@@ -1195,7 +1228,7 @@ const PlayerNewBookingModal = ({
                 }
                 
                 setPaymentStep('success');
-                setTimeout(() => onSuccess(), 1500);
+                setSuccessSplitCount(matchType === 'doubles' || activeParticipants.length > 2 ? 4 : 2);
 
             } catch (e: any) {
                 addToast('Error al procesar: ' + e.message, 'error');
@@ -1218,7 +1251,14 @@ const PlayerNewBookingModal = ({
                             {isReschedule ? 'Selecciona la nueva fecha, modalidad y horario' : 'Selecciona club, modalidad, jugadores y horario'}
                         </p>
                     </div>
-                    {!isSubmitting && <button onClick={onClose} className="text-muted hover:text-white"><X size={20}/></button>}
+                    {!isSubmitting && (
+                        <button 
+                            onClick={paymentStep === 'success' ? onSuccess : onClose} 
+                            className="text-muted hover:text-white"
+                        >
+                            <X size={20}/>
+                        </button>
+                    )}
                 </div>
 
                 <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
@@ -1234,20 +1274,122 @@ const PlayerNewBookingModal = ({
                         </div>
                     )}
 
-                    {paymentStep === 'success' && (
-                        <div className="flex flex-col items-center justify-center py-10 space-y-4 animate-in fade-in zoom-in">
-                            <div className="w-16 h-16 bg-green-500 rounded-full flex items-center justify-center shadow-lg shadow-green-500/20">
-                                <CheckCircle2 className="text-white" size={32} />
+                    {/* Punto 4: PAYMENT SUCCESS VIEW WITH SPLIT BILL */}
+                    {paymentStep === 'success' && (() => {
+                        const total = calculateTotal();
+                        const pricePerPerson = Math.round(total / successSplitCount);
+                        const selectedInstObj = institutions.find(i => i.id === selectedInstId);
+                        const clubAlias = selectedInstObj?.alias_mp || 'parqueespana.tenis';
+
+                        const handleShareSuccessWhatsApp = () => {
+                            const msg = `🎾 *División de Cancha - Smash Tenis*\n` +
+                                `📍 Club: *${selectedInstObj?.name || 'Club de Tenis'}*\n` +
+                                `🏟️ Cancha: *${selectedSlot?.court_name || 'Cancha'}*\n` +
+                                `📅 Fecha: *${formatFriendlyDate(date)}* a las *${selectedSlot?.start_time} hs*\n\n` +
+                                `💰 *Costo Total de Cancha:* $${total}\n` +
+                                `👥 *División entre:* ${successSplitCount} jugadores (${successSplitCount === 2 ? 'Singles' : 'Dobles'})\n` +
+                                `👉 *Tu parte a transferir es:* *$${pricePerPerson}*\n\n` +
+                                `📲 *Alias Mercado Pago / Banco:* \n` +
+                                `*${clubAlias}*\n\n` +
+                                `¡Nos vemos en la cancha para jugar! 🎾🔥`;
+                            window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+                        };
+
+                        return (
+                            <div className="flex flex-col items-center justify-center py-4 space-y-4 animate-in fade-in zoom-in">
+                                <div className="w-14 h-14 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg shadow-emerald-500/20">
+                                    <CheckCircle2 className="text-white" size={30} />
+                                </div>
+                                <div className="text-center space-y-0.5">
+                                    <h3 className="font-bold text-white text-xl">¡Reserva Confirmada!</h3>
+                                    <p className="text-emerald-400 text-xs font-bold">Tu cancha ha sido reservada con éxito.</p>
+                                </div>
+
+                                {/* Split Bill Card */}
+                                <div className="w-full bg-sidebar border border-white/10 rounded-2xl p-4 space-y-3 text-left">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-xs font-black text-white flex items-center gap-1.5 uppercase tracking-wider">
+                                            <Users size={14} className="text-emerald-400" /> Dividir Pago (Split Bill)
+                                        </span>
+                                        <span className="text-xs font-bold text-emerald-400 font-mono">
+                                            Total: ${total}
+                                        </span>
+                                    </div>
+
+                                    {/* Toggle 2 vs 4 */}
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => setSuccessSplitCount(2)}
+                                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                                                successSplitCount === 2
+                                                    ? 'bg-primary/20 border-primary text-white shadow-md'
+                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                            }`}
+                                        >
+                                            2 Jugadores (Singles)
+                                            <span className="block text-[10px] font-normal opacity-80">${Math.round(total / 2)} c/u</span>
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setSuccessSplitCount(4)}
+                                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                                                successSplitCount === 4
+                                                    ? 'bg-purple-500/20 border-purple-500 text-white shadow-md'
+                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                            }`}
+                                        >
+                                            4 Jugadores (Dobles)
+                                            <span className="block text-[10px] font-normal opacity-80">${Math.round(total / 4)} c/u</span>
+                                        </button>
+                                    </div>
+
+                                    {/* Per person display */}
+                                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+                                        <span className="text-[10px] uppercase font-bold text-slate-300 block">Cuota por persona</span>
+                                        <span className="text-2xl font-black text-emerald-400 font-mono">${pricePerPerson}</span>
+                                    </div>
+
+                                    {/* Club Alias Info */}
+                                    <div className="flex items-center justify-between text-xs bg-white/5 p-2.5 rounded-xl border border-white/10">
+                                        <div>
+                                            <span className="text-[10px] text-muted uppercase font-bold block">Alias MP del Club</span>
+                                            <span className="font-mono text-emerald-400 font-bold text-xs">{clubAlias}</span>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(clubAlias);
+                                                setCopiedSuccessAlias(true);
+                                                addToast(`¡Alias "${clubAlias}" copiado!`, "success");
+                                                setTimeout(() => setCopiedSuccessAlias(false), 2000);
+                                            }}
+                                            className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                        >
+                                            {copiedSuccessAlias ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                            {copiedSuccessAlias ? 'Copiado' : 'Copiar'}
+                                        </button>
+                                    </div>
+
+                                    <button
+                                        type="button"
+                                        onClick={handleShareSuccessWhatsApp}
+                                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 uppercase tracking-wider"
+                                    >
+                                        <MessageCircle size={15} /> Compartir Cobro por WhatsApp
+                                    </button>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={onSuccess}
+                                    className="w-full py-3 bg-primary hover:bg-primary-hover text-white text-xs font-black uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-primary/20"
+                                >
+                                    Finalizar y Ver Mis Turnos
+                                </button>
                             </div>
-                            <div className="text-center">
-                                <h3 className="font-bold text-white text-xl">¡Reserva Confirmada!</h3>
-                                <p className="text-green-400 text-sm font-bold">Tu cancha ha sido reservada con éxito.</p>
-                                {participants.length > 1 && (
-                                    <p className="text-xs text-muted mt-1">Se enviaron notificaciones a los jugadores añadidos.</p>
-                                )}
-                            </div>
-                        </div>
-                    )}
+                        );
+                    })()}
 
                     {/* SELECTION FORM VIEW */}
                     {paymentStep === 'select' && (

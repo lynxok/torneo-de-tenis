@@ -5,10 +5,13 @@ import { Card } from './ui/Card';
 import { useToast } from './ui/Toast';
 import { 
     Users, Plus, MessageCircle, Calendar, Clock, MapPin, Sparkles, Filter, X, 
-    CheckCircle2, Trash2, Shield, User, Building, Send, Swords, Award, AlertCircle, Loader2
+    CheckCircle2, Trash2, Shield, User, Building, Send, Swords, Award, AlertCircle, Loader2,
+    Share2, Copy, Check
 } from 'lucide-react';
 import { getCategoriesForInstitution, NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
+import { soundEffects } from '../services/soundEffects';
+import { pushNotificationService } from '../services/pushNotificationService';
 
 interface MatchmakingBoardProps {
     user: UserProfile;
@@ -50,6 +53,14 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
     const [postPlayStyle, setPostPlayStyle] = useState<'competitive' | 'recreational' | 'active'>('competitive');
 
     const { addToast } = useToast();
+    const [highlightMatchId, setHighlightMatchId] = useState<string | null>(() => {
+        try {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('matchId') || null;
+        } catch (e) {
+            return null;
+        }
+    });
 
     useEffect(() => {
         loadPosts();
@@ -64,6 +75,15 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                 filterType === 'all' ? undefined : filterType
             );
             setPosts(data);
+
+            if (highlightMatchId) {
+                setTimeout(() => {
+                    const el = document.getElementById(`match-card-${highlightMatchId}`);
+                    if (el) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }, 350);
+            }
         } catch (e) {
             console.error("Error loading matchmaking posts:", e);
         } finally {
@@ -144,12 +164,38 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
         window.open(waUrl, '_blank');
     };
 
+    const handleShareMatch = (post: MatchmakingPost) => {
+        const isDoubles = post.type === 'doubles';
+        const maxP = post.max_players || (isDoubles ? 4 : 2);
+        const joined = (post.joined_players && post.joined_players.length > 0) ? post.joined_players.length : 1;
+        const openSlots = Math.max(0, maxP - joined);
+        const shareUrl = `${window.location.origin}/?view=open-matches&matchId=${post.id}`;
+        const text = `🎾 ¡Se busca jugador/a en Smash Tenis!\n📍 Club: ${post.institution_name || 'Club de Tenis'}\n⚡ Modalidad: ${isDoubles ? 'Dobles (4 jugadores)' : 'Singles (2 jugadores)'}\n🎯 Categoría: ${post.category || 'Abierta'}\n📅 Fecha: ${post.date || 'A coordinar'} - ${post.time_slot || ''} hs\n👥 Cupos: ${openSlots > 0 ? `Quedan ${openSlots} lugar(es) libre(s)` : '¡Últimos cupos!'}\n\n👉 Sumate con 1 clic acá:\n${shareUrl}`;
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    };
+
+    const handleCopyMatchLink = (postId: string) => {
+        const shareUrl = `${window.location.origin}/?view=open-matches&matchId=${postId}`;
+        navigator.clipboard.writeText(shareUrl);
+        addToast("¡Enlace del partido copiado al portapapeles!", 'success');
+    };
+
     const handleJoinSlot = async (post: MatchmakingPost) => {
         try {
             const updated = await api.matchmaking.joinMatch(post.id, user);
             if (updated) {
+                soundEffects.playBookingSuccess();
                 addToast("¡Te has sumado al partido! 🎾", "success");
                 loadPosts();
+
+                // Punto 5: Comprobar si se completaron los cupos para disparar notificación push
+                const maxP = post.max_players || (post.type === 'doubles' ? 4 : 2);
+                const currentJoined = (updated.joined_players?.length || 0);
+                if (currentJoined >= maxP) {
+                    soundEffects.playVictoryFanfare();
+                    pushNotificationService.notifyMatchCompleted(post);
+                    addToast("🎉 ¡Partidazo Armado! Se completaron todos los cupos del partido.", "success");
+                }
             }
         } catch (e: any) {
             addToast("Error al unirse al partido", "error");
@@ -289,10 +335,17 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                         const isFull = joinedPlayers.length >= maxPlayers || post.status === 'full';
                         const openSlotsCount = Math.max(0, maxPlayers - joinedPlayers.length);
 
+                        const isHighlighted = highlightMatchId === post.id;
+
                         return (
                             <Card 
                                 key={post.id} 
-                                className="p-5 flex flex-col justify-between border-white/10 hover:border-primary/40 transition-all bg-card/90 shadow-xl relative overflow-hidden group"
+                                id={`match-card-${post.id}`}
+                                className={`p-5 flex flex-col justify-between transition-all bg-card/90 shadow-xl relative overflow-hidden group ${
+                                    isHighlighted 
+                                        ? 'border-emerald-400 ring-2 ring-emerald-400/50 scale-[1.01]' 
+                                        : 'border-white/10 hover:border-primary/40'
+                                }`}
                             >
                                 <div className={`absolute top-0 left-0 right-0 h-1 ${isDoubles ? 'bg-purple-500' : 'bg-primary'}`} />
 
@@ -478,6 +531,24 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                                         <MessageCircle size={15} /> 
                                         {isFull ? '💬 ¡Partido Listo! Abrir WhatsApp' : 'Coordinar con Creador por WhatsApp'}
                                     </button>
+
+                                    {/* Punto 1: Botones para Compartir en WhatsApp o Copiar Enlace Directo */}
+                                    <div className="grid grid-cols-2 gap-2 pt-1">
+                                        <button
+                                            onClick={() => handleShareMatch(post)}
+                                            className="py-2 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                            title="Compartir invitación en grupos de WhatsApp"
+                                        >
+                                            <Share2 size={13} /> Invitar por WhatsApp
+                                        </button>
+                                        <button
+                                            onClick={() => handleCopyMatchLink(post.id)}
+                                            className="py-2 bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                                            title="Copiar enlace directo al partido"
+                                        >
+                                            <Copy size={13} /> Copiar link
+                                        </button>
+                                    </div>
                                 </div>
                             </Card>
                         );

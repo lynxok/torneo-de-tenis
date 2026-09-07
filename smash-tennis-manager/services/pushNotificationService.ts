@@ -174,6 +174,15 @@ export const pushNotificationService = {
     },
 
     /**
+     * Triggers a push notification when an open match has all slots filled
+     */
+    async notifyMatchCompleted(post: { institution_name?: string; max_players?: number; type?: string; date?: string; time_slot?: string }): Promise<boolean> {
+        const title = `🎾 ¡Partidazo Armado en ${post.institution_name || 'el club'}!`;
+        const body = `¡Cupos completos (${post.max_players || 4}/${post.max_players || 4}) para el partido de ${post.type === 'doubles' ? 'Dobles' : 'Singles'} del ${post.date || 'día'} a las ${post.time_slot || ''} hs! A preparar la raqueta.`;
+        return this.sendTestNotification(title, body);
+    },
+
+    /**
      * Helper to convert VAPID public key
      */
     urlBase64ToUint8Array(base64String: string) {
