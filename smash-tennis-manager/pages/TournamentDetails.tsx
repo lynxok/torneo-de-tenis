@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Tournament, UserProfile, TournamentPlayer, Match, Booking } from '../types';
+import { Tournament, UserProfile, TournamentPlayer, Match, Booking, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
@@ -8,7 +8,7 @@ import {
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
-    Printer, Image as ImageIcon, Download, Plus
+    Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
@@ -72,6 +72,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [isSwapMode, setIsSwapMode] = useState(false);
     const [swapSource, setSwapSource] = useState<{ id: string; name: string } | null>(null);
     const [isSwapping, setIsSwapping] = useState(false);
+
+    // Host Institution & Mercado Pago State
+    const [hostInstitution, setHostInstitution] = useState<Institution | null>(null);
+    const [copiedAlias, setCopiedAlias] = useState(false);
 
     // Fixture Generation Modal State
     const [showFixtureModal, setShowFixtureModal] = useState(false);
@@ -224,6 +228,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             }
             if (data.category) {
                 setGuestCategory(data.category);
+            }
+            if (data.institution_id) {
+                api.institutions.getById(data.institution_id)
+                    .then(inst => setHostInstitution(inst))
+                    .catch(err => console.warn("Could not load host institution details:", err));
             }
         } catch (e) {
             console.error(e);
@@ -5248,6 +5257,73 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     {user.category || tournament.category} • {tournament.gender || 'Caballeros'}
                                 </span>
                             </div>
+
+                            {effectivePrice > 0 && (
+                                <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-950/40 via-blue-900/20 to-slate-900 border border-sky-500/30 space-y-3 shadow-lg">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
+                                            <CreditCard size={16} />
+                                            <span>Pago del Arancel (0% Comisión)</span>
+                                        </div>
+                                        <span className="text-[10px] uppercase tracking-wider font-bold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                            Directo al Club
+                                        </span>
+                                    </div>
+
+                                    {(hostInstitution?.alias_mp || hostInstitution?.cvu_mp) ? (
+                                        <div className="space-y-2.5">
+                                            <p className="text-xs text-slate-300">
+                                                Podés transferir el arancel (${effectivePrice}) por Mercado Pago o banco:
+                                            </p>
+                                            <div className="p-3 bg-black/40 rounded-xl border border-white/10 flex items-center justify-between gap-2">
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-[10px] text-muted uppercase font-bold">Alias de Mercado Pago</div>
+                                                    <div className="font-mono text-sm font-bold text-emerald-400 truncate">
+                                                        {hostInstitution.alias_mp || hostInstitution.cvu_mp}
+                                                    </div>
+                                                    {hostInstitution.titular_mp && (
+                                                        <div className="text-[11px] text-slate-400 mt-0.5 truncate">
+                                                            Titular: {hostInstitution.titular_mp}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const val = hostInstitution.alias_mp || hostInstitution.cvu_mp || '';
+                                                        navigator.clipboard.writeText(val);
+                                                        setCopiedAlias(true);
+                                                        setTimeout(() => setCopiedAlias(false), 3000);
+                                                        addToast("¡Alias copiado al portapapeles!", 'success');
+                                                    }}
+                                                    className="px-3 py-2 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0"
+                                                >
+                                                    {copiedAlias ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
+                                                    <span>{copiedAlias ? 'Copiado' : 'Copiar'}</span>
+                                                </button>
+                                            </div>
+
+                                            <a
+                                                href="https://www.mercadopago.com.ar/transfer/account-finder?preference_id=transfer-mla-desktop&workflow_id=ars_transfer"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                onClick={() => {
+                                                    const val = hostInstitution.alias_mp || hostInstitution.cvu_mp || '';
+                                                    if (val) navigator.clipboard.writeText(val);
+                                                }}
+                                                className="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 transition-all"
+                                            >
+                                                <ExternalLink size={14} />
+                                                <span>Copiar Alias y Abrir Mercado Pago</span>
+                                            </a>
+                                        </div>
+                                    ) : (
+                                        <p className="text-xs text-slate-400">
+                                            El club no ha configurado alias online. Podrás abonar tu arancel directamente en mesa de control el día del torneo.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
 
                             {/* Availability / Schedule Restrictions Section */}
                             <div className="space-y-2">

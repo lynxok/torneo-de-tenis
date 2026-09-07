@@ -56,6 +56,8 @@ const PricingAndCommissions = lazyRetry(() => import('./pages/PricingAndCommissi
 const LandingPage = lazyRetry(() => import('./pages/LandingPage').then(m => ({ default: m.LandingPage })), 'LandingPage');
 const CoachDashboard = lazyRetry(() => import('./pages/CoachDashboard').then(m => ({ default: m.CoachDashboard })), 'CoachDashboard');
 const BroadcastTV = lazyRetry(() => import('./pages/BroadcastTV').then(m => ({ default: m.BroadcastTV })), 'BroadcastTV');
+const MatchmakingBoard = lazyRetry(() => import('./components/MatchmakingBoard').then(m => ({ default: m.MatchmakingBoard })), 'MatchmakingBoard');
+const ShopPage = lazyRetry(() => import('./pages/ShopPage').then(m => ({ default: m.ShopPage })), 'ShopPage');
 
 export const VALID_VIEWS = [
   'dashboard',
@@ -66,6 +68,8 @@ export const VALID_VIEWS = [
   'rankings',
   'players',
   'bookings',
+  'open-matches',
+  'shop',
   'messages',
   'reports',
   'coach-dashboard',
@@ -517,7 +521,11 @@ const AppContent = () => {
               <Menu size={24} />
             </button>
             <h2 className="font-bold text-lg text-white capitalize">
-              {VALID_VIEWS.includes(activeView as any) 
+              {activeView === 'open-matches' 
+                ? 'Partidos Abiertos' 
+                : activeView === 'shop' 
+                ? 'Tienda & Buffet' 
+                : VALID_VIEWS.includes(activeView as any) 
                 ? activeView.replace('-', ' ').replace('detail', 'detalle') 
                 : 'Panel General'}
             </h2>
@@ -573,6 +581,8 @@ const AppContent = () => {
                 )}
                 {activeView === 'rankings' && <Rankings user={effectiveUser} />}
                 {activeView === 'players' && <Players user={effectiveUser} onNavigate={handleNavigate} />}
+                {activeView === 'open-matches' && <MatchmakingBoard user={effectiveUser} />}
+                {activeView === 'shop' && <ShopPage user={effectiveUser} />}
                 {activeView === 'bookings' && <Bookings user={effectiveUser} />}
                 {activeView === 'messages' && (
                   <Messages

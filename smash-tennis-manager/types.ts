@@ -202,6 +202,9 @@ export interface Institution {
 
   payment_link?: string;
   mp_access_token?: string; // MercadoPago
+  alias_mp?: string; // e.g. "parqueespana.tenis"
+  cvu_mp?: string;
+  titular_mp?: string;
   
   category_system?: 'numeric' | 'letters'; // Configuration for category nomenclature
   is_active?: boolean;
@@ -390,6 +393,16 @@ export interface HeadToHeadStats {
   }>;
 }
 
+export interface MatchmakingJoinedPlayer {
+  user_id: string;
+  name: string;
+  lastname?: string;
+  phone?: string;
+  avatar?: string;
+  category?: string;
+  joined_at: string;
+}
+
 export interface MatchmakingPost {
   id: string;
   user_id: string;
@@ -408,9 +421,13 @@ export interface MatchmakingPost {
   court_name?: string;
   description?: string;
   created_at: string;
-  status: 'open' | 'matched' | 'cancelled';
+  status: 'open' | 'matched' | 'full' | 'cancelled';
   matched_with_user_id?: string;
   matched_with_name?: string;
+
+  // Multi-player match slots (Punto 1)
+  max_players?: number; // 2 for singles, 4 for doubles
+  joined_players?: MatchmakingJoinedPlayer[];
 
   // Doubles Partner Specific Fields
   preferred_side?: 'drive' | 'backhand' | 'both';
@@ -418,6 +435,45 @@ export interface MatchmakingPost {
   play_style?: 'competitive' | 'recreational' | 'active';
   target_tournament_id?: string;
   target_tournament_name?: string;
+}
+
+// --- Pro-Shop & Buffet Types (Punto 2) ---
+export type ProductCategory = 'balls' | 'accessories' | 'rentals' | 'buffet' | 'apparel';
+
+export interface ClubProduct {
+  id: string;
+  institution_id: string;
+  name: string;
+  description?: string;
+  category: ProductCategory;
+  price: number;
+  image_url?: string;
+  is_available: boolean;
+  stock?: number;
+  created_at?: string;
+}
+
+export interface StoreOrderItem {
+  product_id: string;
+  product_name: string;
+  price: number;
+  quantity: number;
+  image_url?: string;
+}
+
+export interface StoreOrder {
+  id: string;
+  institution_id: string;
+  institution_name?: string;
+  user_id?: string;
+  customer_name: string;
+  customer_phone?: string;
+  customer_notes?: string;
+  items: StoreOrderItem[];
+  total_amount: number;
+  payment_method: 'transfer_mp' | 'cash';
+  payment_status: 'pending' | 'verified' | 'delivered' | 'cancelled';
+  created_at: string;
 }
 
 export interface BookingParticipant {

@@ -1,4 +1,5 @@
 
+import React from 'react';
 import {
   LayoutGrid,
   Trophy,
@@ -15,7 +16,9 @@ import {
   Globe,
   GraduationCap,
   Tv,
-  Sparkles
+  Sparkles,
+  Swords,
+  ShoppingBag
 } from 'lucide-react';
 import { UserRole } from '../types';
 import packageInfo from '../package.json';
@@ -127,14 +130,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         <div className="pt-2 pb-1">
-          <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Social</p>
+          <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Comunidad</p>
+          <NavButton view="open-matches" icon={Swords} label="Partidos Abiertos" />
           <NavButton view="players" icon={Users} label="Jugadores" id="nav-players" />
           <NavButton view="messages" icon={Mail} label="Mensajes" badge={unreadCount} />
         </div>
 
         <div className="pt-2 pb-1">
-          <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Canchas</p>
+          <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Club & Servicios</p>
           <NavButton view="bookings" icon={Calendar} label="Reservas" id="nav-bookings" />
+          <NavButton view="shop" icon={ShoppingBag} label="Tienda & Buffet" />
         </div>
 
         {(role === 'professor' || role === 'admin' || role === 'superadmin') && (

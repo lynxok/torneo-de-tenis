@@ -1,6 +1,11 @@
 
 import { supabase } from './supabaseClient';
-import { Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, StoryLayer, MatchmakingPost, PromoCode, TournamentSaga } from '../types';
+import { 
+    Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, 
+    Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, 
+    StoryLayer, MatchmakingPost, MatchmakingJoinedPlayer, PromoCode, TournamentSaga,
+    ClubProduct, StoreOrder, StoreOrderItem, BookingParticipant, WaitlistEntry, PlayerStatsSummary 
+} from '../types';
 import { formatPlayerName } from '../utils/formatters';
 
 export const api = {
@@ -2202,13 +2207,25 @@ export const api = {
         async getPosts(institutionId?: string, category?: string, type?: 'singles' | 'doubles'): Promise<MatchmakingPost[]> {
             try {
                 // Try from matchmaking_posts table
-                let query = supabase.from('matchmaking_posts').select('*').eq('status', 'open').order('created_at', { ascending: false });
+                let query = supabase.from('matchmaking_posts').select('*').in('status', ['open', 'full', 'matched']).order('created_at', { ascending: false });
                 if (institutionId && institutionId !== 'all') query = query.eq('institution_id', institutionId);
                 if (type) query = query.eq('type', type);
                 
                 const { data, error } = await query;
                 if (!error && data) {
-                    return data as MatchmakingPost[];
+                    return data.map((p: any) => ({
+                        ...p,
+                        max_players: p.max_players || (p.type === 'doubles' ? 4 : 2),
+                        joined_players: (p.joined_players && Array.isArray(p.joined_players) && p.joined_players.length > 0) ? p.joined_players : [{
+                            user_id: p.user_id,
+                            name: p.user_name,
+                            lastname: p.user_lastname,
+                            avatar: p.user_avatar,
+                            category: p.user_category || p.category,
+                            phone: p.user_phone,
+                            joined_at: p.created_at
+                        }]
+                    })) as MatchmakingPost[];
                 }
             } catch (e) {}
 
@@ -2217,7 +2234,7 @@ export const api = {
                 const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'matchmaking_posts').single();
                 if (setting?.value && Array.isArray(setting.value)) {
                     let list = setting.value as MatchmakingPost[];
-                    list = list.filter(p => p.status === 'open');
+                    list = list.filter(p => p.status === 'open' || p.status === 'full');
                     if (institutionId && institutionId !== 'all') list = list.filter(p => p.institution_id === institutionId);
                     if (category && category !== 'all') list = list.filter(p => p.category === category);
                     if (type) list = list.filter(p => p.type === type);
@@ -2229,6 +2246,17 @@ export const api = {
         },
 
         async createPost(post: Partial<MatchmakingPost>) {
+            const maxPlayers = post.max_players || (post.type === 'doubles' ? 4 : 2);
+            const authorPlayer: MatchmakingJoinedPlayer = {
+                user_id: post.user_id || '',
+                name: formatPlayerName(post.user_name || 'Jugador', post.user_lastname),
+                lastname: post.user_lastname,
+                phone: post.user_phone,
+                avatar: post.user_avatar,
+                category: post.user_category || '4ta',
+                joined_at: new Date().toISOString()
+            };
+
             const newPost: MatchmakingPost = {
                 id: `post-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
                 user_id: post.user_id || '',
@@ -2246,6 +2274,8 @@ export const api = {
                 has_court_booked: post.has_court_booked || false,
                 court_name: post.court_name,
                 description: post.description || '',
+                max_players: maxPlayers,
+                joined_players: [authorPlayer],
                 created_at: new Date().toISOString(),
                 status: 'open'
             };
@@ -2267,6 +2297,114 @@ export const api = {
                 console.error("Matchmaking fallback save:", e);
                 return newPost;
             }
+        },
+
+        async joinMatch(postId: string, user: UserProfile) {
+            const joinedPlayer: MatchmakingJoinedPlayer = {
+                user_id: user.id,
+                name: formatPlayerName(user.name, user.lastname),
+                lastname: user.lastname,
+                phone: user.phone,
+                avatar: user.profile_picture_url || (user as any).avatar_url,
+                category: user.category || '4ta',
+                joined_at: new Date().toISOString()
+            };
+
+            // Try DB table first
+            try {
+                const { data: post } = await supabase.from('matchmaking_posts').select('*').eq('id', postId).single();
+                if (post) {
+                    const currentJoined: MatchmakingJoinedPlayer[] = post.joined_players || [{
+                        user_id: post.user_id,
+                        name: post.user_name,
+                        lastname: post.user_lastname,
+                        phone: post.user_phone,
+                        avatar: post.user_avatar,
+                        category: post.user_category || post.category,
+                        joined_at: post.created_at
+                    }];
+                    if (currentJoined.some(p => p.user_id === user.id)) {
+                        return post; // Already joined
+                    }
+                    const maxP = post.max_players || (post.type === 'doubles' ? 4 : 2);
+                    const updatedJoined = [...currentJoined, joinedPlayer];
+                    const nextStatus = updatedJoined.length >= maxP ? 'full' : 'open';
+
+                    const { data: updated } = await supabase.from('matchmaking_posts').update({
+                        joined_players: updatedJoined,
+                        status: nextStatus
+                    }).eq('id', postId).select().single();
+                    if (updated) return updated;
+                }
+            } catch (e) {}
+
+            // Fallback system_settings
+            try {
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'matchmaking_posts').single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    let updatedPost: any = null;
+                    const updatedList = setting.value.map((p: any) => {
+                        if (p.id === postId) {
+                            const cur = p.joined_players || [{
+                                user_id: p.user_id,
+                                name: p.user_name,
+                                lastname: p.user_lastname,
+                                phone: p.user_phone,
+                                avatar: p.user_avatar,
+                                category: p.user_category || p.category,
+                                joined_at: p.created_at
+                            }];
+                            if (cur.some((x: any) => x.user_id === user.id)) {
+                                updatedPost = p;
+                                return p;
+                            }
+                            const maxP = p.max_players || (p.type === 'doubles' ? 4 : 2);
+                            const updatedJoined = [...cur, joinedPlayer];
+                            const nextStatus = updatedJoined.length >= maxP ? 'full' : 'open';
+                            updatedPost = { ...p, joined_players: updatedJoined, status: nextStatus };
+                            return updatedPost;
+                        }
+                        return p;
+                    });
+                    await supabase.from('system_settings').upsert({ key: 'matchmaking_posts', value: updatedList, updated_at: new Date() });
+                    return updatedPost;
+                }
+            } catch (e) {}
+            return null;
+        },
+
+        async leaveMatch(postId: string, userId: string) {
+            // DB table
+            try {
+                const { data: post } = await supabase.from('matchmaking_posts').select('*').eq('id', postId).single();
+                if (post && post.joined_players) {
+                    if (post.user_id === userId) return post; // Cannot remove author
+                    const updatedJoined = post.joined_players.filter((p: any) => p.user_id !== userId);
+                    const { data: updated } = await supabase.from('matchmaking_posts').update({
+                        joined_players: updatedJoined,
+                        status: 'open'
+                    }).eq('id', postId).select().single();
+                    if (updated) return updated;
+                }
+            } catch (e) {}
+
+            // Fallback system_settings
+            try {
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', 'matchmaking_posts').single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    const updatedList = setting.value.map((p: any) => {
+                        if (p.id === postId) {
+                            if (p.user_id === userId) return p;
+                            const cur = p.joined_players || [];
+                            const updatedJoined = cur.filter((x: any) => x.user_id !== userId);
+                            return { ...p, joined_players: updatedJoined, status: 'open' };
+                        }
+                        return p;
+                    });
+                    await supabase.from('system_settings').upsert({ key: 'matchmaking_posts', value: updatedList, updated_at: new Date() });
+                }
+            } catch (e) {}
+            return true;
         },
 
         async deletePost(postId: string) {
@@ -2813,22 +2951,98 @@ export const api = {
             let query = supabase.from('institutions').select('*').order('name');
             const { data, error } = await query;
             if (error) throw error;
-            return (data || []).filter(inst => includeInactive || inst.is_active !== false) as Institution[];
+            const list = (data || []).filter(inst => includeInactive || inst.is_active !== false) as Institution[];
+
+            // Merge any system_settings MP info if alias_mp not in DB
+            try {
+                const { data: settings } = await supabase.from('system_settings').select('key, value').like('key', 'inst_mp_%');
+                if (settings && settings.length > 0) {
+                    const mpMap = new Map();
+                    settings.forEach((s: any) => {
+                        const instId = s.key.replace('inst_mp_', '');
+                        mpMap.set(instId, s.value);
+                    });
+                    list.forEach(inst => {
+                        if (!inst.alias_mp && mpMap.has(inst.id)) {
+                            const mp = mpMap.get(inst.id);
+                            inst.alias_mp = mp.alias_mp;
+                            inst.cvu_mp = mp.cvu_mp;
+                            inst.titular_mp = mp.titular_mp;
+                        }
+                    });
+                }
+            } catch (e) {}
+            return list;
         },
         async getById(id: string) {
             const { data, error } = await supabase.from('institutions').select('*').eq('id', id).single();
             if (error) throw error;
-            return data as Institution;
+            const inst = data as Institution;
+            if (!inst.alias_mp) {
+                try {
+                    const { data: s } = await supabase.from('system_settings').select('value').eq('key', `inst_mp_${id}`).single();
+                    if (s?.value) {
+                        inst.alias_mp = s.value.alias_mp;
+                        inst.cvu_mp = s.value.cvu_mp;
+                        inst.titular_mp = s.value.titular_mp;
+                    }
+                } catch (e) {}
+            }
+            return inst;
         },
         async create(data: Partial<Institution>) {
-            const { data: res, error } = await supabase.from('institutions').insert(data).select().single();
-            if (error) throw error;
-            return res;
+            try {
+                const { data: res, error } = await supabase.from('institutions').insert(data).select().single();
+                if (!error && res) return res;
+                if (error) throw error;
+            } catch (err: any) {
+                if (err.message && (err.message.includes('alias_mp') || err.message.includes('cvu_mp') || err.message.includes('titular_mp'))) {
+                    const { alias_mp, cvu_mp, titular_mp, ...safeData } = data as any;
+                    const { data: res, error } = await supabase.from('institutions').insert(safeData).select().single();
+                    if (error) throw error;
+                    if (res?.id) {
+                        await supabase.from('system_settings').upsert({
+                            key: `inst_mp_${res.id}`,
+                            value: { alias_mp, cvu_mp, titular_mp },
+                            updated_at: new Date().toISOString()
+                        });
+                    }
+                    return { ...res, alias_mp, cvu_mp, titular_mp };
+                }
+                throw err;
+            }
         },
         async update(id: string, updates: Partial<Institution>) {
-            const { data, error } = await supabase.from('institutions').update(updates).eq('id', id).select().single();
-            if (error) throw error;
-            return data;
+            try {
+                const { data, error } = await supabase.from('institutions').update(updates).eq('id', id).select().single();
+                if (!error && data) {
+                    // Also mirror in system_settings if MP info was passed
+                    if (updates.alias_mp || updates.cvu_mp || updates.titular_mp) {
+                        try {
+                            await supabase.from('system_settings').upsert({
+                                key: `inst_mp_${id}`,
+                                value: { alias_mp: updates.alias_mp, cvu_mp: updates.cvu_mp, titular_mp: updates.titular_mp },
+                                updated_at: new Date().toISOString()
+                            });
+                        } catch (e) {}
+                    }
+                    return data;
+                }
+                if (error) throw error;
+            } catch (err: any) {
+                // If PostgreSQL table doesn't have alias_mp / cvu_mp / titular_mp yet
+                if (err.message && (err.message.includes('alias_mp') || err.message.includes('cvu_mp') || err.message.includes('titular_mp'))) {
+                    const { alias_mp, cvu_mp, titular_mp, ...safeUpdates } = updates as any;
+                    const { data } = await supabase.from('institutions').update(safeUpdates).eq('id', id).select().single();
+                    await supabase.from('system_settings').upsert({
+                        key: `inst_mp_${id}`,
+                        value: { alias_mp, cvu_mp, titular_mp },
+                        updated_at: new Date().toISOString()
+                    });
+                    return { ...(data || safeUpdates), alias_mp, cvu_mp, titular_mp };
+                }
+                throw err;
+            }
         },
         async delete(id: string) {
             const { error } = await supabase.from('institutions').delete().eq('id', id);
@@ -2903,6 +3117,327 @@ export const api = {
                 currentMins += duration;
             }
             return slots;
+        }
+    },
+    shop: {
+        getDefaultProducts(institutionId: string): ClubProduct[] {
+            return [
+                {
+                    id: `prod-balls-head-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Tubo Pelotas Head Tour x3',
+                    description: 'Pelota oficial premium para polvo de ladrillo y canchas rápidas. Máximo pique y durabilidad.',
+                    category: 'balls',
+                    price: 15500,
+                    image_url: 'https://images.unsplash.com/photo-1592709823125-a191f07a2a5e?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 45
+                },
+                {
+                    id: `prod-balls-penn-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Tubo Pelotas Penn Championship x3',
+                    description: 'La pelota estándar más jugada de Argentina. Excelente relación calidad/precio.',
+                    category: 'balls',
+                    price: 12800,
+                    image_url: 'https://images.unsplash.com/photo-1622163642998-1ea32b0bbc67?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 60
+                },
+                {
+                    id: `prod-grip-wilson-3-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'CubreGrip Wilson Pro Overgrip x3',
+                    description: 'Sensación suave y adherente, absorción superior de sudor. Color blanco.',
+                    category: 'accessories',
+                    price: 8900,
+                    image_url: 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 30
+                },
+                {
+                    id: `prod-grip-indiv-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'CubreGrip Individual (con colocación)',
+                    description: 'Overgrip de reemplazo inmediato colocado en mostrador por el canchero.',
+                    category: 'accessories',
+                    price: 3400,
+                    image_url: 'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 50
+                },
+                {
+                    id: `prod-rental-racket-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Alquiler de Raqueta Head / Babolat',
+                    description: 'Alquiler por turno de 1h o 1h30m. Raquetas de grafito encordadas.',
+                    category: 'rentals',
+                    price: 4500,
+                    image_url: 'https://images.unsplash.com/photo-1617083934555-563d41e78c8a?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 6
+                },
+                {
+                    id: `prod-rental-basket-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Alquiler Canasto 72 Pelotas para Saque',
+                    description: 'Canasto metálico con 72 pelotas de entrenamiento para práctica de saque y drills.',
+                    category: 'rentals',
+                    price: 6000,
+                    image_url: 'https://images.unsplash.com/photo-1592709823125-a191f07a2a5e?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 3
+                },
+                {
+                    id: `prod-gatorade-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Gatorade 500ml Fría',
+                    description: 'Bebida isotónica hidratante con sales y minerales para el partido (varios sabores).',
+                    category: 'buffet',
+                    price: 2900,
+                    image_url: 'https://images.unsplash.com/photo-1622483767028-3f66f32aef97?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 40
+                },
+                {
+                    id: `prod-water-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Agua Mineral Villavicencio 500ml',
+                    description: 'Agua mineral con o sin gas de manantial.',
+                    category: 'buffet',
+                    price: 1800,
+                    image_url: 'https://images.unsplash.com/photo-1548839140-29a749e1bc4e?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 80
+                },
+                {
+                    id: `prod-tostado-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Tostado de Jamón y Queso (Pan de Miga)',
+                    description: 'Tostado caliente al momento en la cantina del club con abundante queso derretido.',
+                    category: 'buffet',
+                    price: 4800,
+                    image_url: 'https://images.unsplash.com/photo-1528735602780-2552fd46c7af?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 25
+                },
+                {
+                    id: `prod-cafe-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Café Espresso o Cortado en Jarrito',
+                    description: 'Café de grano recién molido de la confitería.',
+                    category: 'buffet',
+                    price: 2400,
+                    image_url: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 100
+                },
+                {
+                    id: `prod-tshirt-smash-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Remera Oficial Smash Tenis Dri-Fit',
+                    description: 'Tejido técnico transpirable ultraliviano, costuras planas anti-roce. Talles S al XXL.',
+                    category: 'apparel',
+                    price: 25000,
+                    image_url: 'https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 15
+                },
+                {
+                    id: `prod-cap-smash-${institutionId}`,
+                    institution_id: institutionId,
+                    name: 'Gorra Técnica Microfibra Smash Tenis',
+                    description: 'Visera curva con protección UV y ajuste regulable con abrojo suave.',
+                    category: 'apparel',
+                    price: 16500,
+                    image_url: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=500&auto=format&fit=crop&q=60',
+                    is_available: true,
+                    stock: 20
+                }
+            ];
+        },
+
+        async getProducts(institutionId?: string): Promise<ClubProduct[]> {
+            const instId = institutionId || 'default';
+            // 1. Try table
+            try {
+                let query = supabase.from('club_products').select('*').order('created_at', { ascending: false });
+                if (institutionId && institutionId !== 'all') {
+                    query = query.eq('institution_id', institutionId);
+                }
+                const { data, error } = await query;
+                if (!error && data && data.length > 0) {
+                    return data as ClubProduct[];
+                }
+            } catch (e) {}
+
+            // 2. Try system_settings
+            try {
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', `club_products_${instId}`).single();
+                if (setting?.value && Array.isArray(setting.value) && setting.value.length > 0) {
+                    return setting.value as ClubProduct[];
+                }
+            } catch (e) {}
+
+            // 3. Return defaults and persist them
+            const defaults = this.getDefaultProducts(instId);
+            try {
+                await supabase.from('system_settings').upsert({
+                    key: `club_products_${instId}`,
+                    value: defaults,
+                    updated_at: new Date()
+                });
+            } catch (e) {}
+            return defaults;
+        },
+
+        async createProduct(product: Partial<ClubProduct>): Promise<ClubProduct> {
+            const newProduct: ClubProduct = {
+                id: `prod-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                institution_id: product.institution_id || 'default',
+                name: product.name || 'Nuevo Producto',
+                description: product.description || '',
+                category: product.category || 'balls',
+                price: Number(product.price) || 0,
+                image_url: product.image_url || '',
+                is_available: product.is_available ?? true,
+                stock: Number(product.stock) || 10,
+                created_at: new Date().toISOString()
+            };
+
+            // 1. Try table
+            try {
+                const { data, error } = await supabase.from('club_products').insert(newProduct).select().single();
+                if (!error && data) return data;
+            } catch (e) {}
+
+            // 2. Fallback to system_settings
+            try {
+                const key = `club_products_${newProduct.institution_id}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                const current = (setting?.value && Array.isArray(setting.value)) ? setting.value : this.getDefaultProducts(newProduct.institution_id);
+                const updated = [newProduct, ...current];
+                await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
+            } catch (e) {
+                console.error("Save product fallback:", e);
+            }
+            return newProduct;
+        },
+
+        async updateProduct(id: string, updates: Partial<ClubProduct>): Promise<ClubProduct | null> {
+            // 1. Try table
+            try {
+                const { data, error } = await supabase.from('club_products').update(updates).eq('id', id).select().single();
+                if (!error && data) return data;
+            } catch (e) {}
+
+            // 2. Fallback to system_settings
+            try {
+                const instId = updates.institution_id || 'default';
+                const key = `club_products_${instId}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    let updatedItem: any = null;
+                    const updated = setting.value.map((p: any) => {
+                        if (p.id === id) {
+                            updatedItem = { ...p, ...updates };
+                            return updatedItem;
+                        }
+                        return p;
+                    });
+                    await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
+                    return updatedItem;
+                }
+            } catch (e) {}
+            return null;
+        },
+
+        async deleteProduct(id: string, institutionId?: string): Promise<boolean> {
+            try {
+                await supabase.from('club_products').delete().eq('id', id);
+            } catch (e) {}
+
+            try {
+                const key = `club_products_${institutionId || 'default'}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    const filtered = setting.value.filter((p: any) => p.id !== id);
+                    await supabase.from('system_settings').upsert({ key, value: filtered, updated_at: new Date() });
+                }
+            } catch (e) {}
+            return true;
+        },
+
+        async createOrder(order: Partial<StoreOrder>): Promise<StoreOrder> {
+            const newOrder: StoreOrder = {
+                id: `order-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+                institution_id: order.institution_id || 'default',
+                institution_name: order.institution_name,
+                user_id: order.user_id,
+                customer_name: order.customer_name || 'Socio',
+                customer_phone: order.customer_phone || '',
+                customer_notes: order.customer_notes || '',
+                items: order.items || [],
+                total_amount: Number(order.total_amount) || 0,
+                payment_method: order.payment_method || 'transfer_mp',
+                payment_status: 'pending',
+                created_at: new Date().toISOString()
+            };
+
+            // 1. Try table
+            try {
+                const { data, error } = await supabase.from('store_orders').insert(newOrder).select().single();
+                if (!error && data) return data;
+            } catch (e) {}
+
+            // 2. Fallback to system_settings
+            try {
+                const key = `store_orders_${newOrder.institution_id}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                const current = (setting?.value && Array.isArray(setting.value)) ? setting.value : [];
+                const updated = [newOrder, ...current].slice(0, 100);
+                await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
+            } catch (e) {}
+            return newOrder;
+        },
+
+        async getOrders(institutionId?: string): Promise<StoreOrder[]> {
+            const instId = institutionId || 'default';
+            try {
+                let query = supabase.from('store_orders').select('*').order('created_at', { ascending: false });
+                if (institutionId && institutionId !== 'all') {
+                    query = query.eq('institution_id', institutionId);
+                }
+                const { data, error } = await query;
+                if (!error && data && data.length > 0) {
+                    return data as StoreOrder[];
+                }
+            } catch (e) {}
+
+            try {
+                const key = `store_orders_${instId}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    return setting.value as StoreOrder[];
+                }
+            } catch (e) {}
+            return [];
+        },
+
+        async updateOrderStatus(orderId: string, status: 'pending' | 'verified' | 'delivered' | 'cancelled', institutionId?: string): Promise<boolean> {
+            try {
+                await supabase.from('store_orders').update({ payment_status: status }).eq('id', orderId);
+            } catch (e) {}
+
+            try {
+                const key = `store_orders_${institutionId || 'default'}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    const updated = setting.value.map((o: any) => o.id === orderId ? { ...o, payment_status: status } : o);
+                    await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
+                }
+            } catch (e) {}
+            return true;
         }
     },
     reports: {

@@ -12,10 +12,11 @@ import { formatPlayerName } from '../utils/formatters';
 
 interface MatchmakingBoardProps {
     user: UserProfile;
-    institutions: Institution[];
+    institutions?: Institution[];
 }
 
-export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, institutions }) => {
+export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, institutions: propInstitutions }) => {
+    const [institutions, setInstitutions] = useState<Institution[]>(propInstitutions || []);
     const [posts, setPosts] = useState<MatchmakingPost[]>([]);
     const [loading, setLoading] = useState(true);
     const [filterInst, setFilterInst] = useState<string>('all');
@@ -27,7 +28,18 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
     // Create Form State
     const [postType, setPostType] = useState<'singles' | 'doubles'>('singles');
     const [postCategory, setPostCategory] = useState(user.category || '4ta');
-    const [postInstId, setPostInstId] = useState(user.institution_id || (institutions[0]?.id || ''));
+    const [postInstId, setPostInstId] = useState(user.institution_id || (propInstitutions && propInstitutions[0]?.id) || '');
+
+    useEffect(() => {
+        if (!propInstitutions || propInstitutions.length === 0) {
+            api.institutions.getAll().then(list => {
+                setInstitutions(list);
+                if (!postInstId && list[0]?.id) {
+                    setPostInstId(user.institution_id || list[0].id);
+                }
+            }).catch(console.error);
+        }
+    }, [propInstitutions]);
     const [postDate, setPostDate] = useState(new Date().toISOString().split('T')[0]);
     const [postTimeSlot, setPostTimeSlot] = useState('18:00');
     const [hasCourtBooked, setHasCourtBooked] = useState(false);
@@ -130,6 +142,28 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
         const waUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`;
 
         window.open(waUrl, '_blank');
+    };
+
+    const handleJoinSlot = async (post: MatchmakingPost) => {
+        try {
+            const updated = await api.matchmaking.joinMatch(post.id, user);
+            if (updated) {
+                addToast("¡Te has sumado al partido! 🎾", "success");
+                loadPosts();
+            }
+        } catch (e: any) {
+            addToast("Error al unirse al partido", "error");
+        }
+    };
+
+    const handleLeaveSlot = async (post: MatchmakingPost) => {
+        try {
+            await api.matchmaking.leaveMatch(post.id, user.id);
+            addToast("Has liberado tu lugar en el partido.", "info");
+            loadPosts();
+        } catch (e: any) {
+            addToast("Error al salir del partido", "error");
+        }
     };
 
     return (
@@ -241,6 +275,19 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                     {posts.map(post => {
                         const isOwn = post.user_id === user.id;
                         const isDoubles = post.type === 'doubles';
+                        const maxPlayers = post.max_players || (isDoubles ? 4 : 2);
+                        const joinedPlayers = (post.joined_players && Array.isArray(post.joined_players) && post.joined_players.length > 0) ? post.joined_players : [{
+                            user_id: post.user_id,
+                            name: post.user_name,
+                            lastname: post.user_lastname,
+                            avatar: post.user_avatar,
+                            category: post.user_category || post.category,
+                            phone: post.user_phone,
+                            joined_at: post.created_at
+                        }];
+                        const isUserJoined = joinedPlayers.some(p => p.user_id === user.id);
+                        const isFull = joinedPlayers.length >= maxPlayers || post.status === 'full';
+                        const openSlotsCount = Math.max(0, maxPlayers - joinedPlayers.length);
 
                         return (
                             <Card 
@@ -351,22 +398,86 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                                             "{post.description}"
                                         </p>
                                     )}
+
+                                    {/* Interactive Player Slots */}
+                                    <div className="space-y-2 pt-2 border-t border-white/5">
+                                        <div className="flex items-center justify-between text-[11px]">
+                                            <span className="text-muted font-bold flex items-center gap-1.5">
+                                                <Users size={12} className="text-primary" /> Jugadores convocados:
+                                            </span>
+                                            <span className={`font-mono font-bold px-2 py-0.5 rounded text-[10px] ${
+                                                isFull 
+                                                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' 
+                                                    : 'bg-primary/20 text-primary border border-primary/30'
+                                            }`}>
+                                                {isFull ? '🏆 ¡Partido Completo!' : `🎾 ${joinedPlayers.length}/${maxPlayers} Cupos`}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {joinedPlayers.map((player, idx) => (
+                                                <div key={player.user_id || idx} className="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/10">
+                                                    {player.avatar ? (
+                                                        <img src={player.avatar} alt={player.name} className="w-7 h-7 rounded-lg object-cover shrink-0" />
+                                                    ) : (
+                                                        <div className="w-7 h-7 rounded-lg bg-primary/20 text-primary text-xs font-black flex items-center justify-center shrink-0">
+                                                            {player.name.charAt(0)}
+                                                        </div>
+                                                    )}
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-xs font-bold text-white truncate">{player.name}</p>
+                                                        <span className="text-[10px] text-muted block truncate">
+                                                            {player.user_id === post.user_id ? '👑 Creador' : (player.category || 'Jugador')}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {Array.from({ length: openSlotsCount }).map((_, idx) => (
+                                                <div key={`open-slot-${idx}`} className="flex items-center gap-2 p-2 rounded-xl border border-dashed border-white/20 bg-white/[0.02] text-muted">
+                                                    <div className="w-7 h-7 rounded-lg border border-dashed border-white/30 flex items-center justify-center text-xs font-bold text-slate-500 shrink-0">
+                                                        +
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <p className="text-[11px] font-medium text-slate-400">Lugar disponible</p>
+                                                        <span className="text-[9px] text-slate-500">Esperando rival</span>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Action Buttons */}
-                                <div className="mt-4 pt-3 border-t border-white/10">
-                                    {isOwn ? (
-                                        <div className="text-center text-[11px] text-muted font-medium py-1">
-                                            Tu publicación activa en el tablón
-                                        </div>
-                                    ) : (
+                                <div className="mt-4 pt-3 border-t border-white/10 space-y-2">
+                                    {!isOwn && !isUserJoined && !isFull && (
                                         <button 
-                                            onClick={() => handleJoinMatch(post)}
-                                            className="w-full py-2 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-green-600/20 flex items-center justify-center gap-1.5"
+                                            onClick={() => handleJoinSlot(post)}
+                                            className="w-full py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-1.5"
                                         >
-                                            <MessageCircle size={15} /> ¡Me Sumo! (Coordinar por WhatsApp)
+                                            <Plus size={15} /> 🎾 Unirme a este Partido ({openSlotsCount} libre{openSlotsCount > 1 ? 's' : ''})
                                         </button>
                                     )}
+
+                                    {!isOwn && isUserJoined && (
+                                        <button 
+                                            onClick={() => handleLeaveSlot(post)}
+                                            className="w-full py-2 bg-red-500/20 hover:bg-red-500/30 text-red-300 border border-red-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
+                                        >
+                                            <X size={14} /> Salir del Partido (Liberar mi lugar)
+                                        </button>
+                                    )}
+
+                                    <button 
+                                        onClick={() => handleJoinMatch(post)}
+                                        className={`w-full py-2 text-white text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 ${
+                                            isFull 
+                                                ? 'bg-emerald-600 hover:bg-emerald-500 shadow-lg shadow-emerald-600/20 font-black' 
+                                                : 'bg-white/10 hover:bg-white/15 text-slate-300'
+                                        }`}
+                                    >
+                                        <MessageCircle size={15} /> 
+                                        {isFull ? '💬 ¡Partido Listo! Abrir WhatsApp' : 'Coordinar con Creador por WhatsApp'}
+                                    </button>
                                 </div>
                             </Card>
                         );

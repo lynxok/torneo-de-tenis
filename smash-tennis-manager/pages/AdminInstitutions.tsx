@@ -9,7 +9,7 @@ import {
     Building, MapPin, Plus, Lightbulb, Sun, X, Save, 
     Instagram, Globe, Phone, Mail, Car, Wifi, Utensils, Droplets, ShoppingBag, Clock, ShieldCheck,
     ArrowRightLeft, Layers, Info, Award, Trash2, Power, AlertTriangle, Gift, Sparkles,
-    Tv, Copy, ExternalLink, Share2, Check, MessageSquare, QrCode
+    Tv, Copy, ExternalLink, Share2, Check, MessageSquare, QrCode, CreditCard
 } from 'lucide-react';
 import { CATEGORY_EQUIVALENCES } from '../utils/categories';
 
@@ -371,11 +371,38 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                         <div className="text-right">
                              <span className="text-[10px] text-muted uppercase tracking-wider block mb-0.5">Desde</span>
                              <span className="font-bold text-primary font-mono text-xl">${inst.price_day || 0}</span>
+                         </div>
+                    </div>
+
+                    {/* Mercado Pago Transfer Badge */}
+                    <div className="mt-3 py-2 px-3 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
+                        <div className="flex items-center gap-2 overflow-hidden">
+                            <CreditCard size={14} className={inst.alias_mp ? "text-emerald-400 shrink-0" : "text-amber-400 shrink-0"} />
+                            <span className="text-xs text-slate-300 truncate">
+                                {inst.alias_mp ? (
+                                    <>Alias MP: <strong className="font-mono text-emerald-400 font-bold">{inst.alias_mp}</strong></>
+                                ) : (
+                                    <span className="text-amber-400/90 italic">Sin Alias de cobro registrado</span>
+                                )}
+                            </span>
                         </div>
+                        {inst.alias_mp && (
+                            <button
+                                type="button"
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    navigator.clipboard.writeText(inst.alias_mp || '');
+                                    addToast(`Alias "${inst.alias_mp}" copiado para Mercado Pago`, "success");
+                                }}
+                                className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 hover:underline ml-2 shrink-0"
+                            >
+                                <Copy size={12} /> Copiar
+                            </button>
+                        )}
                     </div>
 
                     {/* TV Broadcast Quick Action Bar */}
-                    <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2">
+                    <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-2">
                         <button
                             type="button"
                             onClick={(e) => {
@@ -436,6 +463,7 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                     <TabButton id="general" label="General" active={activeTab === 'general'} onClick={setActiveTab} />
                     <TabButton id="location" label="Ubicación" active={activeTab === 'location'} onClick={setActiveTab} />
                     <TabButton id="facilities" label="Instalaciones & Valores" active={activeTab === 'facilities'} onClick={setActiveTab} />
+                    <TabButton id="payments" label="💳 Mercado Pago & Alias" active={activeTab === 'payments'} onClick={setActiveTab} />
                     <TabButton id="media" label="Configuración" active={activeTab === 'media'} onClick={setActiveTab} />
                     <TabButton id="broadcast" label="📺 Modo TV Buffet" active={activeTab === 'broadcast'} onClick={setActiveTab} />
                     {user?.role === 'superadmin' && (
@@ -623,6 +651,93 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                                             <span className="text-xs font-bold">{getAmenityLabel(key)}</span>
                                         </div>
                                     ))}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'payments' && (
+                        <div className="space-y-6">
+                            <div className="p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-start gap-3">
+                                <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-xl mt-0.5 shrink-0">
+                                    <CreditCard size={22} />
+                                </div>
+                                <div className="space-y-1">
+                                    <h4 className="text-sm font-bold text-emerald-300">Cobro Express Directo • 0% Comisión de Mercado Pago</h4>
+                                    <p className="text-xs text-slate-300 leading-relaxed">
+                                        Al configurar el <strong>Alias o CVU</strong> de tu club, tus jugadores y socios podrán abonar inscripciones a torneos, reservas de canchas y pedidos de buffet/pro-shop de forma inmediata. La app les copiará tu Alias al portapapeles y les abrirá Mercado Pago directamente para transferir. <strong>Mercado Pago cobra 0% de comisión por transferencias</strong>, por lo que tu club recibe el 100% íntegro al instante.
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs text-muted uppercase font-bold">Alias de Mercado Pago / Banco *</label>
+                                        {formData.alias_mp && (
+                                            <button 
+                                                type="button"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(formData.alias_mp || '');
+                                                    addToast(`¡Alias "${formData.alias_mp}" copiado!`, "success");
+                                                }}
+                                                className="text-[11px] text-primary hover:underline flex items-center gap-1 normal-case font-bold"
+                                            >
+                                                <Copy size={12} /> Probar Copiado
+                                            </button>
+                                        )}
+                                    </div>
+                                    <div className="relative">
+                                        <input 
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white font-mono font-bold focus:outline-none focus:border-primary text-base placeholder:text-muted/50" 
+                                            value={formData.alias_mp || ''} 
+                                            onChange={e => setFormData({...formData, alias_mp: e.target.value.trim().toLowerCase()})} 
+                                            placeholder="ej: parqueespana.tenis" 
+                                        />
+                                        <span className="absolute right-3 top-3 text-[10px] font-bold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded">
+                                            0% Comisión
+                                        </span>
+                                    </div>
+                                    <p className="text-[11px] text-muted">
+                                        Alias que verán los socios al pagar. Debe coincidir exactamente con el de tu cuenta de Mercado Pago o banco.
+                                    </p>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold">CVU o CBU (22 dígitos)</label>
+                                        <input 
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white font-mono text-sm focus:outline-none focus:border-primary" 
+                                            value={formData.cvu_mp || ''} 
+                                            onChange={e => setFormData({...formData, cvu_mp: e.target.value.trim()})} 
+                                            placeholder="0000003100010000000000" 
+                                            maxLength={22}
+                                        />
+                                        <p className="text-[10px] text-muted">Para transferencias interbancarias directas.</p>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs text-muted uppercase font-bold">Titular de la Cuenta / Razón Social</label>
+                                        <input 
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-primary" 
+                                            value={formData.titular_mp || ''} 
+                                            onChange={e => setFormData({...formData, titular_mp: e.target.value})} 
+                                            placeholder="ej: Tenis Parque España / Juan Pérez" 
+                                        />
+                                        <p className="text-[10px] text-muted">Nombre que aparecerá en la pantalla bancaria.</p>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-white/10 pt-4 space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold flex items-center gap-1.5">
+                                        <ExternalLink size={12} /> Link de Cobro Directo Mercado Pago (Opcional)
+                                    </label>
+                                    <input 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-sm focus:outline-none focus:border-primary" 
+                                        value={formData.payment_link || ''} 
+                                        onChange={e => setFormData({...formData, payment_link: e.target.value})} 
+                                        placeholder="https://mpago.la/..." 
+                                    />
+                                    <p className="text-[10px] text-muted">Link de pago web si deseas ofrecer también tarjeta de crédito/débito.</p>
                                 </div>
                             </div>
                         </div>
