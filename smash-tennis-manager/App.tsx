@@ -11,6 +11,7 @@ import { ToastProvider } from './components/ui/Toast';
 import { PWAInstallPrompt } from './components/PWAInstallPrompt';
 import { VersionUpdatePrompt } from './components/VersionUpdatePrompt';
 import { OrganizerImprovementsModal } from './components/OrganizerImprovementsModal';
+import { PlayerImprovementsModal } from './components/PlayerImprovementsModal';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { soundEffects } from './services/soundEffects';
@@ -621,6 +622,9 @@ const AppContent = () => {
 
       {/* Pop-up inteligente de Novedades y Mejoras Semanales para Organizadores */}
       <OrganizerImprovementsModal user={effectiveUser} onNavigate={handleNavigate} />
+
+      {/* Pop-up de Novedades y Mejoras para Jugadores */}
+      <PlayerImprovementsModal user={effectiveUser} onNavigate={handleNavigate} />
     </div>
   );
 };

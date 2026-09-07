@@ -175,6 +175,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
+        {/* Novedades para Jugadores */}
+        {role === 'player' && (
+          <div className="pt-2 pb-1">
+            <button
+              onClick={() => {
+                if (onCloseMobile) onCloseMobile();
+                window.dispatchEvent(new CustomEvent('open-player-improvements'));
+              }}
+              className="flex items-center gap-3 w-full p-2.5 rounded-xl transition-all duration-200 text-xs font-bold text-emerald-300 hover:bg-emerald-500/15 hover:text-emerald-200 hover:translate-x-1 border border-emerald-500/30 bg-emerald-500/10 group mt-1"
+              title="Ver las nuevas funciones de la app para jugadores"
+            >
+              <Sparkles size={16} className="text-emerald-400 group-hover:scale-110 transition-transform shrink-0 animate-pulse" />
+              <span className="flex-1 text-left truncate">Novedades de la App</span>
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono shrink-0">v{packageInfo.version}</span>
+            </button>
+          </div>
+        )}
+
         {/* Sección Más Opciones / Sistema */}
         <div className="pt-3 mt-2 border-t border-white/10 space-y-2">
           <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Más Opciones</p>
@@ -186,6 +204,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <Smartphone size={20} className="text-primary group-hover:scale-110 transition-transform" />
             <span className="flex-1 text-left font-semibold">Instalar App en Celular</span>
           </button>
+
+          {role !== 'player' && (
+            <button
+              onClick={() => {
+                if (onCloseMobile) onCloseMobile();
+                window.dispatchEvent(new CustomEvent('open-player-improvements'));
+              }}
+              className="flex items-center gap-3 w-full p-2.5 rounded-xl transition-all duration-200 text-xs font-medium text-emerald-300/80 hover:bg-emerald-500/10 hover:text-emerald-200 hover:translate-x-1"
+            >
+              <Sparkles size={16} className="text-emerald-400" />
+              <span className="flex-1 text-left">Novedades Jugadores</span>
+            </button>
+          )}
 
           <NavButton view="tutorials" icon={BookOpen} label="Tutoriales / Ayuda" />
           <NavButton view="landing" icon={Globe} label="Ver Landing Page" />
