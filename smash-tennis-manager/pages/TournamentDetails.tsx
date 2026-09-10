@@ -5674,25 +5674,39 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                         <div className="space-y-5 text-xs text-slate-300">
                             {/* Método 1: Tabla General Unificada */}
-                            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2.5">
+                            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
                                 <div className="flex items-center gap-2 text-amber-300 font-black text-sm">
                                     <Trophy size={16} />
                                     <span>1. Tabla General Unificada + BYEs (Criterio por Mérito Global)</span>
                                 </div>
                                 <p className="leading-relaxed">
-                                    Todos los participantes de todas las zonas se unifican en una sola tabla de posiciones del <strong>1° al N°</strong> según:
+                                    Todos los clasificados de todas las zonas se unifican en una sola tabla general del <strong>1° al N°</strong> según:
                                     <span className="block mt-1 font-mono text-amber-200/90 text-[11px] bg-black/30 p-2 rounded-lg">
                                         Puntos &gt; Partidos Ganados &gt; Diferencia de Sets &gt; Diferencia de Games
                                     </span>
                                 </p>
+
+                                {/* Definición y Explicación de BYE */}
+                                <div className="p-3 bg-black/40 rounded-xl border border-amber-500/20 space-y-1.5">
+                                    <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5">
+                                        <span>💡 ¿Qué significa tener un "BYE" en tenis?</span>
+                                    </div>
+                                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                                        Un <strong>BYE</strong> (pase libre o exención de ronda) ocurre cuando un cuadro eliminatorio no completa una potencia de 2 exacta (por ejemplo, clasifican 6 jugadores en vez de 8).
+                                    </p>
+                                    <p className="text-[11px] text-slate-300 leading-relaxed">
+                                        Para completar el cuadro sin partidos ficticios, los <strong>mejores clasificados (1° y 2°) descansan en la primera ronda (Cuartos) y avanzan automáticamente a Semifinales</strong> como premio a su mejor rendimiento, esperando a los ganadores de los otros cruces.
+                                    </p>
+                                </div>
+
                                 <div className="space-y-1.5 pt-1">
-                                    <div className="font-bold text-white flex items-center gap-1.5">
+                                    <div className="font-bold text-white flex items-center gap-1.5 text-[11px]">
                                         <span>🎾 Estructura de cabezas de serie profesional:</span>
                                     </div>
-                                    <ul className="list-disc list-inside space-y-1 pl-1 text-[11px] text-slate-300">
-                                        <li><strong>Premio al 1° y 2°:</strong> Si el cuadro tiene BYEs, los dos mejores clasifican directamente a <strong>Semifinales</strong> en extremos opuestos.</li>
-                                        <li><strong>Regla de oro:</strong> En Cuartos de Final, el mejor rankeado se enfrenta al de menor posición: <strong>1° vs 8°</strong>, <strong>4° vs 5°</strong>, <strong>3° vs 6°</strong> y <strong>2° vs 7°</strong> (la suma de puestos da N+1).</li>
-                                        <li><strong>Ideal para:</strong> Premiar a quienes tuvieron mejor rendimiento general en sets y games durante la fase de grupos.</li>
+                                    <ul className="list-disc list-inside space-y-1.5 pl-1 text-[11px] text-slate-300">
+                                        <li><strong>Si clasifican 6 jugadores (ej: 3 zonas de 4):</strong> El 1° y 2° de la general reciben <strong>BYE directo a Semifinales</strong> (uno en la llave alta y otro en la baja). El 3°, 4°, 5° y 6° juegan los Cuartos de Final (3° vs 6° y 4° vs 5°).</li>
+                                        <li><strong>Si clasifican 8 jugadores (ej: 4 zonas):</strong> Cuadro completo sin BYEs: <strong>1° vs 8°</strong>, <strong>4° vs 5°</strong>, <strong>3° vs 6°</strong> y <strong>2° vs 7°</strong> (regla profesional donde la suma de puestos da N+1).</li>
+                                        <li><strong>Ideal para:</strong> Premiar con justicia deportiva a quienes ganaron más partidos y perdieron menos games en toda la fase regular.</li>
                                     </ul>
                                 </div>
                             </div>
