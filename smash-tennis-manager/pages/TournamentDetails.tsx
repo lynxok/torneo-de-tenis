@@ -131,6 +131,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [replaceCategory, setReplaceCategory] = useState('4ta');
     const [isSubmittingReplace, setIsSubmittingReplace] = useState(false);
 
+    const [previewFormat, setPreviewFormat] = useState<string | null>(null);
+    const [showOfficializeModal, setShowOfficializeModal] = useState(false);
+    const [selectedOfficialFormat, setSelectedOfficialFormat] = useState<string>('tabla_general_byes');
+
     // Score Modal State (with 24h confirmation, tiebreaks & doubles support)
     const [selectedMatchForScore, setSelectedMatchForScore] = useState<Match | null>(null);
     const [scoreP1Set1, setScoreP1Set1] = useState<number | ''>('');
@@ -1228,14 +1232,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const unplayedGroupMatches = groupMatches.filter(m => !m.is_played && !m.winner_id && m.scheduling_status !== 'finished');
     const isGroupStageComplete = groupMatches.length > 0 && unplayedGroupMatches.length === 0;
 
-    const competitionFormat = tournament?.competition_format || tournament?.rules?.competition_format || 'tabla_general_byes';
+    const baseCompetitionFormat = tournament?.competition_format || tournament?.rules?.competition_format || 'tabla_general_byes';
+    const activeCompetitionFormat = previewFormat || baseCompetitionFormat;
     const allowByes = tournament?.allow_byes ?? tournament?.rules?.allow_byes ?? true;
     const minGuaranteedMatches = tournament?.min_guaranteed_matches ?? tournament?.rules?.min_guaranteed_matches ?? 3;
 
     const zones = calculateGroupStandings(groupMatches, players);
     const unifiedStandings = calculateUnifiedStandings(zones, players);
     const playoffRounds = organizePlayoffRounds(playoffMatches);
-    const projectedPlayoffRounds = getProjectedPlayoffRounds(zones, competitionFormat, allowByes, players);
+    const projectedPlayoffRounds = getProjectedPlayoffRounds(zones, activeCompetitionFormat, allowByes, players);
 
     const finalMatch = playoffMatches.find(m => m.round === 'Final' || m.round === 'Gran Final');
     const championName = tournament?.champion_name || (finalMatch?.winner_id ? (
@@ -1261,18 +1266,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         }
     };
 
-    const handleGeneratePlayoffsFromZones = async () => {
+    const handleOpenOfficializeModal = () => {
         if (!tournament || zones.length === 0) return;
+        setSelectedOfficialFormat(activeCompetitionFormat);
+        setShowOfficializeModal(true);
+    };
 
-        // Si la fase de grupos aún tiene partidos pendientes, requerir confirmación explícita del organizador
-        if (unplayedGroupMatches.length > 0) {
-            const proceed = window.confirm(
-                `⚠️ ATENCIÓN: Aún restan ${unplayedGroupMatches.length} partido(s) de la Fase de Grupos por disputarse.\n\n` +
-                `Si continúas, la fase de grupos se dará por concluida y se armarán las llaves con las posiciones actuales de la tabla.\n\n` +
-                `¿Deseas dar por finalizada la fase de grupos y oficializar las llaves de todas formas?`
-            );
-            if (!proceed) return;
-        }
+    const handleConfirmOfficialPlayoffs = async (chosenFormat: string) => {
+        if (!tournament || zones.length === 0) return;
 
         // Auto-validar partidos de grupo que tengan marcador cargado pero sigan pendientes
         const pendingGroupMatches = groupMatches.filter(m => (m.score || m.is_played) && m.score_status !== 'confirmed');
@@ -1286,30 +1287,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             }
         }
 
-        const qualifiers: { zoneName: string; rank: number; player: GroupStandingRow }[] = [];
-        for (const z of zones) {
-            if (z.players.length > 0) {
-                qualifiers.push({ zoneName: z.groupName, rank: 1, player: z.players[0] });
-            }
-            if (z.players.length > 1) {
-                qualifiers.push({ zoneName: z.groupName, rank: 2, player: z.players[1] });
-            }
-        }
-
-        if (qualifiers.length < 2 && unifiedStandings.length < 2) {
-            addToast("Se necesitan al menos 2 jugadores clasificados para armar los playoffs.", "warning");
-            return;
-        }
-
-        if (playoffMatches.length > 0) {
-            if (!confirm("Ya existen llaves de playoffs generadas. ¿Deseas regenerarlas con los clasificados actuales?")) {
-                return;
-            }
-        }
-
         setGeneratingPlayoffs(true);
+        setShowOfficializeModal(false);
         try {
-            const seeds = buildPlayoffTreeFromZones(zones, competitionFormat, allowByes);
+            const seeds = buildPlayoffTreeFromZones(zones, chosenFormat, allowByes);
             await api.tournaments.generatePlayoffs(tournament.id, seeds);
             addToast("¡Cuadro de llaves oficializado y generado exitosamente!", "success");
             setActiveTab('playoffs');
@@ -2603,12 +2584,43 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                 ? 'Todos los partidos de grupos han finalizado y las posiciones están 100% definidas. Ya puedes oficializar el cuadro de llaves definitivo.'
                                                                 : `Las llaves se proyectan y actualizan automáticamente según las posiciones de la fase de zonas (restan ${unplayedGroupMatches.length} partido(s) por jugarse).`}
                                                         </p>
+
+                                                        {/* Interactive Projection Method Switcher */}
+                                                        <div className="mt-3 flex flex-wrap items-center gap-2">
+                                                            <span className="text-[11px] font-bold text-slate-400">Método de Proyección:</span>
+                                                            <div className="inline-flex p-1 bg-black/40 rounded-xl border border-white/10 gap-1">
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setPreviewFormat('tabla_general_byes')}
+                                                                    className={`px-3 py-1 text-xs rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                                                                        activeCompetitionFormat === 'tabla_general_byes'
+                                                                            ? 'bg-amber-500 text-slate-950 shadow-md font-black'
+                                                                            : 'text-slate-400 hover:text-white'
+                                                                    }`}
+                                                                >
+                                                                    <Trophy size={12} />
+                                                                    Tabla General + BYEs
+                                                                </button>
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => setPreviewFormat('zonas_playoffs')}
+                                                                    className={`px-3 py-1 text-xs rounded-lg font-bold transition-all flex items-center gap-1.5 ${
+                                                                        activeCompetitionFormat === 'zonas_playoffs'
+                                                                            ? 'bg-primary text-white shadow-md font-black'
+                                                                            : 'text-slate-400 hover:text-white'
+                                                                    }`}
+                                                                >
+                                                                    <Grid size={12} />
+                                                                    Cruces Directos por Zonas (Anti-Repetición)
+                                                                </button>
+                                                            </div>
+                                                        </div>
                                                     </div>
                                                 </div>
 
                                                 {isClubAdmin && groupMatches.length > 0 && (
                                                     <button
-                                                        onClick={handleGeneratePlayoffsFromZones}
+                                                        onClick={handleOpenOfficializeModal}
                                                         disabled={generatingPlayoffs}
                                                         className={`px-4 py-2.5 text-dark font-black rounded-xl text-xs shadow-lg hover:brightness-110 transition-all flex items-center justify-center gap-2 shrink-0 ${
                                                             isGroupStageComplete
@@ -2682,7 +2694,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             </div>
                                             {isClubAdmin && groupMatches.length > 0 && (
                                                 <button
-                                                    onClick={handleGeneratePlayoffsFromZones}
+                                                    onClick={handleOpenOfficializeModal}
                                                     disabled={generatingPlayoffs}
                                                     className="mt-2 px-4 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-500 text-dark font-black rounded-xl text-xs shadow-lg hover:brightness-110 transition-all inline-flex items-center gap-2"
                                                 >
@@ -5451,6 +5463,153 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
                             >
                                 {isEnrolling ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Confirmar Inscripción
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL PARA OFICIALIZAR Y CONFIRMAR LLAVES */}
+            {showOfficializeModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+                    <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 text-white max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                                    <Trophy size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-black">Oficializar Cuadro de Llaves</h3>
+                                    <p className="text-xs text-slate-400">Elige el método reglamentario para generar los cruces definitivos</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowOfficializeModal(false)}
+                                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Unplayed matches notice */}
+                        {unplayedGroupMatches.length > 0 && (
+                            <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-start gap-2">
+                                <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                                <div>
+                                    <strong className="block text-amber-300 font-bold">Fase de Grupos en curso ({unplayedGroupMatches.length} partidos pendientes)</strong>
+                                    Al oficializar ahora, se cerrará la fase de zonas y se tomarán las posiciones actuales de la tabla para armar los playoffs.
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Format selector */}
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                                Selecciona el Esquema de Cruces:
+                            </label>
+
+                            <div className="grid grid-cols-1 gap-2.5">
+                                <label
+                                    onClick={() => setSelectedOfficialFormat('tabla_general_byes')}
+                                    className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                                        selectedOfficialFormat === 'tabla_general_byes'
+                                            ? 'bg-amber-500/15 border-amber-500/60 shadow-md ring-1 ring-amber-500/30'
+                                            : 'bg-white/5 border-white/10 hover:border-white/20'
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="officialFormat"
+                                        checked={selectedOfficialFormat === 'tabla_general_byes'}
+                                        onChange={() => setSelectedOfficialFormat('tabla_general_byes')}
+                                        className="mt-1 accent-amber-500"
+                                    />
+                                    <div>
+                                        <div className="text-xs font-black text-white flex items-center gap-2">
+                                            🏆 Tabla General Unificada + BYEs
+                                            <span className="text-[10px] px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">Por Mérito</span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                            Se ordena a todos los jugadores por puntos, sets y games. El 1° y 2° general pasan con BYE a Semis, y el 1° cruza con el último clasificado (1° vs 8°, 4° vs 5°, 3° vs 6°, 2° vs 7°).
+                                        </div>
+                                    </div>
+                                </label>
+
+                                <label
+                                    onClick={() => setSelectedOfficialFormat('zonas_playoffs')}
+                                    className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
+                                        selectedOfficialFormat === 'zonas_playoffs'
+                                            ? 'bg-primary/15 border-primary/60 shadow-md ring-1 ring-primary/30'
+                                            : 'bg-white/5 border-white/10 hover:border-white/20'
+                                    }`}
+                                >
+                                    <input
+                                        type="radio"
+                                        name="officialFormat"
+                                        checked={selectedOfficialFormat === 'zonas_playoffs'}
+                                        onChange={() => setSelectedOfficialFormat('zonas_playoffs')}
+                                        className="mt-1 accent-primary"
+                                    />
+                                    <div>
+                                        <div className="text-xs font-black text-white flex items-center gap-2">
+                                            🎾 Cruces Directos por Zonas
+                                            <span className="text-[10px] px-1.5 py-0.2 bg-primary/20 text-primary border border-primary/30 rounded">Anti-Repetición</span>
+                                        </div>
+                                        <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                                            {zones.length === 3 
+                                                ? 'Formato especial para 3 zonas: Los 2 mejores primeros reciben BYE a Semis. Se arman Cuartos entre 1°C vs 2°A y 2°B vs 2°C garantizando que ningún rival de grupo se vuelva a cruzar en el debut.'
+                                                : zones.length === 4
+                                                ? 'Formato clásico de 4 zonas: 1°A vs 2°B, 1°C vs 2°D, 1°B vs 2°A, 1°D vs 2°C en mitades opuestas del cuadro.'
+                                                : 'Cruces directos entre zonas garantizando que rivales de un mismo grupo no se crucen de entrada.'}
+                                        </div>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* Live preview previewing chosen method matches */}
+                        <div className="p-3.5 bg-black/40 border border-white/10 rounded-xl space-y-2">
+                            <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
+                                <span>Previa de Cruces Resultantes:</span>
+                                <span className="text-[10px] text-amber-400 font-mono">
+                                    {selectedOfficialFormat === 'tabla_general_byes' ? 'Tabla General' : 'Directo por Zonas'}
+                                </span>
+                            </div>
+                            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
+                                {(() => {
+                                    const previewRounds = getProjectedPlayoffRounds(zones, selectedOfficialFormat, allowByes, players);
+                                    const firstRound = previewRounds[0];
+                                    if (!firstRound || firstRound.matches.length === 0) {
+                                        return <div className="text-xs text-slate-500 italic">No hay suficientes clasificados para armar la ronda.</div>;
+                                    }
+                                    return firstRound.matches.map((m, idx) => (
+                                        <div key={idx} className="flex items-center justify-between bg-white/5 px-2.5 py-1.5 rounded-lg text-xs">
+                                            <span className="font-bold text-slate-200">{m.p1Name || m.slotP1Label}</span>
+                                            <span className="text-[10px] text-amber-400 font-black px-1.5">vs</span>
+                                            <span className="font-bold text-slate-200">{m.p2Name || m.slotP2Label}</span>
+                                        </div>
+                                    ));
+                                })()}
+                            </div>
+                        </div>
+
+                        {/* Modal Footer */}
+                        <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
+                            <button
+                                type="button"
+                                onClick={() => setShowOfficializeModal(false)}
+                                className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-all"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={generatingPlayoffs}
+                                onClick={() => handleConfirmOfficialPlayoffs(selectedOfficialFormat)}
+                                className="px-5 py-2.5 bg-gradient-to-r from-emerald-400 to-green-500 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all flex items-center gap-2"
+                            >
+                                <Trophy size={14} className={generatingPlayoffs ? 'animate-spin' : ''} />
+                                {generatingPlayoffs ? 'Oficializando...' : 'Confirmar y Crear Llaves Oficiales'}
                             </button>
                         </div>
                     </div>

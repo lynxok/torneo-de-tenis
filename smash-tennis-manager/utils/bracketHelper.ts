@@ -480,6 +480,93 @@ export function getProjectedPlayoffRounds(
             { name: 'Semifinales', matches: sfMatches },
             { name: 'Gran Final', matches: finalMatch }
         );
+    } else if (zones.length === 3) {
+        // 3 Zonas con BYEs anti-repetición:
+        // Los 2 mejores primeros obtienen BYE directo a Semifinales
+        const groupWinners = zones.map((z, idx) => ({ zone: z, player: z.players[0], zoneIdx: idx }))
+            .filter(w => !!w.player);
+        // Ordenar a los ganadores por puntos > sets > games para determinar los 2 mejores primeros
+        groupWinners.sort((a, b) => {
+            if ((b.player.points || 0) !== (a.player.points || 0)) return (b.player.points || 0) - (a.player.points || 0);
+            if ((b.player.diffSets || 0) !== (a.player.diffSets || 0)) return (b.player.diffSets || 0) - (a.player.diffSets || 0);
+            return (b.player.diffGames || 0) - (a.player.diffGames || 0);
+        });
+
+        const topWinner1 = groupWinners[0]; // Semifinal 1 (BYE)
+        const topWinner2 = groupWinners[1]; // Semifinal 2 (BYE)
+        const thirdWinner = groupWinners[2]; // Juega Cuartos
+
+        // Determinar qué zonas son para armar los cruces anti-repetición
+        // Zonas de los BYEs:
+        const byeZoneIdxs = new Set([topWinner1?.zoneIdx, topWinner2?.zoneIdx]);
+        // La zona restante (thirdWinner)
+        const thirdZoneIdx = thirdWinner?.zoneIdx ?? 2;
+
+        // Segundos de cada zona:
+        const secPlayers = zones.map((z, idx) => ({ zone: z, player: z.players[1], zoneIdx: idx }));
+        // El 2° de una de las zonas con BYE juega contra el 3er ganador
+        // Elegimos al 2° de la zona del topWinner1 para que juegue contra thirdWinner en Cuartos 1
+        // y que su ganador vaya a la Semifinal 2 (contra topWinner2), ¡así nunca se cruzan de la misma zona!
+        const secOfBye1 = secPlayers.find(s => s.zoneIdx === topWinner1?.zoneIdx) || secPlayers[0];
+        const secOfBye2 = secPlayers.find(s => s.zoneIdx === topWinner2?.zoneIdx) || secPlayers[1];
+        const secOfThird = secPlayers.find(s => s.zoneIdx === thirdZoneIdx) || secPlayers[2];
+
+        // Cuartos 1: 1° Zona Restante vs 2° Zona de Bye 1 -> Va a Semifinal 2
+        // Cuartos 2: 2° Zona de Bye 2 vs 2° Zona Restante -> Va a Semifinal 1
+        const qfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-qf-1',
+                round: 'Cuartos de Final',
+                slotP1Label: `1° ${thirdWinner?.zone.groupName || 'Zona C'}`,
+                p1Name: thirdWinner?.player?.playerName,
+                p1Id: thirdWinner?.player?.playerId,
+                slotP2Label: `2° ${secOfBye1?.zone.groupName || 'Zona A'}`,
+                p2Name: secOfBye1?.player?.playerName,
+                p2Id: secOfBye1?.player?.playerId
+            },
+            {
+                id: 'proj-qf-2',
+                round: 'Cuartos de Final',
+                slotP1Label: `2° ${secOfBye2?.zone.groupName || 'Zona B'}`,
+                p1Name: secOfBye2?.player?.playerName,
+                p1Id: secOfBye2?.player?.playerId,
+                slotP2Label: `2° ${secOfThird?.zone.groupName || 'Zona C'}`,
+                p2Name: secOfThird?.player?.playerName,
+                p2Id: secOfThird?.player?.playerId
+            }
+        ];
+
+        const sfMatches: ProjectedMatch[] = [
+            {
+                id: 'proj-sf-1',
+                round: 'Semifinal',
+                slotP1Label: `1° ${topWinner1?.zone.groupName || 'Zona A'} (BYE a Semis)`,
+                p1Name: topWinner1?.player?.playerName,
+                p1Id: topWinner1?.player?.playerId,
+                slotP2Label: `Ganador Cuartos 2 (${secOfBye2?.zone.groupName || '2°B'} vs ${secOfThird?.zone.groupName || '2°C'})`
+            },
+            {
+                id: 'proj-sf-2',
+                round: 'Semifinal',
+                slotP1Label: `1° ${topWinner2?.zone.groupName || 'Zona B'} (BYE a Semis)`,
+                p1Name: topWinner2?.player?.playerName,
+                p1Id: topWinner2?.player?.playerId,
+                slotP2Label: `Ganador Cuartos 1 (${thirdWinner?.zone.groupName || '1°C'} vs ${secOfBye1?.zone.groupName || '2°A'})`
+            }
+        ];
+
+        const finalMatch: ProjectedMatch = {
+            id: 'proj-f-1',
+            round: 'Final',
+            slotP1Label: 'Ganador Semifinal 1',
+            slotP2Label: 'Ganador Semifinal 2'
+        };
+
+        rounds.push(
+            { name: 'Cuartos de Final (Proyectado)', matches: qfMatches },
+            { name: 'Semifinales (Proyectado)', matches: sfMatches },
+            { name: 'Gran Final', matches: [finalMatch] }
+        );
     } else if (zones.length === 2) {
         const zA = zones[0];
         const zB = zones[1];
@@ -518,7 +605,7 @@ export function getProjectedPlayoffRounds(
 
         rounds.push(
             { name: 'Semifinales (Proyectado)', matches: sfMatches },
-            { name: 'Gran Final', matches: finalMatch }
+            { name: 'Gran Final', matches: [finalMatch] }
         );
     } else {
         const unified = calculateUnifiedStandings(zones, allPlayers);
@@ -676,40 +763,80 @@ function getProjectedRoundsFromUnified(standings: GroupStandingRow[], allowByes:
         );
     } else {
         const topCount = Math.min(N, 8);
-        const roundName = topCount > 4 ? 'Cuartos de Final (Proyectado)' : 'Semifinales (Proyectado)';
         const matches: ProjectedMatch[] = [];
 
-        for (let i = 0; i < topCount; i += 2) {
-            if (i + 1 < topCount) {
-                matches.push({
-                    id: `proj-m-${i}`,
-                    round: roundName,
-                    slotP1Label: `${i + 1}° Clasificación`,
-                    p1Name: standings[i]?.playerName,
-                    p1Id: standings[i]?.playerId,
-                    slotP2Label: `${i + 2}° Clasificación`,
-                    p2Name: standings[i + 1]?.playerName,
-                    p2Id: standings[i + 1]?.playerId
-                });
-            }
-        }
+        if (topCount > 4) {
+            // Cuartos de Final estándar profesional (8 jugadores):
+            // Llave 1 (Arriba): 1° vs 8°
+            // Llave 2:         4° vs 5°
+            // Llave 3:         3° vs 6°
+            // Llave 4 (Abajo): 2° vs 7°
+            const qfPairs = [
+                { p1Idx: 0, p2Idx: 7 }, // 1° vs 8°
+                { p1Idx: 3, p2Idx: 4 }, // 4° vs 5°
+                { p1Idx: 2, p2Idx: 5 }, // 3° vs 6°
+                { p1Idx: 1, p2Idx: 6 }, // 2° vs 7°
+            ];
 
-        rounds.push({ name: roundName, matches });
-        if (roundName.includes('Cuartos')) {
+            qfPairs.forEach((pair, idx) => {
+                const s1 = standings[pair.p1Idx];
+                const s2 = standings[pair.p2Idx];
+                matches.push({
+                    id: `proj-m-${idx}`,
+                    round: 'Cuartos de Final (Proyectado)',
+                    slotP1Label: `${pair.p1Idx + 1}° Clasificación`,
+                    p1Name: s1?.playerName,
+                    p1Id: s1?.playerId,
+                    slotP2Label: `${pair.p2Idx + 1}° Clasificación`,
+                    p2Name: s2?.playerName,
+                    p2Id: s2?.playerId
+                });
+            });
+
+            rounds.push({ name: 'Cuartos de Final (Proyectado)', matches });
             rounds.push({
-                name: 'Semifinales',
+                name: 'Semifinales (Proyectado)',
                 matches: [
-                    { id: 'proj-sf-1', round: 'Semifinal', slotP1Label: 'Ganador Llave 1', slotP2Label: 'Ganador Llave 2' },
-                    { id: 'proj-sf-2', round: 'Semifinal', slotP1Label: 'Ganador Llave 3', slotP2Label: 'Ganador Llave 4' }
+                    { id: 'proj-sf-1', round: 'Semifinal', slotP1Label: 'Ganador Llave 1 (1° vs 8°)', slotP2Label: 'Ganador Llave 2 (4° vs 5°)' },
+                    { id: 'proj-sf-2', round: 'Semifinal', slotP1Label: 'Ganador Llave 3 (3° vs 6°)', slotP2Label: 'Ganador Llave 4 (2° vs 7°)' }
+                ]
+            });
+            rounds.push({
+                name: 'Gran Final',
+                matches: [
+                    { id: 'proj-f-1', round: 'Final', slotP1Label: 'Ganador Semifinal 1', slotP2Label: 'Ganador Semifinal 2' }
+                ]
+            });
+        } else {
+            // Semifinales estándar (4 jugadores): 1° vs 4°, 2° vs 3°
+            const sfPairs = [
+                { p1Idx: 0, p2Idx: 3 }, // 1° vs 4°
+                { p1Idx: 1, p2Idx: 2 }, // 2° vs 3°
+            ];
+
+            sfPairs.forEach((pair, idx) => {
+                const s1 = standings[pair.p1Idx];
+                const s2 = standings[pair.p2Idx];
+                matches.push({
+                    id: `proj-m-${idx}`,
+                    round: 'Semifinales (Proyectado)',
+                    slotP1Label: `${pair.p1Idx + 1}° Clasificación`,
+                    p1Name: s1?.playerName,
+                    p1Id: s1?.playerId,
+                    slotP2Label: `${pair.p2Idx + 1}° Clasificación`,
+                    p2Name: s2?.playerName,
+                    p2Id: s2?.playerId
+                });
+            });
+
+            rounds.push({ name: 'Semifinales (Proyectado)', matches });
+            rounds.push({
+                name: 'Gran Final',
+                matches: [
+                    { id: 'proj-f-1', round: 'Final', slotP1Label: 'Ganador Semifinal 1', slotP2Label: 'Ganador Semifinal 2' }
                 ]
             });
         }
-        rounds.push({
-            name: 'Gran Final',
-            matches: [
-                { id: 'proj-f-1', round: 'Final', slotP1Label: 'Ganador Semifinal 1', slotP2Label: 'Ganador Semifinal 2' }
-            ]
-        });
     }
 
     return rounds;
@@ -946,12 +1073,24 @@ export function buildPlayoffTreeWithByes(
         return seeds;
     }
 
-    // Default top 4 or top 8
+    // Default top 4 or top 8 con emparejamientos estándar profesionales
     const topQ = standings.slice(0, 8);
     if (topQ.length > 4) {
-        for (let i = 0; i < 4; i++) {
-            const p1 = topQ[i * 2];
-            const p2 = topQ[i * 2 + 1];
+        // Cuartos de Final (8 jugadores):
+        // Llave 0: 1° vs 8° -> va a Semifinal 0 (player1)
+        // Llave 1: 4° vs 5° -> va a Semifinal 0 (player2)
+        // Llave 2: 3° vs 6° -> va a Semifinal 1 (player1)
+        // Llave 3: 2° vs 7° -> va a Semifinal 1 (player2)
+        const qfPairs = [
+            { p1Idx: 0, p2Idx: 7, semiMatch: 0, semiSlot: 'player1' as const }, // 1° vs 8°
+            { p1Idx: 3, p2Idx: 4, semiMatch: 0, semiSlot: 'player2' as const }, // 4° vs 5°
+            { p1Idx: 2, p2Idx: 5, semiMatch: 1, semiSlot: 'player1' as const }, // 3° vs 6°
+            { p1Idx: 1, p2Idx: 6, semiMatch: 1, semiSlot: 'player2' as const }, // 2° vs 7°
+        ];
+
+        qfPairs.forEach((pair, i) => {
+            const p1 = topQ[pair.p1Idx];
+            const p2 = topQ[pair.p2Idx];
             seeds.push({
                 round: 'Cuartos de Final',
                 player1: p1?.playerId ? { id: p1.playerId, name: p1.playerName || '' } : undefined,
@@ -960,13 +1099,14 @@ export function buildPlayoffTreeWithByes(
                     bracket_round: 'Cuartos de Final',
                     bracket_match_index: i,
                     next_round: 'Semifinal',
-                    next_match_index: Math.floor(i / 2),
-                    next_slot: i % 2 === 0 ? 'player1' : 'player2',
-                    slot1_label: `${i * 2 + 1}° ${p1?.playerName || ''}`,
-                    slot2_label: `${i * 2 + 2}° ${p2?.playerName || ''}`
+                    next_match_index: pair.semiMatch,
+                    next_slot: pair.semiSlot,
+                    slot1_label: `${pair.p1Idx + 1}° ${p1?.playerName || ''}`,
+                    slot2_label: `${pair.p2Idx + 1}° ${p2?.playerName || ''}`
                 }
             });
-        }
+        });
+
         seeds.push({
             round: 'Semifinal',
             proposal_data: {
@@ -975,8 +1115,8 @@ export function buildPlayoffTreeWithByes(
                 next_round: 'Final',
                 next_match_index: 0,
                 next_slot: 'player1',
-                slot1_label: 'Ganador Llave 1',
-                slot2_label: 'Ganador Llave 2'
+                slot1_label: 'Ganador Llave 1 (1° vs 8°)',
+                slot2_label: 'Ganador Llave 2 (4° vs 5°)'
             }
         });
         seeds.push({
@@ -987,8 +1127,8 @@ export function buildPlayoffTreeWithByes(
                 next_round: 'Final',
                 next_match_index: 0,
                 next_slot: 'player2',
-                slot1_label: 'Ganador Llave 3',
-                slot2_label: 'Ganador Llave 4'
+                slot1_label: 'Ganador Llave 3 (3° vs 6°)',
+                slot2_label: 'Ganador Llave 4 (2° vs 7°)'
             }
         });
         seeds.push({
@@ -1001,9 +1141,15 @@ export function buildPlayoffTreeWithByes(
             }
         });
     } else {
-        for (let i = 0; i < 2; i++) {
-            const p1 = topQ[i * 2];
-            const p2 = topQ[i * 2 + 1];
+        // Semifinales (4 jugadores): 1° vs 4°, 2° vs 3°
+        const sfPairs = [
+            { p1Idx: 0, p2Idx: 3, finalSlot: 'player1' as const }, // 1° vs 4°
+            { p1Idx: 1, p2Idx: 2, finalSlot: 'player2' as const }, // 2° vs 3°
+        ];
+
+        sfPairs.forEach((pair, i) => {
+            const p1 = topQ[pair.p1Idx];
+            const p2 = topQ[pair.p2Idx];
             seeds.push({
                 round: 'Semifinal',
                 player1: p1?.playerId ? { id: p1.playerId, name: p1.playerName || '' } : undefined,
@@ -1013,12 +1159,13 @@ export function buildPlayoffTreeWithByes(
                     bracket_match_index: i,
                     next_round: 'Final',
                     next_match_index: 0,
-                    next_slot: i === 0 ? 'player1' : 'player2',
-                    slot1_label: `${i * 2 + 1}° ${p1?.playerName || ''}`,
-                    slot2_label: `${i * 2 + 2}° ${p2?.playerName || ''}`
+                    next_slot: pair.finalSlot,
+                    slot1_label: `${pair.p1Idx + 1}° ${p1?.playerName || ''}`,
+                    slot2_label: `${pair.p2Idx + 1}° ${p2?.playerName || ''}`
                 }
             });
-        }
+        });
+
         seeds.push({
             round: 'Final',
             proposal_data: {
@@ -1137,6 +1284,98 @@ export function buildPlayoffTreeFromZones(
         });
 
         // 1 Gran Final
+        seeds.push({
+            round: 'Final',
+            proposal_data: {
+                bracket_round: 'Final',
+                bracket_match_index: 0,
+                slot1_label: 'Ganador Semifinal 1',
+                slot2_label: 'Ganador Semifinal 2'
+            }
+        });
+    } else if (zones.length === 3) {
+        // 3 Zonas con BYEs anti-repetición:
+        const groupWinners = zones.map((z, idx) => ({ zone: z, player: z.players[0], zoneIdx: idx }))
+            .filter(w => !!w.player);
+        groupWinners.sort((a, b) => {
+            if ((b.player.points || 0) !== (a.player.points || 0)) return (b.player.points || 0) - (a.player.points || 0);
+            if ((b.player.diffSets || 0) !== (a.player.diffSets || 0)) return (b.player.diffSets || 0) - (a.player.diffSets || 0);
+            return (b.player.diffGames || 0) - (a.player.diffGames || 0);
+        });
+
+        const topWinner1 = groupWinners[0]; // Semifinal 0 (BYE)
+        const topWinner2 = groupWinners[1]; // Semifinal 1 (BYE)
+        const thirdWinner = groupWinners[2]; // Juega Cuartos 0
+
+        const thirdZoneIdx = thirdWinner?.zoneIdx ?? 2;
+        const secPlayers = zones.map((z, idx) => ({ zone: z, player: z.players[1], zoneIdx: idx }));
+        const secOfBye1 = secPlayers.find(s => s.zoneIdx === topWinner1?.zoneIdx) || secPlayers[0];
+        const secOfBye2 = secPlayers.find(s => s.zoneIdx === topWinner2?.zoneIdx) || secPlayers[1];
+        const secOfThird = secPlayers.find(s => s.zoneIdx === thirdZoneIdx) || secPlayers[2];
+
+        // Cuartos 0: 1° Zona Restante vs 2° Zona de Bye 1 -> Va a Semifinal 1 (player2)
+        seeds.push({
+            round: 'Cuartos de Final',
+            player1: thirdWinner?.player ? { id: thirdWinner.player.playerId, name: thirdWinner.player.playerName } : undefined,
+            player2: secOfBye1?.player ? { id: secOfBye1.player.playerId, name: secOfBye1.player.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Cuartos de Final',
+                bracket_match_index: 0,
+                next_round: 'Semifinal',
+                next_match_index: 1,
+                next_slot: 'player2',
+                slot1_label: `1° ${thirdWinner?.zone.groupName || 'Zona C'}`,
+                slot2_label: `2° ${secOfBye1?.zone.groupName || 'Zona A'}`
+            }
+        });
+
+        // Cuartos 1: 2° Zona de Bye 2 vs 2° Zona Restante -> Va a Semifinal 0 (player2)
+        seeds.push({
+            round: 'Cuartos de Final',
+            player1: secOfBye2?.player ? { id: secOfBye2.player.playerId, name: secOfBye2.player.playerName } : undefined,
+            player2: secOfThird?.player ? { id: secOfThird.player.playerId, name: secOfThird.player.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Cuartos de Final',
+                bracket_match_index: 1,
+                next_round: 'Semifinal',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: `2° ${secOfBye2?.zone.groupName || 'Zona B'}`,
+                slot2_label: `2° ${secOfThird?.zone.groupName || 'Zona C'}`
+            }
+        });
+
+        // Semifinal 0: 1° Zona Bye 1 vs Ganador Cuartos 1
+        seeds.push({
+            round: 'Semifinal',
+            player1: topWinner1?.player ? { id: topWinner1.player.playerId, name: topWinner1.player.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 0,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player1',
+                slot1_label: `1° ${topWinner1?.zone.groupName || 'Zona A'} (BYE a Semis)`,
+                slot2_label: `Ganador Cuartos 2 (${secOfBye2?.zone.groupName || '2°B'} vs ${secOfThird?.zone.groupName || '2°C'})`
+            }
+        });
+
+        // Semifinal 1: 1° Zona Bye 2 vs Ganador Cuartos 0
+        seeds.push({
+            round: 'Semifinal',
+            player1: topWinner2?.player ? { id: topWinner2.player.playerId, name: topWinner2.player.playerName } : undefined,
+            proposal_data: {
+                bracket_round: 'Semifinal',
+                bracket_match_index: 1,
+                next_round: 'Final',
+                next_match_index: 0,
+                next_slot: 'player2',
+                slot1_label: `1° ${topWinner2?.zone.groupName || 'Zona B'} (BYE a Semis)`,
+                slot2_label: `Ganador Cuartos 1 (${thirdWinner?.zone.groupName || '1°C'} vs ${secOfBye1?.zone.groupName || '2°A'})`
+            }
+        });
+
+        // Gran Final
         seeds.push({
             round: 'Final',
             proposal_data: {
