@@ -12,6 +12,13 @@ import { getCategoriesForInstitution, NUMERIC_CATEGORIES } from '../utils/catego
 import { formatPlayerName } from '../utils/formatters';
 import { soundEffects } from '../services/soundEffects';
 import { pushNotificationService } from '../services/pushNotificationService';
+import { 
+    getUserLocationFromProfile, 
+    getInstitutionCoordinates, 
+    calculateDistanceKm, 
+    formatDistance, 
+    UserLocation 
+} from '../utils/geoUtils';
 
 interface MatchmakingBoardProps {
     user: UserProfile;
@@ -27,6 +34,37 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
     const [filterType, setFilterType] = useState<'all' | 'singles' | 'doubles'>('all');
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [submitting, setSubmitting] = useState(false);
+
+    // Location & Radius Filtering (50 km default based on user city/profile)
+    const profileCoords = React.useMemo(() => {
+        return getUserLocationFromProfile(user);
+    }, [user]);
+
+    const userCityLabel = user.city || user.province || '';
+    const [userLocation, setUserLocation] = useState<UserLocation | null>(profileCoords);
+    const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(profileCoords ? 50 : null);
+    const [sortByDistance, setSortByDistance] = useState<boolean>(!!profileCoords);
+
+    // Passive GPS detection to refine accuracy if allowed
+    useEffect(() => {
+        if ('geolocation' in navigator) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => {
+                    const coords: UserLocation = {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        accuracy: pos.coords.accuracy,
+                    };
+                    setUserLocation(coords);
+                    setSortByDistance(true);
+                },
+                (err) => {
+                    console.log('Passive geolocation skipped in Matchmaking:', err.message);
+                },
+                { enableHighAccuracy: false, timeout: 5000, maximumAge: 300000 }
+            );
+        }
+    }, []);
 
     // Create Form State
     const [postType, setPostType] = useState<'singles' | 'doubles'>('singles');
@@ -90,6 +128,40 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
             setLoading(false);
         }
     };
+
+    // Process posts with distances and filter by radius (50km by default)
+    const processedPosts = React.useMemo(() => {
+        return posts
+            .map(post => {
+                const inst = institutions.find(i => i.id === post.institution_id);
+                const coords = getInstitutionCoordinates(inst || {
+                    id: post.institution_id,
+                    name: post.institution_name,
+                });
+                const distanceKm = userLocation
+                    ? calculateDistanceKm(userLocation.lat, userLocation.lng, coords.lat, coords.lng)
+                    : null;
+                return {
+                    ...post,
+                    coords,
+                    distanceKm,
+                    institutionCity: inst?.city || '',
+                };
+            })
+            .filter(post => {
+                if (maxDistanceKm !== null && post.distanceKm !== null) {
+                    if (post.distanceKm > maxDistanceKm) return false;
+                }
+                return true;
+            })
+            .sort((a, b) => {
+                if (sortByDistance && a.distanceKm !== null && b.distanceKm !== null) {
+                    return a.distanceKm - b.distanceKm;
+                }
+                // default sort by created_at descending
+                return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+            });
+    }, [posts, institutions, userLocation, maxDistanceKm, sortByDistance]);
 
     const handleCreatePost = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -223,6 +295,13 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                     <p className="text-xs text-slate-300 max-w-2xl">
                         ¿Tenés cancha reservada y te falta rival? ¿Querés armar un dobles o encontrar rivales de tu categoría? Publicá tu anuncio o unite a los partidos de otros socios.
                     </p>
+                    {userCityLabel && (
+                        <div className="pt-1 flex items-center gap-2">
+                            <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 border border-sky-500/20 px-2.5 py-0.5 rounded-full inline-flex items-center gap-1">
+                                📍 Tu ciudad: <b>{userCityLabel}</b> (Radio 50 km activo)
+                            </span>
+                        </div>
+                    )}
                 </div>
 
                 <button 
@@ -291,8 +370,62 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                     ))}
                 </select>
 
+                {/* Distance Radius Filter */}
+                {userLocation && (
+                    <div className="flex items-center gap-1.5 bg-slate-900/80 p-1 rounded-xl border border-white/10 text-xs">
+                        <button
+                            onClick={() => {
+                                if (maxDistanceKm === 50) {
+                                    setMaxDistanceKm(null);
+                                } else {
+                                    setMaxDistanceKm(50);
+                                    setSortByDistance(true);
+                                }
+                            }}
+                            className={`px-3 py-1.5 rounded-lg font-bold transition-all flex items-center gap-1 ${
+                                maxDistanceKm === 50
+                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
+                                    : 'text-muted hover:text-white'
+                            }`}
+                        >
+                            <span>📍</span>
+                            <span>{maxDistanceKm === 50 ? 'Radio 50 km' : 'Radio 50 km'}</span>
+                        </button>
+                        <button
+                            onClick={() => setMaxDistanceKm(null)}
+                            className={`px-2.5 py-1.5 rounded-lg font-bold transition-all ${
+                                maxDistanceKm === null ? 'bg-primary text-white' : 'text-muted hover:text-white'
+                            }`}
+                        >
+                            Todos
+                        </button>
+                        <button
+                            onClick={() => setMaxDistanceKm(100)}
+                            className={`px-2.5 py-1.5 rounded-lg font-bold transition-all ${
+                                maxDistanceKm === 100 ? 'bg-primary text-white' : 'text-muted hover:text-white'
+                            }`}
+                        >
+                            100 km
+                        </button>
+                    </div>
+                )}
+
+                {userLocation && (
+                    <button
+                        onClick={() => setSortByDistance(!sortByDistance)}
+                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 ${
+                            sortByDistance
+                                ? 'bg-sky-500/20 text-sky-400 border-sky-400/40'
+                                : 'bg-slate-900/80 border-white/10 text-muted hover:text-white'
+                        }`}
+                    >
+                        <span>🧭</span>
+                        <span>Más cercanos a mí</span>
+                    </button>
+                )}
+
                 <div className="ml-auto text-xs text-muted">
-                    {posts.length} {posts.length === 1 ? 'anuncio activo' : 'anuncios activos'}
+                    {processedPosts.length} {processedPosts.length === 1 ? 'anuncio activo' : 'anuncios activos'}
                 </div>
             </div>
 
@@ -302,23 +435,47 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                     <Loader2 className="animate-spin text-primary mb-2" size={32} />
                     <p className="text-xs">Cargando anuncios del tablón...</p>
                 </div>
-            ) : posts.length === 0 ? (
+            ) : processedPosts.length === 0 ? (
                 <div className="text-center py-16 border border-dashed border-white/10 rounded-2xl p-6 text-muted space-y-3">
                     <Users size={40} className="mx-auto text-primary opacity-40" />
-                    <h4 className="font-bold text-white text-base">No hay anuncios activos con estos filtros</h4>
+                    <h4 className="font-bold text-white text-base">
+                        {maxDistanceKm 
+                            ? `No hay propuestas de partidos a menos de ${maxDistanceKm} km` 
+                            : 'No hay anuncios activos con estos filtros'}
+                    </h4>
                     <p className="text-xs text-slate-400 max-w-md mx-auto">
-                        Sé el primero en publicar una búsqueda para jugar hoy o el fin de semana.
+                        {maxDistanceKm 
+                            ? `No encontramos partidos en tu zona inmediata (${userCityLabel || 'tu localidad'}). Podés ampliar el radio o ver todos los partidos.`
+                            : 'Sé el primero en publicar una búsqueda para jugar hoy o el fin de semana.'}
                     </p>
-                    <button 
-                        onClick={() => setShowCreateModal(true)}
-                        className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl transition-all shadow-md"
-                    >
-                        Publicar Primer Aviso
-                    </button>
+                    <div className="flex justify-center items-center gap-2 pt-2">
+                        {maxDistanceKm && (
+                            <button
+                                onClick={() => setMaxDistanceKm(null)}
+                                className="px-4 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl transition-all shadow-md"
+                            >
+                                Ver Todos los Partidos
+                            </button>
+                        )}
+                        {maxDistanceKm === 50 && (
+                            <button
+                                onClick={() => setMaxDistanceKm(100)}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl transition-all border border-white/10"
+                            >
+                                Ampliar a 100 km
+                            </button>
+                        )}
+                        <button 
+                            onClick={() => setShowCreateModal(true)}
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-white/10 text-xs font-bold rounded-xl transition-all shadow-md"
+                        >
+                            Publicar Aviso en mi Club
+                        </button>
+                    </div>
                 </div>
             ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {posts.map(post => {
+                    {processedPosts.map(post => {
                         const isOwn = post.user_id === user.id;
                         const isDoubles = post.type === 'doubles';
                         const maxPlayers = post.max_players || (isDoubles ? 4 : 2);
@@ -393,14 +550,25 @@ export const MatchmakingBoard: React.FC<MatchmakingBoardProps> = ({ user, instit
                                     {/* Match details */}
                                     <div className="bg-slate-900/80 border border-white/5 rounded-xl p-3 space-y-2 text-xs">
                                         <div className="flex items-center justify-between text-slate-300">
-                                            <div className="flex items-center gap-1.5">
-                                                <Building size={14} className="text-primary" />
-                                                <span className="font-semibold">{post.institution_name || 'Club'}</span>
+                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                <Building size={14} className="text-primary shrink-0" />
+                                                <span className="font-semibold truncate">{post.institution_name || 'Club'}</span>
+                                                {post.institutionCity && (
+                                                    <span className="text-[10px] text-slate-400 shrink-0">
+                                                        • {post.institutionCity}
+                                                    </span>
+                                                )}
                                             </div>
-                                            <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded-md text-[10px]">
+                                            <span className="font-bold text-white bg-white/10 px-2 py-0.5 rounded-md text-[10px] shrink-0">
                                                 Cat: {post.category}
                                             </span>
                                         </div>
+
+                                        {post.distanceKm !== null && (
+                                            <div className="text-[10px] font-bold text-sky-400 flex items-center gap-1">
+                                                <span>🧭 A {formatDistance(post.distanceKm)} de tu ubicación</span>
+                                            </div>
+                                        )}
 
                                         <div className="flex items-center gap-3 text-[11px] text-muted">
                                             {post.date && (

@@ -235,6 +235,30 @@ export function getTournamentCoordinates(item: {
 }
 
 /**
+ * Resolves coordinates for an institution or club
+ */
+export function getInstitutionCoordinates(inst?: {
+    id?: string;
+    name?: string | null;
+    city?: string | null;
+    province?: string | null;
+    address?: string | null;
+    latitude?: number | null;
+    longitude?: number | null;
+} | null): Coordinates {
+    if (!inst) return DEFAULT_MAP_CENTER;
+    return getTournamentCoordinates({
+        id: inst.id,
+        institution_id: inst.id,
+        institutions: inst,
+        institution_name: inst.name,
+        city: inst.city,
+        province: inst.province,
+    });
+}
+
+
+/**
  * Open external navigation apps with coordinates or venue query
  */
 export function openDirections(coords: Coordinates, label?: string) {
