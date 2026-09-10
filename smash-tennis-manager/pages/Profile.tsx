@@ -19,6 +19,7 @@ import { RankingEvolutionChart } from '../components/RankingEvolutionChart';
 import { soundEffects } from '../services/soundEffects';
 import { pushNotificationService, PushPermissionStatus } from '../services/pushNotificationService';
 import { triggerPWAInstall } from '../components/PWAInstallPrompt';
+import { LocationSelector } from '../components/LocationSelector';
 
 interface ProfileProps {
     user: UserProfile;
@@ -49,6 +50,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
         lastname: user.lastname || '',
         phone: user.phone || '',
         dni: user.dni || '',
+        country: user.country || 'Argentina',
+        province: user.province || '',
+        city: user.city || '',
         category: user.category || '',
         gender: user.gender || 'masculino',
         birth_date: user.birth_date || '',
@@ -244,6 +248,9 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             lastname: user.lastname || '',
             phone: user.phone || '',
             dni: user.dni || '',
+            country: user.country || 'Argentina',
+            province: user.province || '',
+            city: user.city || '',
             category: user.category || '',
             gender: user.gender || 'masculino',
             birth_date: user.birth_date || '',
@@ -319,7 +326,10 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
             gender: formData.gender,
             birth_date: formData.birth_date || null,
             institution_id: formData.institution_id,
-            show_whatsapp: formData.show_whatsapp
+            show_whatsapp: formData.show_whatsapp,
+            country: formData.country || 'Argentina',
+            province: formData.province || null,
+            city: formData.city || null
         };
 
         // Fix: Convert empty string UUIDs to null to avoid Postgres error
@@ -544,7 +554,12 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                 icon={Calendar} 
                                 className="text-primary font-bold" 
                             />
-                            <InfoField label="Club Principal" value={user.institution || 'Sin club principal'} icon={MapPin} />
+                            <InfoField 
+                                label="Ubicación" 
+                                value={[user.city, user.province, user.country].filter(Boolean).join(', ') || 'No especificada'} 
+                                icon={MapPin} 
+                            />
+                            <InfoField label="Club Principal" value={user.institution || 'Sin club principal'} icon={BuildingIcon} />
                             <InfoField label="Rol en Sistema" value={user.role} icon={Shield} className="capitalize" />
                             <InfoField
                                 label="Condición General"
@@ -1139,6 +1154,17 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                                             onChange={e => setFormData({ ...formData, birth_date: e.target.value })} 
                                         />
                                     </div>
+                                </div>
+                                <div className="space-y-1">
+                                    <LocationSelector
+                                        country={formData.country}
+                                        province={formData.province}
+                                        city={formData.city}
+                                        compact
+                                        onChange={({ country, province, city }) => {
+                                            setFormData(prev => ({ ...prev, country, province, city }));
+                                        }}
+                                    />
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs text-muted uppercase font-bold">Institución / Club</label>

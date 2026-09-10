@@ -2,12 +2,13 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { UserProfile, UserRole, Institution } from '../types';
 import { api } from '../services/api';
-import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar, Trophy, Medal, LayoutList, Layers, Trash2, Gift, Sparkles } from 'lucide-react';
+import { Search, Shield, UserPlus, X, Loader2, Save, Building, AlertCircle, CheckCheck, Edit2, UserCheck, Users, Clock, Award, Check, Phone, CreditCard, Calendar, Trophy, Medal, LayoutList, Layers, Trash2, Gift, Sparkles, MapPin } from 'lucide-react';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass } from '../utils/demographics';
 import { computeRankings, normalizeCategoryKey, RankedPlayer } from '../utils/ranking';
 import { UserAvatar } from '../components/UserAvatar';
+import { LocationSelector } from '../components/LocationSelector';
 
 interface AdminUsersProps {
     user?: UserProfile;
@@ -66,6 +67,9 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         birth_date: '',
         role: 'player' as UserRole,
         institution_id: '',
+        country: 'Argentina',
+        province: '',
+        city: '',
         is_member: false,
         member_number: '',
         member_status: 'active' as 'active' | 'pending' | 'inactive',
@@ -101,6 +105,9 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             birth_date: u.birth_date || '',
             role: u.role || 'player',
             institution_id: u.institution_id || '',
+            country: u.country || 'Argentina',
+            province: u.province || '',
+            city: u.city || '',
             is_member: !!u.is_member,
             member_number: u.member_number || '',
             member_status: u.member_status || 'active',
@@ -129,6 +136,9 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 birth_date: editFormData.birth_date || null,
                 role: editFormData.role,
                 institution_id: editFormData.institution_id ? editFormData.institution_id : null,
+                country: editFormData.country || 'Argentina',
+                province: editFormData.province || null,
+                city: editFormData.city || null,
                 is_member: editFormData.is_member,
                 member_number: editFormData.member_number,
                 member_status: editFormData.member_status || (editFormData.is_member ? 'active' : 'inactive')
@@ -312,6 +322,79 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             alert('Error al eliminar usuario: ' + (error.message || error));
         } finally {
             setDeletingUserId(null);
+        }
+    };
+
+    const [syncingParqueEspana, setSyncingParqueEspana] = useState(false);
+
+    const handleSyncParqueEspanaLocation = async () => {
+        const parqueEspanaClub = institutions.find(i => i.name.toLowerCase().includes('parque españa') || i.name.toLowerCase().includes('parque espana'));
+        if (!parqueEspanaClub) {
+            alert('No se encontró la institución Parque España.');
+            return;
+        }
+
+        const targetUsers = users.filter(u => u.institution_id === parqueEspanaClub.id);
+        if (targetUsers.length === 0) {
+            alert('No hay socios vinculados a Parque España actualmente.');
+            return;
+        }
+
+        if (!confirm(`¿Confirmas asignar "Argentina, Entre Ríos, Diamante" a los ${targetUsers.length} socios registrados en ${parqueEspanaClub.name}?`)) {
+            return;
+        }
+
+        setSyncingParqueEspana(true);
+        let successCount = 0;
+        try {
+            for (const u of targetUsers) {
+                try {
+                    await api.auth.updateProfile(u.id, {
+                        country: 'Argentina',
+                        province: 'Entre Ríos',
+                        city: 'Diamante'
+                    });
+                    successCount++;
+                } catch (err) {
+                    console.warn(`Error actualizando ubicación de ${u.name}:`, err);
+                }
+            }
+
+            // Sincronizar también Javier Carponi y Yanina Schneider según indicación
+            const carponi = users.find(u => u.email?.toLowerCase() === 'javiscarponi@gmail.com' || (u.name?.toLowerCase().includes('javier') && u.lastname?.toLowerCase().includes('carponi')));
+            if (carponi) {
+                try {
+                    await api.auth.updateProfile(carponi.id, {
+                        country: 'Argentina',
+                        province: 'Entre Ríos',
+                        city: 'Paraná'
+                    });
+                    successCount++;
+                } catch (err) {
+                    console.warn("Error actualizando a Javier Carponi:", err);
+                }
+            }
+
+            const yanina = users.find(u => u.email?.toLowerCase() === 'yaninaschneider10@gmail.com' || (u.name?.toLowerCase().includes('yanina') && u.lastname?.toLowerCase().includes('schneider')));
+            if (yanina) {
+                try {
+                    await api.auth.updateProfile(yanina.id, {
+                        country: 'Argentina',
+                        province: 'Santa Fe',
+                        city: 'Santa Rosa de Calchines'
+                    });
+                    successCount++;
+                } catch (err) {
+                    console.warn("Error actualizando a Yanina Schneider:", err);
+                }
+            }
+
+            alert(`✅ ¡Listo! Se actualizaron con éxito las ubicaciones:\n- ${targetUsers.length} socios de Parque España (Diamante, Entre Ríos)\n- Javier Carponi (Paraná, Entre Ríos)\n- Yanina Schneider (Santa Rosa de Calchines, Santa Fe)`);
+            loadUsers();
+        } catch (e: any) {
+            alert('Error durante la actualización: ' + e.message);
+        } finally {
+            setSyncingParqueEspana(false);
         }
     };
 
@@ -549,7 +632,13 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                     </div>
                 </td>
                 <td className="p-3.5 text-xs text-slate-300 hidden md:table-cell">
-                    {u.institution || <span className="text-muted italic">Sin asignar</span>}
+                    <div className="font-medium text-white">{u.institution || <span className="text-muted italic">Sin asignar</span>}</div>
+                    {(u.city || u.province) && (
+                        <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                            <MapPin size={11} className="text-primary shrink-0" />
+                            <span>{[u.city, u.province].filter(Boolean).join(', ')}</span>
+                        </div>
+                    )}
                 </td>
                 <td className="p-3.5 text-xs text-muted hidden lg:table-cell">
                     <div>{u.phone || '-'}</div>
@@ -646,6 +735,19 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                             title="Copiar link directo para que nuevos socios se registren con tu club preseleccionado"
                         >
                             <Building size={16} className="text-primary" /> Link Invitación Club
+                        </button>
+                    )}
+
+                    {/* Botón exclusivo para Super Admin para asignar ubicación masiva a Parque España + Carponi + Schneider */}
+                    {isSuperAdmin && (
+                        <button
+                            onClick={handleSyncParqueEspanaLocation}
+                            disabled={syncingParqueEspana}
+                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap text-sm shadow-lg shadow-emerald-600/20 disabled:opacity-50"
+                            title="Asignar automáticamente Diamante a Parque España, Paraná a Javier Carponi y Santa Rosa de Calchines a Yanina Schneider"
+                        >
+                            {syncingParqueEspana ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} className="text-white" />}
+                            <span>Sincronizar Ubicaciones</span>
                         </button>
                     )}
                 </div>
@@ -1144,6 +1246,19 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         onChange={e => setEditFormData({ ...editFormData, birth_date: e.target.value })}
                                     />
                                 </div>
+                            </div>
+
+                            {/* Ubicación del Usuario */}
+                            <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+                                <LocationSelector
+                                    country={editFormData.country}
+                                    province={editFormData.province}
+                                    city={editFormData.city}
+                                    compact
+                                    onChange={({ country, province, city }) => {
+                                        setEditFormData(prev => ({ ...prev, country, province, city }));
+                                    }}
+                                />
                             </div>
 
                             {/* SOCIO & CATEGORIA CONFIG */}

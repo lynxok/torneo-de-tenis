@@ -5,6 +5,7 @@ import { useToast } from './ui/Toast';
 import { Institution } from '../types';
 import { NUMERIC_CATEGORIES } from '../utils/categories';
 import { calculateAge, getAgeCategoryLabel } from '../utils/demographics';
+import { LocationSelector } from './LocationSelector';
 
 interface AuthPageProps {
   onLoginSuccess: () => void;
@@ -41,11 +42,18 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     phone: '',
     dni: '',
 
+    // Location Data (User & Club)
+    country: 'Argentina',
+    province: '',
+    city: '',
+
     // Promo Code
     promo_code: '',
 
     // Club Specific Fields
     club_name: '',
+    club_country: 'Argentina',
+    club_province: '',
     club_city: '',
     club_address: '',
     club_role_title: 'Capitán de Tenis',
@@ -173,6 +181,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
       // CASO B: CREAR NUEVA INSTITUCIÓN / CLUB (FUNDADOR)
       const cleanClubName = formData.club_name.trim();
+      const cleanClubCountry = (formData.club_country || formData.country || 'Argentina').trim();
+      const cleanClubProvince = formData.club_province.trim();
       const cleanClubCity = formData.club_city.trim();
       const cleanPromo = formData.promo_code.trim().toUpperCase();
 
@@ -181,8 +191,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         return;
       }
 
-      if (!cleanClubCity || cleanClubCity.length < 3) {
-        addToast('Por favor ingresa la Ciudad y Provincia del Club.', 'error');
+      if (!cleanClubProvince || !cleanClubCity) {
+        addToast('Por favor selecciona País, Provincia y Ciudad del Club.', 'error');
         return;
       }
 
@@ -205,6 +215,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
           lastname: cleanLastname,
           phone: cleanPhone,
           role: 'admin',
+          country: cleanClubCountry,
+          province: cleanClubProvince,
+          city: cleanClubCity,
           is_approved: isApprovedImmediately,
           is_member: true,
           member_status: isApprovedImmediately ? 'active' : 'pending'
@@ -218,6 +231,8 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         try {
           const newInst = await api.institutions.create({
             name: cleanClubName,
+            country: cleanClubCountry,
+            province: cleanClubProvince,
             city: cleanClubCity,
             address: formData.club_address.trim() || undefined,
             phone: cleanPhone,
@@ -273,6 +288,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
     const cleanDni = formData.dni.trim();
     const cleanPhone = formData.phone.trim();
     const cleanEmail = formData.email.trim();
+    const cleanCountry = (formData.country || 'Argentina').trim();
+    const cleanProvince = formData.province.trim();
+    const cleanCity = formData.city.trim();
     const cleanPromo = formData.promo_code.trim().toUpperCase();
 
     if (!cleanName || cleanName.length < 2) {
@@ -292,6 +310,11 @@ export const AuthPage: React.FC<AuthPageProps> = ({
 
     if (!cleanPhone || cleanPhone.length < 6) {
       addToast('Por favor ingresa tu número de WhatsApp / Teléfono.', 'error');
+      return;
+    }
+
+    if (!cleanProvince || !cleanCity) {
+      addToast('Por favor selecciona País, Provincia y Ciudad / Localidad.', 'error');
       return;
     }
 
@@ -319,6 +342,9 @@ export const AuthPage: React.FC<AuthPageProps> = ({
         lastname: cleanLastname,
         phone: cleanPhone,
         dni: cleanDni,
+        country: cleanCountry,
+        province: cleanProvince,
+        city: cleanCity,
         gender: formData.gender || 'masculino',
         birth_date: formData.birth_date || null,
         category: formData.category,
@@ -555,33 +581,32 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1 flex items-center gap-1">
-                          <MapPin size={12} className="text-primary" /> Ciudad y Provincia *
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ej: Paraná, Entre Ríos"
-                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                          required
-                          value={formData.club_city}
-                          onChange={e => setFormData({ ...formData, club_city: e.target.value })}
-                        />
-                      </div>
+                    <LocationSelector
+                      country={formData.club_country}
+                      province={formData.club_province}
+                      city={formData.club_city}
+                      required
+                      onChange={({ country, province, city }) => {
+                        setFormData({
+                          ...formData,
+                          club_country: country,
+                          club_province: province,
+                          club_city: city
+                        });
+                      }}
+                    />
 
-                      <div>
-                        <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
-                          Dirección (Opcional)
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ej: Av. Costanera 450"
-                          className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
-                          value={formData.club_address}
-                          onChange={e => setFormData({ ...formData, club_address: e.target.value })}
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-[11px] font-semibold text-muted uppercase tracking-wider mb-1">
+                        Dirección (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Av. Costanera 450"
+                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:border-primary focus:outline-none transition-colors text-sm"
+                        value={formData.club_address}
+                        onChange={e => setFormData({ ...formData, club_address: e.target.value })}
+                      />
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -766,6 +791,22 @@ export const AuthPage: React.FC<AuthPageProps> = ({
                   />
                 </div>
               </div>
+
+              {/* País, Provincia y Ciudad del Jugador */}
+              <LocationSelector
+                country={formData.country}
+                province={formData.province}
+                city={formData.city}
+                required
+                onChange={({ country, province, city }) => {
+                  setFormData({
+                    ...formData,
+                    country,
+                    province,
+                    city
+                  });
+                }}
+              />
 
               {/* Rama / Género y Fecha de Nacimiento */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

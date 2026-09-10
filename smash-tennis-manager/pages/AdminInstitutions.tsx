@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { CATEGORY_EQUIVALENCES } from '../utils/categories';
 import { CourtQRModal } from '../components/CourtQRModal';
+import { LocationSelector } from '../components/LocationSelector';
 
 interface AdminInstitutionsProps {
     user?: UserProfile;
@@ -518,23 +519,26 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
 
                     {activeTab === 'location' && (
                         <div className="space-y-4">
-                             <div className="space-y-1">
+                            <LocationSelector
+                                country={formData.country || 'Argentina'}
+                                province={formData.province || ''}
+                                city={formData.city || ''}
+                                onChange={({ country, province, city }) => {
+                                    setFormData(prev => ({
+                                        ...prev,
+                                        country,
+                                        province,
+                                        city
+                                    }));
+                                }}
+                            />
+
+                            <div className="space-y-1">
                                 <label className="text-xs text-muted uppercase font-bold">Dirección Completa</label>
                                 <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
                                     value={formData.address || ''} onChange={e => setFormData({...formData, address: e.target.value})} placeholder="Ej: Av. Libertador 1234" />
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Ciudad</label>
-                                    <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
-                                        value={formData.city || ''} onChange={e => setFormData({...formData, city: e.target.value})} />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Provincia</label>
-                                    <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" 
-                                        value={formData.province || ''} onChange={e => setFormData({...formData, province: e.target.value})} />
-                                </div>
-                            </div>
+
                             <div className="space-y-1">
                                 <label className="text-xs text-muted uppercase font-bold flex items-center gap-2"><MapPin size={12}/> Google Maps Link</label>
                                 <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm" 

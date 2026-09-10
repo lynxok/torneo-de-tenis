@@ -58,6 +58,9 @@ export interface UserProfile {
   tournaments_won?: number;
   profile_picture_url?: string; // New field for Drive Image
   show_whatsapp?: boolean; // Privacy setting: allow others to contact via WhatsApp
+  country?: string;
+  province?: string;
+  city?: string;
 
   // Organizer Benefits & Trial
   promo_code_used?: string;

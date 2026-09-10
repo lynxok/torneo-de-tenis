@@ -151,9 +151,11 @@ export const api = {
                         if (!data.phone && meta.phone) updates.phone = meta.phone.trim();
                         if (!data.dni && meta.dni) updates.dni = meta.dni.trim();
                         if (!data.gender && meta.gender) updates.gender = meta.gender.trim();
-                        if ((!data.category || data.category === 'C') && meta.category && meta.category !== 'C') updates.category = meta.category.trim();
                         if (!data.institution_id && meta.institution_id && meta.institution_id !== 'none') updates.institution_id = meta.institution_id;
                         if ((!data.name || data.name === 'Usuario') && meta.name) updates.name = meta.name.trim();
+                        if (!data.country && meta.country) updates.country = meta.country.trim();
+                        if (!data.province && meta.province) updates.province = meta.province.trim();
+                        if (!data.city && meta.city) updates.city = meta.city.trim();
 
                         if (meta.birth_date) {
                             data.birth_date = meta.birth_date;
@@ -214,7 +216,7 @@ export const api = {
                     .not('winner_id', 'is', null),
                 supabase
                     .from('profiles')
-                    .select('id, email, name, lastname, role, category, gender, birth_date, institution_id, is_approved, member_status, avatar_url, profile_picture_url, phone, dni, created_at, institutions:institutions(id, name)', { count: 'exact' })
+                    .select('id, email, name, lastname, role, category, gender, birth_date, country, province, city, institution_id, is_approved, member_status, avatar_url, profile_picture_url, phone, dni, created_at, institutions:institutions(id, name)', { count: 'exact' })
                     .order('created_at', { ascending: false })
                     .range((page - 1) * pageSize, page * pageSize - 1)
             ]);
@@ -341,6 +343,9 @@ export const api = {
                     category: meta.category || '6ta',
                     role: meta.role || 'player',
                     institution_id: (meta.institution_id && meta.institution_id !== 'none') ? meta.institution_id : null,
+                    country: meta.country?.trim() || null,
+                    province: meta.province?.trim() || null,
+                    city: meta.city?.trim() || null,
                     is_approved: false
                 };
                 try {
@@ -368,6 +373,9 @@ export const api = {
                     category: userData.category || '4ta',
                     role: userData.role || 'player',
                     institution_id: (userData.institution_id && userData.institution_id !== 'none') ? userData.institution_id : null,
+                    country: userData.country?.trim() || null,
+                    province: userData.province?.trim() || null,
+                    city: userData.city?.trim() || null,
                     is_approved: userData.is_approved ?? true
                 };
                 try {
