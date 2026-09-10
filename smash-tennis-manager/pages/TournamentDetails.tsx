@@ -1234,6 +1234,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const baseCompetitionFormat = tournament?.competition_format || tournament?.rules?.competition_format || 'tabla_general_byes';
     const activeCompetitionFormat = previewFormat || baseCompetitionFormat;
+    const competitionFormat = activeCompetitionFormat;
     const allowByes = tournament?.allow_byes ?? tournament?.rules?.allow_byes ?? true;
     const minGuaranteedMatches = tournament?.min_guaranteed_matches ?? tournament?.rules?.min_guaranteed_matches ?? 3;
 
