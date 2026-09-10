@@ -253,13 +253,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             if (data.category) {
                 setGuestCategory(data.category);
             }
-            // Use institutions already embedded if it has the required details
-            if (data.institutions && (data.institutions.alias_mp || data.institutions.cvu_mp)) {
-                setHostInstitution(data.institutions as Institution);
-            } else if (data.institution_id) {
+            if (data.institution_id) {
                 api.institutions.getById(data.institution_id)
                     .then(inst => setHostInstitution(inst))
-                    .catch(err => console.warn("Could not load host institution details:", err));
+                    .catch(err => {
+                        console.warn("Could not load host institution details:", err);
+                        if (data.institutions) setHostInstitution(data.institutions as Institution);
+                    });
+            } else if (data.institutions) {
+                setHostInstitution(data.institutions as Institution);
             }
         } catch (e) {
             console.error(e);

@@ -571,7 +571,7 @@ export const api = {
                 { data: players, error: playersError },
                 { data: matches, error: matchesError }
             ] = await Promise.all([
-                supabase.from('tournaments').select('*, institutions(id, name, city, phone, email, alias_mp, cvu_mp, titular_mp)').eq('id', id).single(),
+                supabase.from('tournaments').select('*, institutions(id, name, city)').eq('id', id).single(),
                 supabase.from('tournament_players').select('*').eq('tournament_id', id).order('enrolled_at', { ascending: true }),
                 supabase.from('matches').select('*').eq('tournament_id', id).order('group_number', { ascending: true })
             ]);
