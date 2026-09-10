@@ -571,7 +571,7 @@ export const api = {
                 { data: players, error: playersError },
                 { data: matches, error: matchesError }
             ] = await Promise.all([
-                supabase.from('tournaments').select('*, institutions(name, id)').eq('id', id).single(),
+                supabase.from('tournaments').select('*, institutions(id, name, city, phone, email, alias_mp, cvu_mp, titular_mp)').eq('id', id).single(),
                 supabase.from('tournament_players').select('*').eq('tournament_id', id).order('enrolled_at', { ascending: true }),
                 supabase.from('matches').select('*').eq('tournament_id', id).order('group_number', { ascending: true })
             ]);
@@ -641,17 +641,10 @@ export const api = {
                                 try {
                                     await supabase.from('matches').update({
                                         score_status: 'confirmed',
-                                        score_confirmed_at: new Date().toISOString(),
-                                        scheduling_status: 'finished',
                                         is_played: true
                                     }).eq('id', m.id);
                                 } catch (e) {
-                                    try {
-                                        await supabase.from('matches').update({
-                                            scheduling_status: 'finished',
-                                            is_played: true
-                                        }).eq('id', m.id);
-                                    } catch (ign) {}
+                                    // Ignore background auto-confirm sync errors to avoid blocking UI
                                 }
 
                                 if (m.winner_id) {
@@ -2988,7 +2981,7 @@ export const api = {
             const inst = data as Institution;
             if (!inst.alias_mp) {
                 try {
-                    const { data: s } = await supabase.from('system_settings').select('value').eq('key', `inst_mp_${id}`).single();
+                    const { data: s } = await supabase.from('system_settings').select('value').eq('key', `inst_mp_${id}`).maybeSingle();
                     if (s?.value) {
                         inst.alias_mp = s.value.alias_mp;
                         inst.cvu_mp = s.value.cvu_mp;

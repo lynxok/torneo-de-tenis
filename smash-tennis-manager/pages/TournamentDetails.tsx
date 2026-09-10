@@ -28,6 +28,8 @@ interface TournamentDetailsProps {
     onBack: () => void;
 }
 
+const tournamentDataCache = new Map<string, Tournament>();
+
 export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournamentId, user, onBack }) => {
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [loading, setLoading] = useState(true);
@@ -222,10 +224,26 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         };
     }, [selectedMatchForSchedule, scheduleDate, tournament?.institution_id]);
 
-    const loadTournament = async () => {
-        setLoading(true);
+    const loadTournament = async (showLoadingSpinner = true) => {
+        const cached = tournamentDataCache.get(tournamentId);
+        if (cached && !tournament) {
+            setTournament(cached);
+            if (cached.tournament_players) setPlayers(cached.tournament_players);
+            if (cached.matches) setMatches(cached.matches);
+            if (cached.registration_price !== undefined) setManualFee(cached.registration_price);
+            if (cached.category) setGuestCategory(cached.category);
+            if (cached.institutions) setHostInstitution(cached.institutions as Institution);
+            setLoading(false);
+            showLoadingSpinner = false;
+        }
+
+        if (showLoadingSpinner) {
+            setLoading(true);
+        }
+
         try {
             const data = await api.tournaments.getById(tournamentId);
+            tournamentDataCache.set(tournamentId, data);
             setTournament(data);
             if (data.tournament_players) setPlayers(data.tournament_players);
             if (data.matches) setMatches(data.matches);
@@ -235,7 +253,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             if (data.category) {
                 setGuestCategory(data.category);
             }
-            if (data.institution_id) {
+            // Use institutions already embedded if it has the required details
+            if (data.institutions && (data.institutions.alias_mp || data.institutions.cvu_mp)) {
+                setHostInstitution(data.institutions as Institution);
+            } else if (data.institution_id) {
                 api.institutions.getById(data.institution_id)
                     .then(inst => setHostInstitution(inst))
                     .catch(err => console.warn("Could not load host institution details:", err));
