@@ -1,4 +1,4 @@
-﻿import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 
 interface Props {
@@ -23,11 +23,48 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('[ErrorBoundary Uncaught Exception]:', error, errorInfo);
+
+    // Auto-recuperación si es un error de script desfasado o variable no encontrada
+    const errorMessage = error?.message || '';
+    const isChunkOrVariableError = 
+      errorMessage.includes("Can't find variable") || 
+      errorMessage.includes("Failed to fetch dynamically imported module") ||
+      errorMessage.includes("is not defined");
+
+    if (isChunkOrVariableError) {
+      const autoRecoverKey = 'smash_auto_recovered_error';
+      const lastRecover = sessionStorage.getItem(autoRecoverKey);
+      // Auto-recargar una vez limpiando la caché si ocurrió hace más de 15 segundos
+      if (!lastRecover || Date.now() - parseInt(lastRecover, 10) > 15000) {
+        sessionStorage.setItem(autoRecoverKey, Date.now().toString());
+        this.cleanCacheAndHardReload();
+      }
+    }
   }
 
+  private cleanCacheAndHardReload = async () => {
+    try {
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const reg of regs) {
+          await reg.unregister().catch(() => {});
+        }
+      }
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+    } catch (e) {
+      console.warn('Error clearing caches during recovery:', e);
+    }
+    // Hard reload con parámetro anti-caché
+    const cleanUrl = window.location.origin + window.location.pathname + window.location.search;
+    const separator = cleanUrl.includes('?') ? '&' : '?';
+    window.location.replace(`${cleanUrl}${separator}_cb=${Date.now()}`);
+  };
+
   private handleReset = () => {
-    this.setState({ hasError: false, error: null });
-    window.location.reload();
+    this.cleanCacheAndHardReload();
   };
 
   public render() {
