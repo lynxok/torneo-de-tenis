@@ -63,7 +63,84 @@ export const KNOWN_TENNIS_CLUBS: Record<string, Coordinates> = {
     // Córdoba & other provinces
     'cordoba lawn tennis club': { lat: -31.4280, lng: -64.1750 },
     'cordoba': { lat: -31.4201, lng: -64.1888 },
+    'cordoba capital': { lat: -31.4201, lng: -64.1888 },
+
+    // Additional Entre Ríos & Santa Fe towns
+    'santa rosa de calchines': { lat: -31.4833, lng: -60.3333 },
+    'calchines': { lat: -31.4833, lng: -60.3333 },
+    'oro verde': { lat: -31.8167, lng: -60.5167 },
+    'san benito': { lat: -31.7833, lng: -60.4333 },
+    'viale': { lat: -31.8667, lng: -60.0083 },
+    'santa elena': { lat: -30.9500, lng: -59.7833 },
+    'nogoya': { lat: -32.3944, lng: -59.7906 },
+    'villaguay': { lat: -31.8653, lng: -59.0269 },
+    'colon': { lat: -32.2231, lng: -58.1438 },
+    'gualeguay': { lat: -33.1416, lng: -59.3097 },
+    'la paz': { lat: -30.7419, lng: -59.6456 },
+    'chajari': { lat: -30.7516, lng: -57.9797 },
+    'federacion': { lat: -30.9856, lng: -57.9217 },
+    'santo tome': { lat: -31.6628, lng: -60.7656 },
+    'esperanza': { lat: -31.4489, lng: -60.9328 },
+    'san lorenzo': { lat: -32.7486, lng: -60.7333 },
+    'funes': { lat: -32.9167, lng: -60.8167 },
+    'venado tuerto': { lat: -33.7456, lng: -61.9689 },
+
+    // Uruguay & international
+    'montevideo': { lat: -34.9011, lng: -56.1645 },
+    'punta del este': { lat: -34.9633, lng: -54.9439 },
+    'maldonado': { lat: -34.9000, lng: -54.9500 },
+    'colonia del sacramento': { lat: -34.4626, lng: -57.8398 },
+    'canelones': { lat: -34.5228, lng: -56.2778 },
+    'ciudad de la costa': { lat: -34.8219, lng: -55.9525 },
 };
+
+/**
+ * Normalizes text for geo lookup (lowercase, removes accents/tildes)
+ */
+export function normalizeGeoText(text?: string | null): string {
+    if (!text) return '';
+    return text
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .trim();
+}
+
+/**
+ * Resolves coordinates for a user based on their registered city, province, or country
+ */
+export function getUserLocationFromProfile(user?: {
+    city?: string | null;
+    province?: string | null;
+    country?: string | null;
+} | null): Coordinates | null {
+    if (!user) return null;
+
+    const city = normalizeGeoText(user.city);
+    const province = normalizeGeoText(user.province);
+
+    // 1. Direct match on city
+    if (city) {
+        for (const [key, coords] of Object.entries(KNOWN_TENNIS_CLUBS)) {
+            const normKey = normalizeGeoText(key);
+            if (city === normKey || city.includes(normKey) || normKey.includes(city)) {
+                return coords;
+            }
+        }
+    }
+
+    // 2. Direct match on province / department
+    if (province) {
+        for (const [key, coords] of Object.entries(KNOWN_TENNIS_CLUBS)) {
+            const normKey = normalizeGeoText(key);
+            if (province === normKey || province.includes(normKey) || normKey.includes(province)) {
+                return coords;
+            }
+        }
+    }
+
+    return null;
+}
 
 // Default center baseline (Entre Ríos - Diamante / Paraná region as core hub)
 export const DEFAULT_MAP_CENTER: Coordinates = { lat: -32.0664, lng: -60.6384 };

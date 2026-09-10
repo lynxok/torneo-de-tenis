@@ -12,7 +12,8 @@ import {
     openDirections, 
     openWaze, 
     UserLocation, 
-    DEFAULT_MAP_CENTER 
+    DEFAULT_MAP_CENTER,
+    getUserLocationFromProfile
 } from '../utils/geoUtils';
 import { getTournamentTier, getTierInfoByKey } from '../utils/tournamentTiers';
 import { 
@@ -95,23 +96,33 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
         }
     };
 
+    // Profile location resolution
+    const profileCoords = useMemo(() => {
+        return getUserLocationFromProfile(user);
+    }, [user]);
+
+    const userCityLabel = user.city || user.province || '';
+
     // Filter & Search State
     const [searchQuery, setSearchQuery] = useState('');
     const [onlyOpenRegistration, setOnlyOpenRegistration] = useState(false);
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedTier, setSelectedTier] = useState<string>('all');
-    const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
-    const [sortByDistance, setSortByDistance] = useState(false);
+    // Default to 50 km radius as requested by user
+    const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(profileCoords ? 50 : null);
+    const [sortByDistance, setSortByDistance] = useState(!!profileCoords);
 
     // Map & Geolocation State
     const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
     const [currentZoom, setCurrentZoom] = useState<number>(12);
-    const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+    const [userLocation, setUserLocation] = useState<UserLocation | null>(profileCoords);
     const [isLocating, setIsLocating] = useState(false);
-    const [gpsStatusMessage, setGpsStatusMessage] = useState<string | null>(null);
+    const [gpsStatusMessage, setGpsStatusMessage] = useState<string | null>(
+        profileCoords && userCityLabel ? `Centrado en ${userCityLabel}` : null
+    );
     const [showFiltersModal, setShowFiltersModal] = useState(false);
 
-    // Initial Geolocation Auto-Detection on Mount
+    // Initial Geolocation Auto-Detection on Mount (Refines city location with exact GPS if permitted)
     useEffect(() => {
         if ('geolocation' in navigator) {
             navigator.geolocation.getCurrentPosition(
@@ -123,7 +134,7 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                     };
                     setUserLocation(coords);
                     setSortByDistance(true);
-                    setGpsStatusMessage('Ubicación detectada');
+                    setGpsStatusMessage('Ubicación GPS detectada');
                 },
                 (err) => {
                     console.log('Passive geolocation skipped:', err.message);
@@ -282,10 +293,12 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
     useEffect(() => {
         if (!mapContainerRef.current || mapInstanceRef.current) return;
 
-        const defaultCenter: [number, number] = [DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng];
+        const initialCenter: [number, number] = profileCoords 
+            ? [profileCoords.lat, profileCoords.lng] 
+            : [DEFAULT_MAP_CENTER.lat, DEFAULT_MAP_CENTER.lng];
 
         const map = L.map(mapContainerRef.current, {
-            center: defaultCenter,
+            center: initialCenter,
             zoom: 11,
             minZoom: 2,
             maxZoom: 18,
@@ -822,6 +835,28 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
                         Abiertos para Inscripción
                     </button>
 
+                    {/* Radius quick filter pill */}
+                    {userLocation && (
+                        <button
+                            onClick={() => {
+                                if (maxDistanceKm === 50) {
+                                    setMaxDistanceKm(null);
+                                } else {
+                                    setMaxDistanceKm(50);
+                                    setSortByDistance(true);
+                                }
+                            }}
+                            className={`px-3 py-1 rounded-xl text-xs font-bold whitespace-nowrap transition-all border flex items-center gap-1.5 shadow-md ${
+                                maxDistanceKm === 50
+                                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 shadow-amber-500/10'
+                                    : 'bg-slate-900/80 text-slate-400 border-white/10 hover:text-white'
+                            }`}
+                        >
+                            <span>📍</span>
+                            <span>{maxDistanceKm === 50 ? 'Radio: 50 km (Activo)' : 'Radio 50 km'}</span>
+                        </button>
+                    )}
+
                     {userLocation && (
                         <button
                             onClick={() => setSortByDistance(!sortByDistance)}
@@ -941,6 +976,35 @@ export const TournamentsMap: React.FC<TournamentsMapProps> = ({
             {gpsStatusMessage && (
                 <div className="absolute top-28 left-1/2 -translate-x-1/2 z-[500] bg-slate-900/90 backdrop-blur-md border border-sky-400/30 text-sky-300 text-xs font-bold px-4 py-1.5 rounded-full shadow-2xl flex items-center gap-2 pointer-events-none animate-fade-in">
                     <span>📍 {gpsStatusMessage}</span>
+                </div>
+            )}
+
+            {/* EMPTY STATE BANNER (When filtered by radius and 0 tournaments found) */}
+            {processedTournaments.length === 0 && (
+                <div className="absolute top-36 left-1/2 -translate-x-1/2 z-[500] max-w-sm w-[90%] bg-slate-900/95 backdrop-blur-xl border border-white/20 p-4 rounded-2xl shadow-2xl text-center space-y-2 pointer-events-auto animate-fade-in">
+                    <p className="text-xs font-bold text-slate-200">
+                        {maxDistanceKm 
+                            ? `No encontramos torneos activos a menos de ${maxDistanceKm} km de tu ubicación.`
+                            : 'No hay torneos que coincidan con tus filtros.'}
+                    </p>
+                    <div className="flex justify-center gap-2 pt-1">
+                        {maxDistanceKm && (
+                            <button
+                                onClick={() => setMaxDistanceKm(null)}
+                                className="bg-primary hover:bg-primary-hover text-white text-xs font-black px-3.5 py-1.5 rounded-xl shadow-lg shadow-primary/20 transition-all cursor-pointer"
+                            >
+                                Ver todos los torneos
+                            </button>
+                        )}
+                        {maxDistanceKm === 50 && (
+                            <button
+                                onClick={() => setMaxDistanceKm(100)}
+                                className="bg-white/10 hover:bg-white/20 text-white text-xs font-bold px-3.5 py-1.5 rounded-xl border border-white/10 transition-all cursor-pointer"
+                            >
+                                Ampliar a 100 km
+                            </button>
+                        )}
+                    </div>
                 </div>
             )}
 
