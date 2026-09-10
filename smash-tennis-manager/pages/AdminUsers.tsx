@@ -348,6 +348,10 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
             alert('La Categoría es obligatoria.');
             return;
         }
+        if (!newUser.province?.trim() || !newUser.city?.trim()) {
+            alert('Por favor selecciona País, Provincia y Ciudad / Departamento.');
+            return;
+        }
 
         setCreating(true);
 
@@ -1513,6 +1517,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                     country={newUser.country}
                                     province={newUser.province}
                                     city={newUser.city}
+                                    required
                                     compact
                                     onChange={({ country, province, city }) => {
                                         setNewUser(prev => ({ ...prev, country, province, city }));
