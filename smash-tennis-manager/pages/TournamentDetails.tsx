@@ -8,7 +8,7 @@ import {
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
-    Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink, Eye
+    Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink, Eye, HelpCircle
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
