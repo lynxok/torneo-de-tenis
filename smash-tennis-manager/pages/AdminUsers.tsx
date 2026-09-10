@@ -325,78 +325,6 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         }
     };
 
-    const [syncingParqueEspana, setSyncingParqueEspana] = useState(false);
-
-    const handleSyncParqueEspanaLocation = async () => {
-        const parqueEspanaClub = institutions.find(i => i.name.toLowerCase().includes('parque españa') || i.name.toLowerCase().includes('parque espana'));
-        if (!parqueEspanaClub) {
-            alert('No se encontró la institución Parque España.');
-            return;
-        }
-
-        const targetUsers = users.filter(u => u.institution_id === parqueEspanaClub.id);
-        if (targetUsers.length === 0) {
-            alert('No hay socios vinculados a Parque España actualmente.');
-            return;
-        }
-
-        if (!confirm(`¿Confirmas asignar "Argentina, Entre Ríos, Diamante" a los ${targetUsers.length} socios registrados en ${parqueEspanaClub.name}?`)) {
-            return;
-        }
-
-        setSyncingParqueEspana(true);
-        let successCount = 0;
-        try {
-            for (const u of targetUsers) {
-                try {
-                    await api.auth.updateProfile(u.id, {
-                        country: 'Argentina',
-                        province: 'Entre Ríos',
-                        city: 'Diamante'
-                    });
-                    successCount++;
-                } catch (err) {
-                    console.warn(`Error actualizando ubicación de ${u.name}:`, err);
-                }
-            }
-
-            // Sincronizar también Javier Carponi y Yanina Schneider según indicación
-            const carponi = users.find(u => u.email?.toLowerCase() === 'javiscarponi@gmail.com' || (u.name?.toLowerCase().includes('javier') && u.lastname?.toLowerCase().includes('carponi')));
-            if (carponi) {
-                try {
-                    await api.auth.updateProfile(carponi.id, {
-                        country: 'Argentina',
-                        province: 'Entre Ríos',
-                        city: 'Paraná'
-                    });
-                    successCount++;
-                } catch (err) {
-                    console.warn("Error actualizando a Javier Carponi:", err);
-                }
-            }
-
-            const yanina = users.find(u => u.email?.toLowerCase() === 'yaninaschneider10@gmail.com' || (u.name?.toLowerCase().includes('yanina') && u.lastname?.toLowerCase().includes('schneider')));
-            if (yanina) {
-                try {
-                    await api.auth.updateProfile(yanina.id, {
-                        country: 'Argentina',
-                        province: 'Santa Fe',
-                        city: 'Santa Rosa de Calchines'
-                    });
-                    successCount++;
-                } catch (err) {
-                    console.warn("Error actualizando a Yanina Schneider:", err);
-                }
-            }
-
-            alert(`✅ ¡Listo! Se actualizaron con éxito las ubicaciones:\n- ${targetUsers.length} socios de Parque España (Diamante, Entre Ríos)\n- Javier Carponi (Paraná, Entre Ríos)\n- Yanina Schneider (Santa Rosa de Calchines, Santa Fe)`);
-            loadUsers();
-        } catch (e: any) {
-            alert('Error durante la actualización: ' + e.message);
-        } finally {
-            setSyncingParqueEspana(false);
-        }
-    };
 
     const handleCreateUser = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -738,18 +666,6 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                         </button>
                     )}
 
-                    {/* Botón exclusivo para Super Admin para asignar ubicación masiva a Parque España + Carponi + Schneider */}
-                    {isSuperAdmin && (
-                        <button
-                            onClick={handleSyncParqueEspanaLocation}
-                            disabled={syncingParqueEspana}
-                            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-2 rounded-xl font-bold flex items-center justify-center gap-2 transition-all whitespace-nowrap text-sm shadow-lg shadow-emerald-600/20 disabled:opacity-50"
-                            title="Asignar automáticamente Diamante a Parque España, Paraná a Javier Carponi y Santa Rosa de Calchines a Yanina Schneider"
-                        >
-                            {syncingParqueEspana ? <Loader2 size={16} className="animate-spin" /> : <MapPin size={16} className="text-white" />}
-                            <span>Sincronizar Ubicaciones</span>
-                        </button>
-                    )}
                 </div>
             </div>
 
