@@ -47,6 +47,9 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         gender: 'masculino',
         birth_date: '',
         category: '4ta',
+        country: 'Argentina',
+        province: '',
+        city: '',
         is_member: true,
         member_number: ''
     });
@@ -358,6 +361,9 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 gender: newUser.gender || 'masculino',
                 birth_date: newUser.birth_date || null,
                 category: newUser.category,
+                country: newUser.country || 'Argentina',
+                province: newUser.province || null,
+                city: newUser.city || null,
                 is_approved: true,
                 is_member: newUser.is_member,
                 member_number: newUser.member_number || null,
@@ -383,6 +389,9 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 gender: 'masculino',
                 birth_date: '',
                 category: '4ta',
+                country: 'Argentina',
+                province: '',
+                city: '',
                 is_member: true,
                 member_number: ''
             });
@@ -1496,6 +1505,19 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                         {isSuperAdmin && <option value="superadmin">Super Admin</option>}
                                     </select>
                                 </div>
+                            </div>
+
+                            {/* Ubicación del Usuario */}
+                            <div className="p-3 bg-white/[0.02] border border-white/5 rounded-xl space-y-1">
+                                <LocationSelector
+                                    country={newUser.country}
+                                    province={newUser.province}
+                                    city={newUser.city}
+                                    compact
+                                    onChange={({ country, province, city }) => {
+                                        setNewUser(prev => ({ ...prev, country, province, city }));
+                                    }}
+                                />
                             </div>
 
                             <div className="space-y-1">
