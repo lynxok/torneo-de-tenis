@@ -1911,7 +1911,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                                         {groupMatches.length > 0 && tournament.status !== 'finished' && (
                                             <button
-                                                onClick={handleGeneratePlayoffsFromZones}
+                                                onClick={handleOpenOfficializeModal}
                                                 disabled={generatingPlayoffs}
                                                 className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-yellow-500/20 border border-amber-500/40 text-amber-300 hover:bg-amber-500/30 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
                                             >
