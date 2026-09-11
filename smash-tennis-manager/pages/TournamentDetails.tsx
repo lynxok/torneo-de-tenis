@@ -2177,8 +2177,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </div>
                 )}
 
-                {/* Left: Matches & Brackets */}
-                <div className="lg:col-span-2 space-y-6">
+                {/* Left: Matches & Brackets (Full width on playoffs tab for expansive bracket view) */}
+                <div className={`${activeTab === 'playoffs' ? 'col-span-1 lg:col-span-3' : 'lg:col-span-2'} space-y-6`}>
                     <Card className="p-6">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 border-b border-white/10 pb-4">
                             <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -2916,9 +2916,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     )
                                 ) : (
                                     <div className="overflow-x-auto pb-4 custom-scrollbar">
-                                        <div className="flex items-stretch gap-8 min-w-[850px] py-3">
+                                        <div className="flex items-stretch gap-8 min-w-[980px] py-3">
                                             {playoffRounds.map((round, rIdx) => (
-                                                <div key={rIdx} className="flex-1 min-w-[280px] flex flex-col space-y-4">
+                                                <div key={rIdx} className="flex-1 min-w-[320px] max-w-[360px] flex flex-col space-y-4">
                                                     <div className="text-center pb-2 border-b border-white/10">
                                                         <span className="text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">
                                                             {round.name}
@@ -3055,11 +3055,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                                                                     {/* Score & Edit Bar */}
                                                                     <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
-                                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                                        <div className="flex items-center gap-1.5">
                                                                             {m.player1_id && m.player2_id && (
                                                                                 <button
                                                                                     onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
-                                                                                    className="px-2 py-1 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[10px] font-bold flex items-center gap-1 border border-white/5"
+                                                                                    className="px-2 py-1 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[10px] font-bold flex items-center gap-1 border border-white/5 shrink-0"
                                                                                     title="Ver H2H"
                                                                                 >
                                                                                     <Swords size={11} /> H2H
@@ -3082,22 +3082,22 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     )}
                                                                                 </div>
                                                                             ) : hasBothPlayers ? (
-                                                                                <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded-md border border-yellow-500/20">
+                                                                                <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded-md border border-yellow-500/20 whitespace-nowrap">
                                                                                     Por Jugar
                                                                                 </span>
                                                                             ) : (
-                                                                                <span className="text-[10px] text-slate-400 bg-white/[0.02] px-2 py-0.5 rounded-md border border-white/5 font-medium flex items-center gap-1">
+                                                                                <span className="text-[10px] text-slate-400 bg-white/[0.02] px-2 py-0.5 rounded-md border border-white/5 font-medium flex items-center gap-1 whitespace-nowrap">
                                                                                     <Clock size={10} className="text-slate-500" /> Esperando clasificados
                                                                                 </span>
                                                                             )}
                                                                         </div>
 
-                                                                        <div className="flex items-center gap-1 shrink-0">
+                                                                        <div className="flex items-center gap-1.5 shrink-0">
                                                                             {/* Schedule Button for Admin or Assigned Players (Solo si ambos jugadores están definidos y el partido NO fue jugado aún) */}
                                                                             {canSchedule && (
                                                                                 <button
                                                                                     onClick={() => openScheduleModal(m)}
-                                                                                    className={`p-1.5 px-2 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                    className={`p-1.5 px-2.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
                                                                                         scheduledInfo
                                                                                             ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
                                                                                             : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
@@ -3105,7 +3105,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
                                                                                 >
                                                                                     <Calendar size={11} className={scheduledInfo ? "text-blue-400" : ""} />
-                                                                                    <span className="hidden sm:inline">{scheduledInfo ? "Horario" : "Programar"}</span>
+                                                                                    <span>{scheduledInfo ? "Horario" : "Programar"}</span>
                                                                                 </button>
                                                                             )}
 
@@ -3113,7 +3113,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                 <>
                                                                                     <button
                                                                                         onClick={() => openQuickScorerModal(m)}
-                                                                                        className="p-1.5 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 text-[10px] font-black shadow-sm active:scale-95"
+                                                                                        className="p-1.5 px-2.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 text-[10px] font-black shadow-sm active:scale-95"
                                                                                         title="Carga Rápida Táctil (Quick-Scorer)"
                                                                                     >
                                                                                         <Sparkles size={11} className="text-emerald-400" />
@@ -3121,7 +3121,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     </button>
                                                                                     <button
                                                                                         onClick={() => openScoreModal(m)}
-                                                                                        className={`p-1.5 px-2 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                        className={`p-1.5 px-2.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
                                                                                             !m.is_played
                                                                                                 ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
                                                                                                 : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
@@ -3446,8 +3446,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </Card>
                 </div>
 
-                {/* Right: Players List */}
-                <div className="space-y-6">
+                {/* Right: Players List (Only shown on groups/all tabs or as a bottom section when playoffs) */}
+                <div className={`${activeTab === 'playoffs' ? 'col-span-1 lg:col-span-3' : ''} space-y-6`}>
                     <Card className="p-6">
                         <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
                             <h3 className="font-bold text-white flex items-center gap-2 text-base">
@@ -6102,7 +6102,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     player2Name={selectedMatchForScore.team2_name || selectedMatchForScore.player2_name || 'Jugador 2'}
                     p1Id={selectedMatchForScore.player1_id}
                     p2Id={selectedMatchForScore.player2_id}
-                    currentScore={typeof selectedMatchForScore.score === 'object' 
+                    currentScore={selectedMatchForScore.score && typeof selectedMatchForScore.score === 'object' 
                         ? `${selectedMatchForScore.score.set1 || ''} ${selectedMatchForScore.score.set2 || ''} ${selectedMatchForScore.score.set3 || ''}`.trim()
                         : (selectedMatchForScore.score || '')
                     }
