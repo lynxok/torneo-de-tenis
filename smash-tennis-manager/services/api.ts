@@ -631,9 +631,10 @@ export const api = {
                 }
 
                 // Auto-confirm if pending confirmation for > 24 hours
-                if (m.score_status === 'pending_confirmation' && m.score_submitted_at) {
-                    const submittedTime = new Date(m.score_submitted_at).getTime();
-                    if (now - submittedTime >= TWENTY_FOUR_HOURS) {
+                const submittedIso = m.score_submitted_at || m.score?.submitted_at || m.played_at || m.updated_at || m.created_at;
+                if (m.score_status === 'pending_confirmation' && submittedIso) {
+                    const submittedTime = new Date(submittedIso).getTime();
+                    if (!isNaN(submittedTime) && now - submittedTime >= TWENTY_FOUR_HOURS) {
                         updatedScoreStatus = 'confirmed';
                         // Trigger async confirmation update in background
                         autoConfirmUpdates.push(

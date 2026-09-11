@@ -214,6 +214,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
 
             await api.tournaments.create({ 
                 ...newTournament, 
+                name: (newTournament.name || '').trim(),
                 rules: formatRules,
                 competition_format: formatRules.competition_format,
                 min_guaranteed_matches: formatRules.min_guaranteed_matches,
