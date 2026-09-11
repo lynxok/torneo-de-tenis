@@ -32,15 +32,19 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
 
     const animationFrameRef = useRef<number | null>(null);
     const startTimeRef = useRef<number | null>(null);
-    const pausedTimeRef = useRef<number>(0);
+    const pausedProgressRef = useRef<number>(0);
+    const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
+    const isLongPressRef = useRef<boolean>(false);
 
     // Sincronizar índice inicial cuando se abre
     useEffect(() => {
         if (isOpen) {
             setCurrentIndex(Math.min(initialStoryIndex, stories.length - 1));
             setProgress(0);
+            setIsPaused(false);
             startTimeRef.current = null;
-            pausedTimeRef.current = 0;
+            pausedProgressRef.current = 0;
+            isLongPressRef.current = false;
         }
     }, [isOpen, initialStoryIndex, stories.length]);
 
@@ -49,17 +53,27 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
 
     // Temporizador de barra de progreso con requestAnimationFrame
     useEffect(() => {
-        if (!isOpen || !activeStory || isPaused) {
+        if (!isOpen || !activeStory) {
+            if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+            return;
+        }
+
+        if (isPaused) {
             if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
             return;
         }
 
         const updateProgress = (timestamp: number) => {
-            if (!startTimeRef.current) startTimeRef.current = timestamp - pausedTimeRef.current;
+            if (startTimeRef.current === null) {
+                // Ajustar startTime según el progreso ya transcurrido
+                startTimeRef.current = timestamp - (pausedProgressRef.current / 100) * STORY_DURATION_MS;
+            }
+
             const elapsed = timestamp - startTimeRef.current;
             const currentProgress = Math.min(100, (elapsed / STORY_DURATION_MS) * 100);
 
             setProgress(currentProgress);
+            pausedProgressRef.current = currentProgress;
 
             if (currentProgress >= 100) {
                 // Siguiente historia o cerrar si es la última
@@ -67,7 +81,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                     setCurrentIndex(prev => prev + 1);
                     setProgress(0);
                     startTimeRef.current = null;
-                    pausedTimeRef.current = 0;
+                    pausedProgressRef.current = 0;
                 } else {
                     onClose();
                 }
@@ -83,21 +97,43 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
         };
     }, [isOpen, currentIndex, activeStory, isPaused, stories.length, onClose]);
 
-    // Pausar y reanudar al mantener presionado
+    // Limpiar timer de long press al desmontar
+    useEffect(() => {
+        return () => {
+            if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+        };
+    }, []);
+
+    // Iniciar pulsación: si dura más de 200ms se considera pausa (long press)
     const handlePressStart = () => {
-        setIsPaused(true);
-        if (startTimeRef.current) {
-            pausedTimeRef.current = (progress / 100) * STORY_DURATION_MS;
+        isLongPressRef.current = false;
+        if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+        
+        pressTimerRef.current = setTimeout(() => {
+            isLongPressRef.current = true;
+            setIsPaused(true);
+        }, 220);
+    };
+
+    // Finalizar pulsación: si estaba pausado, reanudar
+    const handlePressEnd = () => {
+        if (pressTimerRef.current) {
+            clearTimeout(pressTimerRef.current);
+            pressTimerRef.current = null;
+        }
+        if (isLongPressRef.current) {
+            setIsPaused(false);
+            startTimeRef.current = null; // Se recalculará en el próximo frame con pausedProgressRef
         }
     };
 
-    const handlePressEnd = () => {
-        setIsPaused(false);
-        startTimeRef.current = null;
-    };
-
-    // Navegación izquierda / derecha al tocar bordes
+    // Navegación izquierda / derecha al tocar bordes (solo si fue tap rápido, no long-press)
     const handleTapScreen = (e: React.MouseEvent<HTMLDivElement>) => {
+        if (isLongPressRef.current) {
+            isLongPressRef.current = false;
+            return;
+        }
+
         const rect = e.currentTarget.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
         const width = rect.width;
@@ -108,7 +144,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                 setCurrentIndex(prev => prev - 1);
                 setProgress(0);
                 startTimeRef.current = null;
-                pausedTimeRef.current = 0;
+                pausedProgressRef.current = 0;
             }
         } else {
             // Toque en los dos tercios derechos: ir a siguiente historia
@@ -116,7 +152,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                 setCurrentIndex(prev => prev + 1);
                 setProgress(0);
                 startTimeRef.current = null;
-                pausedTimeRef.current = 0;
+                pausedProgressRef.current = 0;
             } else {
                 onClose();
             }
@@ -244,7 +280,7 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                         {stories.map((s, idx) => (
                             <div key={s.id || idx} className="flex-1 h-1 bg-white/30 rounded-full overflow-hidden">
                                 <div 
-                                    className="h-full bg-lime-400 rounded-full transition-all duration-75"
+                                    className={`h-full bg-lime-400 rounded-full ${idx === currentIndex ? 'transition-none' : 'transition-all duration-150'}`}
                                     style={{
                                         width: idx === currentIndex ? `${progress}%` : idx < currentIndex ? '100%' : '0%'
                                     }}

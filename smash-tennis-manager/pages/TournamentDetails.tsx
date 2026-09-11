@@ -1782,11 +1782,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 onClick={() => {
                                     soundEffects.playScoreBeep();
                                     const shareUrl = `${window.location.origin}/?tournament=${tournament.id}`;
-                                    const message = encodeURIComponent(`🎾 ¡Te invito a participar en el torneo "${tournament.name}" en ${tournament.institutions?.name || 'nuestro club'}! Regístrate o inscríbete directamente aquí: ${shareUrl}`);
-                                    window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+                                    const clubName = tournament.institutions?.name || 'nuestro club';
+                                    const messageText = isRegClosed
+                                        ? `🎾 Aquí podés ver el avance del torneo "${tournament.name}" en ${clubName}. Mirá el cuadro, partidos y resultados aquí: ${shareUrl}`
+                                        : `🎾 ¡Te invito a participar en el torneo "${tournament.name}" en ${clubName}! Regístrate o inscríbete directamente aquí: ${shareUrl}`;
+                                    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(messageText)}`, '_blank');
                                 }}
                                 className="px-4 py-3 bg-green-600/30 hover:bg-green-600/50 text-green-300 font-semibold rounded-xl transition-all border border-green-500/30 flex items-center gap-2 text-sm"
-                                title="Compartir por WhatsApp"
+                                title={isRegClosed ? "Compartir avance del torneo por WhatsApp" : "Compartir por WhatsApp"}
                             >
                                 <MessageCircle size={16} /> WhatsApp
                             </button>

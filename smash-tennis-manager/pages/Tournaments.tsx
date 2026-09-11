@@ -591,11 +591,14 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
                                                                     const shareUrl = `${window.location.origin}/?tournament=${t.id}`;
-                                                                    const message = encodeURIComponent(`🎾 ¡Te invito a participar o seguir el torneo "${t.name}" en ${t.institutions?.name || 'nuestro club'}! Mirá el cuadro y detalles aquí: ${shareUrl}`);
-                                                                    window.open(`https://api.whatsapp.com/send?text=${message}`, '_blank');
+                                                                    const clubName = t.institutions?.name || 'nuestro club';
+                                                                    const messageText = isRegClosed
+                                                                        ? `🎾 Aquí podés ver el avance del torneo "${t.name}" en ${clubName}. Mirá el cuadro, partidos y resultados aquí: ${shareUrl}`
+                                                                        : `🎾 ¡Te invito a participar o seguir el torneo "${t.name}" en ${clubName}! Mirá el cuadro y detalles aquí: ${shareUrl}`;
+                                                                    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(messageText)}`, '_blank');
                                                                 }}
                                                                 className="p-1.5 rounded-lg bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 transition-colors"
-                                                                title="Compartir torneo por WhatsApp"
+                                                                title={isRegClosed ? "Compartir avance del torneo por WhatsApp" : "Compartir torneo por WhatsApp"}
                                                             >
                                                                 <MessageCircle size={14} />
                                                             </button>
