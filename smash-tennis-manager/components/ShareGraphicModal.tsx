@@ -1,10 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { Tournament, Match, UserProfile } from '../types';
 import { soundEffects } from '../services/soundEffects';
 import { X, Download, Share2, Sparkles, Trophy, Grid, Calendar, Image as ImageIcon, Check, Loader2 } from 'lucide-react';
 import { GroupZone, PlayoffRound } from '../utils/bracketHelper';
 import { getTournamentTier } from '../utils/tournamentTiers';
-import { formatMatchScore } from '../utils/formatters';
+import { formatMatchScore, formatPlayerName } from '../utils/formatters';
 import { api } from '../services/api';
 import { useToast } from './ui/Toast';
 
@@ -74,8 +74,27 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
     }
   };
 
+  // Filter playoff rounds so we only keep rounds and matches that have actual assigned players (no dummy "Jugador / Por Definir")
+  const validPlayoffRounds = useMemo(() => {
+    return (playoffRounds || [])
+      .map(round => {
+        const matchesWithData = (round.matches || []).filter(m => {
+          const hasP1 = !!(m.player1_id || (m.player1_name && m.player1_name.toLowerCase() !== 'jugador' && m.player1_name.toLowerCase() !== 'por definir'));
+          const hasP2 = !!(m.player2_id || (m.player2_name && m.player2_name.toLowerCase() !== 'jugador' && m.player2_name.toLowerCase() !== 'por definir'));
+          return hasP1 || hasP2;
+        });
+        return {
+          ...round,
+          matches: matchesWithData
+        };
+      })
+      .filter(round => round.matches.length > 0);
+  }, [playoffRounds]);
+
   const displayedZones = selectedZoneIndex === 'all' ? zones : [zones[selectedZoneIndex]].filter(Boolean);
-  const displayedRounds = selectedRoundIndex === 'all' ? playoffRounds : [playoffRounds[selectedRoundIndex]].filter(Boolean);
+  const displayedRounds = selectedRoundIndex === 'all' 
+    ? validPlayoffRounds 
+    : [validPlayoffRounds[selectedRoundIndex]].filter(Boolean);
 
   // Pure HTML5 Canvas rendering engine (guarantees no tainted canvas SecurityErrors)
   const renderGraphicToCanvas = async (width: number, height: number): Promise<HTMLCanvasElement> => {
@@ -332,7 +351,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
       ctx.fillStyle = '#64748b';
       ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 20px sans-serif';
       ctx.textAlign = 'right';
-      const subLabel = selectedRoundIndex === 'all' ? `LLAVES (${playoffRounds.length} RONDAS)` : playoffRounds[selectedRoundIndex]?.name || '';
+      const subLabel = selectedRoundIndex === 'all' ? `LLAVES (${validPlayoffRounds.length} RONDAS)` : validPlayoffRounds[selectedRoundIndex]?.name || '';
       ctx.fillText(subLabel, width - padX, curY);
 
       curY += isSquare ? 24 : 30;
@@ -368,13 +387,16 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
           ctx.fill();
           ctx.stroke();
 
+          const p1Text = m.team1_name || (m.player1_name ? formatPlayerName(m.player1_name) : 'Por Definir');
+          const p2Text = m.team2_name || (m.player2_name ? formatPlayerName(m.player2_name) : 'Por Definir');
+
           // Player 1
           ctx.fillStyle = isP1Win ? '#f97316' : '#ffffff';
           ctx.font = isP1Win 
             ? (isSquare ? '900 17px sans-serif' : '900 20px sans-serif')
             : (isSquare ? 'bold 17px sans-serif' : 'bold 20px sans-serif');
           ctx.textAlign = 'left';
-          ctx.fillText((isP1Win ? '▶ ' : '') + (m.player1_name || 'Por Definir'), mX + 14, mY + (isSquare ? 28 : 36));
+          ctx.fillText((isP1Win ? '▶ ' : '') + p1Text, mX + 14, mY + (isSquare ? 28 : 36));
 
           if (isP1Win && sc) {
             ctx.fillStyle = '#f97316';
@@ -389,7 +411,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
             ? (isSquare ? '900 17px sans-serif' : '900 20px sans-serif')
             : (isSquare ? 'bold 17px sans-serif' : 'bold 20px sans-serif');
           ctx.textAlign = 'left';
-          ctx.fillText((isP2Win ? '▶ ' : '') + (m.player2_name || 'Por Definir'), mX + 14, mY + (isSquare ? 60 : 76));
+          ctx.fillText((isP2Win ? '▶ ' : '') + p2Text, mX + 14, mY + (isSquare ? 60 : 76));
 
           if (isP2Win && sc) {
             ctx.fillStyle = '#f97316';
@@ -690,7 +712,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
             )}
 
             {/* Playoff Round Sub-Filter (Only when 'playoffs' is active) */}
-            {graphicType === 'playoffs' && playoffRounds.length > 1 && (
+            {graphicType === 'playoffs' && validPlayoffRounds.length > 1 && (
               <div className="animate-in fade-in duration-150">
                 <label className="text-xs font-bold text-muted uppercase tracking-wider block mb-1.5">Rondas de Llaves</label>
                 <div className="flex flex-wrap gap-1.5 p-1.5 bg-black/30 rounded-xl border border-white/5">
@@ -702,9 +724,9 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                         : 'text-muted hover:text-white'
                     }`}
                   >
-                    Todas ({playoffRounds.length})
+                    Todas ({validPlayoffRounds.length})
                   </button>
-                  {playoffRounds.map((r, idx) => (
+                  {validPlayoffRounds.map((r, idx) => (
                     <button
                       key={idx}
                       onClick={() => { setSelectedRoundIndex(idx); soundEffects.playScoreBeep(); }}
@@ -904,7 +926,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                     <div className="text-[9px] font-bold text-primary uppercase tracking-wider flex items-center justify-between mb-0.5">
                       <span className="flex items-center gap-1"><Trophy size={11} /> Cuadro de Playoffs</span>
                       <span className="text-[8px] text-muted">
-                        {selectedRoundIndex === 'all' ? `Todas las Rondas (${playoffRounds.length})` : playoffRounds[selectedRoundIndex]?.name}
+                        {selectedRoundIndex === 'all' ? `Todas las Rondas (${validPlayoffRounds.length})` : validPlayoffRounds[selectedRoundIndex]?.name}
                       </span>
                     </div>
                     {(!displayedRounds || displayedRounds.length === 0) ? (
@@ -923,6 +945,8 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                                 const isP1Winner = m.winner_id && m.winner_id === m.player1_id;
                                 const isP2Winner = m.winner_id && m.winner_id === m.player2_id;
                                 const scoreText = formatShortScore(m.score);
+                                const p1DisplayName = m.team1_name || (m.player1_name ? formatPlayerName(m.player1_name) : 'Por Definir');
+                                const p2DisplayName = m.team2_name || (m.player2_name ? formatPlayerName(m.player2_name) : 'Por Definir');
 
                                 return (
                                   <div key={mIdx} className="bg-white/5 border border-white/10 rounded-md p-1 text-[8.5px]">
@@ -932,7 +956,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                                     }`}>
                                       <span className="truncate max-w-[85px] flex items-center gap-0.5">
                                         {isP1Winner && <span className="text-primary text-[7px]">▶</span>}
-                                        {m.player1_name || 'Por Definir'}
+                                        {p1DisplayName}
                                       </span>
                                       {scoreText && m.is_played && isP1Winner && (
                                         <span className="text-[7px] bg-primary/20 text-primary px-0.5 rounded font-bold">GANADOR</span>
@@ -944,7 +968,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                                     }`}>
                                       <span className="truncate max-w-[85px] flex items-center gap-0.5">
                                         {isP2Winner && <span className="text-primary text-[7px]">▶</span>}
-                                        {m.player2_name || 'Por Definir'}
+                                        {p2DisplayName}
                                       </span>
                                       {scoreText && m.is_played && isP2Winner && (
                                         <span className="text-[7px] bg-primary/20 text-primary px-0.5 rounded font-bold">GANADOR</span>
