@@ -13,6 +13,7 @@ import {
     User, Copy
 } from 'lucide-react';
 import { SplitBillModal } from '../components/SplitBillModal';
+import { BookingSlotSkeleton } from '../components/ui/Skeleton';
 
 export const Bookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   if (user.role === 'admin' || user.role === 'superadmin' || user.role === 'professor') {
@@ -462,12 +463,36 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'my_bookings' | 'clubs_catalog'>('my_bookings');
   const [statusFilter, setStatusFilter] = useState<'active' | 'history'>('active');
+  const [timeOfDayFilter, setTimeOfDayFilter] = useState<'all' | 'morning' | 'afternoon' | 'night'>('all');
   const [clubSearch, setClubSearch] = useState('');
   const [showNewBooking, setShowNewBooking] = useState(false);
   const [selectedClubIdForBooking, setSelectedClubIdForBooking] = useState<string | undefined>(undefined);
   const [bookingToReschedule, setBookingToReschedule] = useState<Booking | null>(null);
   const [splitBillBooking, setSplitBillBooking] = useState<Booking | null>(null);
   const { addToast } = useToast();
+
+  const handleShareWhatsApp = (booking: Booking) => {
+    soundEffects.play('click');
+    const clubName = booking.institutions?.name || 'el Club';
+    const courtName = booking.court_name || 'Cancha de Tenis';
+    const friendlyDate = formatFriendlyDate(booking.date);
+    const time = `${booking.start_time} - ${booking.end_time} hs`;
+    
+    let participantsText = '';
+    if (booking.participants && booking.participants.length > 0) {
+      participantsText = `\n👥 *Jugadores:* ${booking.participants.map(p => p.name).join(', ')}`;
+    }
+
+    const message = `🎾 *¡Partido Confirmado en Smash Tenis!* 🏆\n\n` +
+      `📍 *Club:* ${clubName}\n` +
+      `🏟️ *Cancha:* ${courtName}\n` +
+      `📅 *Día:* ${friendlyDate}\n` +
+      `⏰ *Horario:* ${time}${participantsText}\n\n` +
+      `¡Nos vemos en la cancha! 🎾🔥`;
+
+    const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+    window.open(whatsappUrl, '_blank');
+  };
 
   useEffect(() => {
     loadData();
@@ -543,7 +568,16 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
 
   const activeBookings = bookings.filter(b => b.status !== 'cancelled' && b.status !== 'rejected');
   const historyBookings = bookings.filter(b => b.status === 'cancelled' || b.status === 'rejected');
-  const displayedBookings = statusFilter === 'active' ? activeBookings : historyBookings;
+  const baseBookings = statusFilter === 'active' ? activeBookings : historyBookings;
+  
+  const displayedBookings = baseBookings.filter(b => {
+    if (timeOfDayFilter === 'all') return true;
+    const hour = parseInt(b.start_time?.split(':')[0] || '12', 10);
+    if (timeOfDayFilter === 'morning') return hour >= 6 && hour < 13;
+    if (timeOfDayFilter === 'afternoon') return hour >= 13 && hour < 19;
+    if (timeOfDayFilter === 'night') return hour >= 19 || hour < 6;
+    return true;
+  });
 
   return (
     <div className="space-y-6 animate-fade-up">
@@ -590,32 +624,85 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
       </div>
 
       {loading ? (
-        <div className="text-center py-20 text-muted">Cargando información...</div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <BookingSlotSkeleton />
+            <BookingSlotSkeleton />
+            <BookingSlotSkeleton />
+        </div>
       ) : activeTab === 'my_bookings' ? (
         /* MY BOOKINGS TAB */
         <div className="space-y-4">
-            {/* Sub-pills for Active vs History */}
-            <div className="flex items-center gap-2 bg-slate-900/60 p-1 rounded-xl border border-white/10 w-fit text-xs font-bold">
-                <button
-                    onClick={() => setStatusFilter('active')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${
-                        statusFilter === 'active' 
-                            ? 'bg-primary text-white shadow-sm' 
-                            : 'text-muted hover:text-white'
-                    }`}
-                >
-                    Turnos Próximos ({activeBookings.length})
-                </button>
-                <button
-                    onClick={() => setStatusFilter('history')}
-                    className={`px-3 py-1.5 rounded-lg transition-all ${
-                        statusFilter === 'history' 
-                            ? 'bg-primary text-white shadow-sm' 
-                            : 'text-muted hover:text-white'
-                    }`}
-                >
-                    Historial / Cancelados ({historyBookings.length})
-                </button>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                {/* Sub-pills for Active vs History */}
+                <div className="flex items-center gap-2 bg-slate-900/60 p-1 rounded-xl border border-white/10 w-fit text-xs font-bold">
+                    <button
+                        onClick={() => setStatusFilter('active')}
+                        className={`px-3 py-1.5 rounded-lg transition-all ${
+                            statusFilter === 'active' 
+                                ? 'bg-primary text-white shadow-sm' 
+                                : 'text-muted hover:text-white'
+                        }`}
+                    >
+                        Turnos Próximos ({activeBookings.length})
+                    </button>
+                    <button
+                        onClick={() => setStatusFilter('history')}
+                        className={`px-3 py-1.5 rounded-lg transition-all ${
+                            statusFilter === 'history' 
+                                ? 'bg-primary text-white shadow-sm' 
+                                : 'text-muted hover:text-white'
+                        }`}
+                    >
+                        Historial / Cancelados ({historyBookings.length})
+                    </button>
+                </div>
+
+                {/* Filtro Rápido Ergonómico por Momento del Día */}
+                <div className="flex items-center gap-1.5 bg-dark/60 p-1 rounded-xl border border-white/10 text-xs">
+                    <button
+                        onClick={() => setTimeOfDayFilter('all')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all ${
+                            timeOfDayFilter === 'all'
+                                ? 'bg-primary text-white font-bold shadow-sm'
+                                : 'text-muted hover:text-white'
+                        }`}
+                    >
+                        Todos
+                    </button>
+                    <button
+                        onClick={() => setTimeOfDayFilter('morning')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                            timeOfDayFilter === 'morning'
+                                ? 'bg-amber-500/30 text-amber-200 border border-amber-500/40 font-bold shadow-sm'
+                                : 'text-muted hover:text-white'
+                        }`}
+                    >
+                        <Sun size={12} className="text-amber-400" />
+                        <span>Mañana (08-13h)</span>
+                    </button>
+                    <button
+                        onClick={() => setTimeOfDayFilter('afternoon')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                            timeOfDayFilter === 'afternoon'
+                                ? 'bg-orange-500/30 text-orange-200 border border-orange-500/40 font-bold shadow-sm'
+                                : 'text-muted hover:text-white'
+                        }`}
+                    >
+                        <Flame size={12} className="text-orange-400" />
+                        <span>Tarde (13-19h)</span>
+                    </button>
+                    <button
+                        onClick={() => setTimeOfDayFilter('night')}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 ${
+                            timeOfDayFilter === 'night'
+                                ? 'bg-indigo-500/30 text-indigo-200 border border-indigo-500/40 font-bold shadow-sm'
+                                : 'text-muted hover:text-white'
+                        }`}
+                    >
+                        <Moon size={12} className="text-indigo-400" />
+                        <span>Noche (19-23h)</span>
+                    </button>
+                </div>
             </div>
 
             {displayedBookings.length === 0 ? (
@@ -711,17 +798,31 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
                                         </div>
                                     )}
 
-                                    {/* Punto 4: Botón de Split Bill en cada turno activo */}
-                                    {!isCancelled && (booking.total_price > 0 || (booking as any).price > 0) && (
-                                        <div className="mt-2.5 pt-2 border-t border-white/5">
+                                    {/* Botones de Compartir & Split Bill en cada turno activo */}
+                                    {!isCancelled && (
+                                        <div className="mt-2.5 pt-2 border-t border-white/5 grid grid-cols-2 gap-2">
                                             <button
                                                 type="button"
-                                                onClick={() => setSplitBillBooking(booking)}
-                                                className="w-full py-2 px-3 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm"
-                                                title="Dividir el costo del turno entre 2 o 4 jugadores y compartir por WhatsApp"
+                                                onClick={() => handleShareWhatsApp(booking)}
+                                                className="py-2 px-2.5 bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                                                title="Compartir detalles del partido en WhatsApp"
                                             >
-                                                <Users size={13} /> Dividir Pago (Split Bill)
+                                                <MessageCircle size={13} /> Compartir
                                             </button>
+                                            {(booking.total_price > 0 || (booking as any).price > 0) ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setSplitBillBooking(booking)}
+                                                    className="py-2 px-2.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-sm active:scale-95"
+                                                    title="Dividir el costo del turno entre 2 o 4 jugadores"
+                                                >
+                                                    <Users size={13} /> Dividir Pago
+                                                </button>
+                                            ) : (
+                                                <div className="py-2 px-2.5 bg-white/5 text-muted text-[11px] rounded-xl flex items-center justify-center">
+                                                    Sin costo
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 

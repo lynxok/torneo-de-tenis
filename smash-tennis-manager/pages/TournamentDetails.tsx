@@ -18,6 +18,7 @@ import { exportTournamentPlayersToCSV } from '../utils/exportHelper';
 import { calculateGroupStandings, calculateUnifiedStandings, organizePlayoffRounds, getProjectedPlayoffRounds, buildPlayoffTreeFromZones, GroupZone, GroupStandingRow, UnifiedStandingRow, PlayoffRound, ProjectedRound } from '../utils/bracketHelper';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { ShareGraphicModal } from '../components/ShareGraphicModal';
+import { MatchQuickScorerModal } from '../components/MatchQuickScorerModal';
 import { soundEffects } from '../services/soundEffects';
 import { canEditTournament } from './Tournaments';
 import { checkPlayerGenderEligibility } from '../utils/demographics';
@@ -140,6 +141,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     // Score Modal State (with 24h confirmation, tiebreaks & doubles support)
     const [selectedMatchForScore, setSelectedMatchForScore] = useState<Match | null>(null);
+    const [showQuickScorer, setShowQuickScorer] = useState(false);
     const [scoreP1Set1, setScoreP1Set1] = useState<number | ''>('');
     const [scoreP2Set1, setScoreP2Set1] = useState<number | ''>('');
     const [tbP1Set1, setTbP1Set1] = useState<number | ''>('');
@@ -671,6 +673,63 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         } finally {
             setSavingScore(false);
         }
+    };
+
+    const openQuickScorerModal = (m: Match) => {
+        const isClubAdmin = user.role === 'superadmin' || (user.role === 'admin' && user.institution_id === tournament?.institution_id);
+        if (m.is_played && (m.score_status === 'confirmed' || m.score_status === 'disputed') && !isClubAdmin) {
+            addToast("Este marcador ya ha sido verificado u oficializado. Solo el organizador o SuperAdmin puede modificarlo.", "info");
+            return;
+        }
+        setSelectedMatchForScore(m);
+        setShowQuickScorer(true);
+    };
+
+    const handleQuickSaveScore = async (scoreString: string, winnerId?: string) => {
+        if (!selectedMatchForScore) return;
+
+        let finalWinnerId = winnerId;
+        if (!finalWinnerId) {
+            finalWinnerId = selectedMatchForScore.player1_id;
+        }
+
+        const isDoubles = tournament?.type === 'doubles';
+        const winnerPartnerId = finalWinnerId === selectedMatchForScore.player1_id 
+            ? selectedMatchForScore.player1_partner_id 
+            : selectedMatchForScore.player2_partner_id;
+
+        // Construir objeto estructurado para retrocompatibilidad
+        const parts = scoreString.trim().split(/\s+/);
+        const scoreObj: any = {
+            raw: scoreString,
+            set1: parts[0] || '6-0',
+            set2: parts[1] || '6-0'
+        };
+        if (parts[2]) {
+            scoreObj.set3 = parts[2];
+        }
+        if (scoreString.includes('W.O.')) {
+            scoreObj.walkover = true;
+            scoreObj.walkover_winner = finalWinnerId === selectedMatchForScore.player1_id ? 'p1' : 'p2';
+        }
+
+        const res = await api.matches.updateScore(
+            selectedMatchForScore.id, 
+            scoreObj, 
+            finalWinnerId,
+            user,
+            isDoubles,
+            winnerPartnerId
+        );
+
+        if (res.scoreStatus === 'confirmed') {
+            addToast("⚡ Marcador cargado y oficializado con éxito.", 'success');
+        } else {
+            addToast("⚡ Resultado cargado con Quick-Scorer.", 'info');
+        }
+        setShowQuickScorer(false);
+        setSelectedMatchForScore(null);
+        loadTournament();
     };
 
     const handleConfirmScore = async (matchId: string) => {
@@ -2522,18 +2581,28 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             )}
 
                                                                             {canEditScore && (
-                                                                                <button
-                                                                                    onClick={() => openScoreModal(m)}
-                                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
-                                                                                        !m.is_played
-                                                                                            ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
-                                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
-                                                                                    }`}
-                                                                                    title={m.is_played ? "Modificar resultado" : "Cargar resultado del partido"}
-                                                                                >
-                                                                                    <Edit3 size={12} className={!m.is_played ? "text-primary" : ""} />
-                                                                                    <span className="hidden sm:inline">{m.is_played ? "Editar" : "Resultado"}</span>
-                                                                                </button>
+                                                                                <>
+                                                                                    <button
+                                                                                        onClick={() => openQuickScorerModal(m)}
+                                                                                        className="p-1.5 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 text-[10px] font-black shadow-sm active:scale-95"
+                                                                                        title="Carga Rápida Táctil (Quick-Scorer)"
+                                                                                    >
+                                                                                        <Sparkles size={12} className="text-emerald-400" />
+                                                                                        <span>Rápido</span>
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => openScoreModal(m)}
+                                                                                        className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                            !m.is_played
+                                                                                                ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
+                                                                                                : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                        }`}
+                                                                                        title={m.is_played ? "Modificar resultado detallado" : "Cargar resultado tradicional"}
+                                                                                    >
+                                                                                        <Edit3 size={12} className={!m.is_played ? "text-primary" : ""} />
+                                                                                        <span className="hidden sm:inline">{m.is_played ? "Editar" : "Detallado"}</span>
+                                                                                    </button>
+                                                                                </>
                                                                             )}
                                                                         </div>
                                                                     </div>
@@ -3009,18 +3078,28 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                             )}
 
                                                                             {canEditScore && (
-                                                                                <button
-                                                                                    onClick={() => openScoreModal(m)}
-                                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
-                                                                                        !m.is_played
-                                                                                            ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
-                                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
-                                                                                    }`}
-                                                                                    title={m.is_played ? "Modificar marcador" : "Cargar marcador"}
-                                                                                >
-                                                                                    <Edit3 size={11} className={!m.is_played ? "text-primary" : ""} />
-                                                                                    <span>{m.is_played ? "Editar" : "Resultado"}</span>
-                                                                                </button>
+                                                                                <>
+                                                                                    <button
+                                                                                        onClick={() => openQuickScorerModal(m)}
+                                                                                        className="p-1.5 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 text-[10px] font-black shadow-sm active:scale-95"
+                                                                                        title="Carga Rápida Táctil (Quick-Scorer)"
+                                                                                    >
+                                                                                        <Sparkles size={11} className="text-emerald-400" />
+                                                                                        <span>Rápido</span>
+                                                                                    </button>
+                                                                                    <button
+                                                                                        onClick={() => openScoreModal(m)}
+                                                                                        className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                            !m.is_played
+                                                                                                ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
+                                                                                                : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                        }`}
+                                                                                        title={m.is_played ? "Modificar marcador detallado" : "Cargar marcador"}
+                                                                                    >
+                                                                                        <Edit3 size={11} className={!m.is_played ? "text-primary" : ""} />
+                                                                                        <span>{m.is_played ? "Editar" : "Detallado"}</span>
+                                                                                    </button>
+                                                                                </>
                                                                             )}
                                                                         </div>
                                                                     </div>
@@ -5934,6 +6013,26 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                         </div>
                     </div>
                 </div>
+            )}
+
+            {/* Quick-Scorer Modal Ergonómico */}
+            {selectedMatchForScore && showQuickScorer && (
+                <MatchQuickScorerModal
+                    isOpen={showQuickScorer}
+                    onClose={() => {
+                        setShowQuickScorer(false);
+                        setSelectedMatchForScore(null);
+                    }}
+                    player1Name={selectedMatchForScore.team1_name || selectedMatchForScore.player1_name || 'Jugador 1'}
+                    player2Name={selectedMatchForScore.team2_name || selectedMatchForScore.player2_name || 'Jugador 2'}
+                    p1Id={selectedMatchForScore.player1_id}
+                    p2Id={selectedMatchForScore.player2_id}
+                    currentScore={typeof selectedMatchForScore.score === 'object' 
+                        ? `${selectedMatchForScore.score.set1 || ''} ${selectedMatchForScore.score.set2 || ''} ${selectedMatchForScore.score.set3 || ''}`.trim()
+                        : (selectedMatchForScore.score || '')
+                    }
+                    onSaveScore={handleQuickSaveScore}
+                />
             )}
 
             {/* PRINTABLE CONTROL SHEET (A4 - Only visible during print) */}

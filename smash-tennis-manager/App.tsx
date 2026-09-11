@@ -14,6 +14,7 @@ import { OrganizerImprovementsModal } from './components/OrganizerImprovementsMo
 import { PlayerImprovementsModal } from './components/PlayerImprovementsModal';
 import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { BottomNavBar } from './components/BottomNavBar';
 import { soundEffects } from './services/soundEffects';
 import { Menu, ShieldAlert, User, Shield, Loader2, GraduationCap } from 'lucide-react';
 
@@ -555,7 +556,7 @@ const AppContent = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8 pb-24 md:pb-8">
           <div className="max-w-7xl mx-auto pb-10">
             <ErrorBoundary>
               <Suspense fallback={
@@ -619,6 +620,14 @@ const AppContent = () => {
           </div>
         </div>
       </main>
+
+      {/* Navegación Móvil Ergonómica Inferior */}
+      <BottomNavBar
+        activeView={activeView}
+        onNavigate={handleNavigate}
+        role={effectiveUser.role}
+        unreadCount={unreadCount}
+      />
 
       {/* Pop-up inteligente de Novedades y Mejoras Semanales para Organizadores */}
       <OrganizerImprovementsModal user={effectiveUser} onNavigate={handleNavigate} />

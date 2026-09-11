@@ -7,6 +7,7 @@ import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, TIER_META, TIER_ORDER, getEffectiveTournamentTier, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
 import { TournamentsMap } from '../components/TournamentsMap';
+import { TournamentCardSkeleton } from '../components/ui/Skeleton';
 import { checkPlayerGenderEligibility } from '../utils/demographics';
 
 interface TournamentsProps {
@@ -488,7 +489,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                     )}
 
                     {loading ? (
-                        <div className="text-center py-20 text-muted">Cargando calendario de torneos...</div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                            <TournamentCardSkeleton />
+                            <TournamentCardSkeleton />
+                            <TournamentCardSkeleton />
+                        </div>
                     ) : tournaments.length === 0 ? (
                         <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
                             No hay torneos programados por el momento.
