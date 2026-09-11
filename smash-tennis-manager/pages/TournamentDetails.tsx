@@ -233,7 +233,13 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         if (cached && !tournament) {
             setTournament(cached);
             if (cached.tournament_players) setPlayers(cached.tournament_players);
-            if (cached.matches) setMatches(cached.matches);
+            if (cached.matches) {
+                setMatches(cached.matches);
+                const hasCachedPlayoffs = cached.matches.some((m: any) => m.round !== 'Fase de Grupos' && !m.group_number);
+                if (hasCachedPlayoffs) {
+                    setActiveTab('playoffs');
+                }
+            }
             if (cached.registration_price !== undefined) setManualFee(cached.registration_price);
             if (cached.category) setGuestCategory(cached.category);
             if (cached.institutions) setHostInstitution(cached.institutions as Institution);
@@ -250,7 +256,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             tournamentDataCache.set(tournamentId, data);
             setTournament(data);
             if (data.tournament_players) setPlayers(data.tournament_players);
-            if (data.matches) setMatches(data.matches);
+            if (data.matches) {
+                setMatches(data.matches);
+                // Si el torneo ya tiene partidos de llaves/playoffs generados, abrir directamente en la pestaña de Llaves
+                const hasPlayoffs = data.matches.some((m: any) => m.round !== 'Fase de Grupos' && !m.group_number);
+                if (hasPlayoffs) {
+                    setActiveTab('playoffs');
+                }
+            }
             if (data.registration_price !== undefined) {
                 setManualFee(data.registration_price);
             }
@@ -3053,9 +3066,38 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                         </div>
                                                                     )}
 
-                                                                    {/* Score & Edit Bar */}
-                                                                    <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
-                                                                        <div className="flex items-center gap-1.5">
+                                                                    {/* Status and Action Buttons */}
+                                                                    <div className="pt-2.5 border-t border-white/5 space-y-2">
+                                                                        {/* Row 1: Status & H2H */}
+                                                                        <div className="flex items-center justify-between gap-2">
+                                                                            <div className="flex items-center gap-1.5 min-w-0">
+                                                                                {formattedScore ? (
+                                                                                    <div className="flex flex-col gap-0.5">
+                                                                                        <span className="font-mono font-bold text-primary text-xs bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
+                                                                                            {formattedScore}
+                                                                                        </span>
+                                                                                        {m.score_status === 'pending_confirmation' && (
+                                                                                            <span className="text-[8px] text-amber-400 font-bold flex items-center gap-0.5">
+                                                                                                <Clock size={9} /> Pendiente ({hoursRemaining}h)
+                                                                                            </span>
+                                                                                        )}
+                                                                                        {m.score_status === 'disputed' && (
+                                                                                            <span className="text-[8px] text-red-400 font-bold flex items-center gap-0.5">
+                                                                                                <AlertTriangle size={9} /> En Disputa
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                ) : hasBothPlayers ? (
+                                                                                    <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded-md border border-yellow-500/20 whitespace-nowrap">
+                                                                                        Por Jugar
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="text-[10px] text-slate-400 bg-white/[0.02] px-2 py-0.5 rounded-md border border-white/5 font-medium flex items-center gap-1 whitespace-nowrap">
+                                                                                        <Clock size={10} className="text-slate-500" /> Esperando clasificados
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+
                                                                             {m.player1_id && m.player2_id && (
                                                                                 <button
                                                                                     onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
@@ -3065,75 +3107,53 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     <Swords size={11} /> H2H
                                                                                 </button>
                                                                             )}
-                                                                            {formattedScore ? (
-                                                                                <div className="flex flex-col gap-0.5">
-                                                                                    <span className="font-mono font-bold text-primary text-xs bg-black/40 px-2 py-0.5 rounded-lg border border-white/5">
-                                                                                        {formattedScore}
-                                                                                    </span>
-                                                                                    {m.score_status === 'pending_confirmation' && (
-                                                                                        <span className="text-[8px] text-amber-400 font-bold flex items-center gap-0.5">
-                                                                                            <Clock size={9} /> Pendiente ({hoursRemaining}h)
-                                                                                        </span>
-                                                                                    )}
-                                                                                    {m.score_status === 'disputed' && (
-                                                                                        <span className="text-[8px] text-red-400 font-bold flex items-center gap-0.5">
-                                                                                            <AlertTriangle size={9} /> En Disputa
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                            ) : hasBothPlayers ? (
-                                                                                <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded-md border border-yellow-500/20 whitespace-nowrap">
-                                                                                    Por Jugar
-                                                                                </span>
-                                                                            ) : (
-                                                                                <span className="text-[10px] text-slate-400 bg-white/[0.02] px-2 py-0.5 rounded-md border border-white/5 font-medium flex items-center gap-1 whitespace-nowrap">
-                                                                                    <Clock size={10} className="text-slate-500" /> Esperando clasificados
-                                                                                </span>
-                                                                            )}
                                                                         </div>
 
-                                                                        <div className="flex items-center gap-1.5 shrink-0">
-                                                                            {/* Schedule Button for Admin or Assigned Players (Solo si ambos jugadores están definidos y el partido NO fue jugado aún) */}
-                                                                            {canSchedule && (
-                                                                                <button
-                                                                                    onClick={() => openScheduleModal(m)}
-                                                                                    className={`p-1.5 px-2.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
-                                                                                        scheduledInfo
-                                                                                            ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
-                                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
-                                                                                    }`}
-                                                                                    title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
-                                                                                >
-                                                                                    <Calendar size={11} className={scheduledInfo ? "text-blue-400" : ""} />
-                                                                                    <span>{scheduledInfo ? "Horario" : "Programar"}</span>
-                                                                                </button>
-                                                                            )}
-
-                                                                            {canEditScore && (
-                                                                                <>
+                                                                        {/* Row 2: Action Buttons (full width grid/flex) */}
+                                                                        {(canSchedule || canEditScore) && (
+                                                                            <div className="flex items-center gap-1.5 pt-1">
+                                                                                {/* Schedule Button */}
+                                                                                {canSchedule && (
                                                                                     <button
-                                                                                        onClick={() => openQuickScorerModal(m)}
-                                                                                        className="p-1.5 px-2.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 text-[10px] font-black shadow-sm active:scale-95"
-                                                                                        title="Carga Rápida Táctil (Quick-Scorer)"
-                                                                                    >
-                                                                                        <Sparkles size={11} className="text-emerald-400" />
-                                                                                        <span>Rápido</span>
-                                                                                    </button>
-                                                                                    <button
-                                                                                        onClick={() => openScoreModal(m)}
-                                                                                        className={`p-1.5 px-2.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
-                                                                                            !m.is_played
-                                                                                                ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
+                                                                                        onClick={() => openScheduleModal(m)}
+                                                                                        className={`flex-1 min-w-0 p-1.5 px-2 rounded-lg border transition-all flex items-center justify-center gap-1 text-[10px] font-bold ${
+                                                                                            scheduledInfo
+                                                                                                ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
                                                                                                 : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
                                                                                         }`}
-                                                                                        title={m.is_played ? "Modificar marcador detallado" : "Cargar marcador"}
+                                                                                        title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
                                                                                     >
-                                                                                        <Edit3 size={11} className={!m.is_played ? "text-primary" : ""} />
-                                                                                        <span>{m.is_played ? "Editar" : "Detallado"}</span>
+                                                                                        <Calendar size={11} className={scheduledInfo ? "text-blue-400 shrink-0" : "shrink-0"} />
+                                                                                        <span className="truncate">{scheduledInfo ? "Horario" : "Programar"}</span>
                                                                                     </button>
-                                                                                </>
-                                                                            )}
-                                                                        </div>
+                                                                                )}
+
+                                                                                {canEditScore && (
+                                                                                    <>
+                                                                                        <button
+                                                                                            onClick={() => openQuickScorerModal(m)}
+                                                                                            className="flex-1 min-w-0 p-1.5 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center justify-center gap-1 text-[10px] font-black shadow-sm active:scale-95"
+                                                                                            title="Carga Rápida Táctil (Quick-Scorer)"
+                                                                                        >
+                                                                                            <Sparkles size={11} className="text-emerald-400 shrink-0" />
+                                                                                            <span className="truncate">Rápido</span>
+                                                                                        </button>
+                                                                                        <button
+                                                                                            onClick={() => openScoreModal(m)}
+                                                                                            className={`flex-1 min-w-0 p-1.5 px-2 rounded-lg border transition-all flex items-center justify-center gap-1 text-[10px] font-bold ${
+                                                                                                !m.is_played
+                                                                                                    ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
+                                                                                                    : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                            }`}
+                                                                                            title={m.is_played ? "Modificar marcador detallado" : "Cargar marcador"}
+                                                                                        >
+                                                                                            <Edit3 size={11} className={!m.is_played ? "text-primary shrink-0" : "shrink-0"} />
+                                                                                            <span className="truncate">{m.is_played ? "Editar" : "Detallado"}</span>
+                                                                                        </button>
+                                                                                    </>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
                                                                     </div>
 
                                                                     {/* Submitter info */}
