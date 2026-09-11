@@ -408,6 +408,13 @@ export function getProjectedPlayoffRounds(
         const zC = zones[2];
         const zD = zones[3];
 
+        // Esquema tradicional de cruces alternados (salto de zona N+2):
+        // Llave Superior:
+        // Cuartos 1: 1°A vs 2°C
+        // Cuartos 2: 1°B vs 2°D
+        // Llave Inferior:
+        // Cuartos 3: 1°C vs 2°A
+        // Cuartos 4: 1°D vs 2°B
         const qfMatches: ProjectedMatch[] = [
             {
                 id: 'proj-qf-1',
@@ -415,16 +422,16 @@ export function getProjectedPlayoffRounds(
                 slotP1Label: `1° ${zA?.groupName || 'Grupo A'}`,
                 p1Name: zA?.players[0]?.playerName,
                 p1Id: zA?.players[0]?.playerId,
-                slotP2Label: `2° ${zB?.groupName || 'Grupo B'}`,
-                p2Name: zB?.players[1]?.playerName,
-                p2Id: zB?.players[1]?.playerId
+                slotP2Label: `2° ${zC?.groupName || 'Grupo C'}`,
+                p2Name: zC?.players[1]?.playerName,
+                p2Id: zC?.players[1]?.playerId
             },
             {
                 id: 'proj-qf-2',
                 round: 'Cuartos de Final',
-                slotP1Label: `1° ${zC?.groupName || 'Grupo C'}`,
-                p1Name: zC?.players[0]?.playerName,
-                p1Id: zC?.players[0]?.playerId,
+                slotP1Label: `1° ${zB?.groupName || 'Grupo B'}`,
+                p1Name: zB?.players[0]?.playerName,
+                p1Id: zB?.players[0]?.playerId,
                 slotP2Label: `2° ${zD?.groupName || 'Grupo D'}`,
                 p2Name: zD?.players[1]?.playerName,
                 p2Id: zD?.players[1]?.playerId
@@ -432,9 +439,9 @@ export function getProjectedPlayoffRounds(
             {
                 id: 'proj-qf-3',
                 round: 'Cuartos de Final',
-                slotP1Label: `1° ${zB?.groupName || 'Grupo B'}`,
-                p1Name: zB?.players[0]?.playerName,
-                p1Id: zB?.players[0]?.playerId,
+                slotP1Label: `1° ${zC?.groupName || 'Grupo C'}`,
+                p1Name: zC?.players[0]?.playerName,
+                p1Id: zC?.players[0]?.playerId,
                 slotP2Label: `2° ${zA?.groupName || 'Grupo A'}`,
                 p2Name: zA?.players[1]?.playerName,
                 p2Id: zA?.players[1]?.playerId
@@ -445,9 +452,9 @@ export function getProjectedPlayoffRounds(
                 slotP1Label: `1° ${zD?.groupName || 'Grupo D'}`,
                 p1Name: zD?.players[0]?.playerName,
                 p1Id: zD?.players[0]?.playerId,
-                slotP2Label: `2° ${zC?.groupName || 'Grupo C'}`,
-                p2Name: zC?.players[1]?.playerName,
-                p2Id: zC?.players[1]?.playerId
+                slotP2Label: `2° ${zB?.groupName || 'Grupo B'}`,
+                p2Name: zB?.players[1]?.playerName,
+                p2Id: zB?.players[1]?.playerId
             }
         ];
 
@@ -455,14 +462,14 @@ export function getProjectedPlayoffRounds(
             {
                 id: 'proj-sf-1',
                 round: 'Semifinal',
-                slotP1Label: 'Ganador Llave 1 (1°A vs 2°B)',
-                slotP2Label: 'Ganador Llave 2 (1°C vs 2°D)'
+                slotP1Label: 'Ganador Llave 1 (1°A vs 2°C)',
+                slotP2Label: 'Ganador Llave 2 (1°B vs 2°D)'
             },
             {
                 id: 'proj-sf-2',
                 round: 'Semifinal',
-                slotP1Label: 'Ganador Llave 3 (1°B vs 2°A)',
-                slotP2Label: 'Ganador Llave 4 (1°D vs 2°C)'
+                slotP1Label: 'Ganador Llave 3 (1°C vs 2°A)',
+                slotP2Label: 'Ganador Llave 4 (1°D vs 2°B)'
             }
         ];
 
@@ -1199,11 +1206,11 @@ export function buildPlayoffTreeFromZones(
         const zC = zones[2]?.players;
         const zD = zones[3]?.players;
 
-        // 4 Cuartos de Final (Separación de grupos: 1A y 2A en mitades opuestas)
+        // 4 Cuartos de Final (Cruces alternados N+2: 1A vs 2C, 1B vs 2D en parte alta; 1C vs 2A, 1D vs 2B en parte baja)
         seeds.push({
             round: 'Cuartos de Final',
             player1: zA?.[0] ? { id: zA[0].playerId, name: zA[0].playerName } : undefined,
-            player2: zB?.[1] ? { id: zB[1].playerId, name: zB[1].playerName } : undefined,
+            player2: zC?.[1] ? { id: zC[1].playerId, name: zC[1].playerName } : undefined,
             proposal_data: {
                 bracket_round: 'Cuartos de Final',
                 bracket_match_index: 0,
@@ -1211,12 +1218,12 @@ export function buildPlayoffTreeFromZones(
                 next_match_index: 0,
                 next_slot: 'player1',
                 slot1_label: `1° ${zones[0]?.groupName || 'Grupo A'}`,
-                slot2_label: `2° ${zones[1]?.groupName || 'Grupo B'}`
+                slot2_label: `2° ${zones[2]?.groupName || 'Grupo C'}`
             }
         });
         seeds.push({
             round: 'Cuartos de Final',
-            player1: zC?.[0] ? { id: zC[0].playerId, name: zC[0].playerName } : undefined,
+            player1: zB?.[0] ? { id: zB[0].playerId, name: zB[0].playerName } : undefined,
             player2: zD?.[1] ? { id: zD[1].playerId, name: zD[1].playerName } : undefined,
             proposal_data: {
                 bracket_round: 'Cuartos de Final',
@@ -1224,13 +1231,13 @@ export function buildPlayoffTreeFromZones(
                 next_round: 'Semifinal',
                 next_match_index: 0,
                 next_slot: 'player2',
-                slot1_label: `1° ${zones[2]?.groupName || 'Grupo C'}`,
+                slot1_label: `1° ${zones[1]?.groupName || 'Grupo B'}`,
                 slot2_label: `2° ${zones[3]?.groupName || 'Grupo D'}`
             }
         });
         seeds.push({
             round: 'Cuartos de Final',
-            player1: zB?.[0] ? { id: zB[0].playerId, name: zB[0].playerName } : undefined,
+            player1: zC?.[0] ? { id: zC[0].playerId, name: zC[0].playerName } : undefined,
             player2: zA?.[1] ? { id: zA[1].playerId, name: zA[1].playerName } : undefined,
             proposal_data: {
                 bracket_round: 'Cuartos de Final',
@@ -1238,14 +1245,14 @@ export function buildPlayoffTreeFromZones(
                 next_round: 'Semifinal',
                 next_match_index: 1,
                 next_slot: 'player1',
-                slot1_label: `1° ${zones[1]?.groupName || 'Grupo B'}`,
+                slot1_label: `1° ${zones[2]?.groupName || 'Grupo C'}`,
                 slot2_label: `2° ${zones[0]?.groupName || 'Grupo A'}`
             }
         });
         seeds.push({
             round: 'Cuartos de Final',
             player1: zD?.[0] ? { id: zD[0].playerId, name: zD[0].playerName } : undefined,
-            player2: zC?.[1] ? { id: zC[1].playerId, name: zC[1].playerName } : undefined,
+            player2: zB?.[1] ? { id: zB[1].playerId, name: zB[1].playerName } : undefined,
             proposal_data: {
                 bracket_round: 'Cuartos de Final',
                 bracket_match_index: 3,
@@ -1253,7 +1260,7 @@ export function buildPlayoffTreeFromZones(
                 next_match_index: 1,
                 next_slot: 'player2',
                 slot1_label: `1° ${zones[3]?.groupName || 'Grupo D'}`,
-                slot2_label: `2° ${zones[2]?.groupName || 'Grupo C'}`
+                slot2_label: `2° ${zones[1]?.groupName || 'Grupo B'}`
             }
         });
 
@@ -1266,8 +1273,8 @@ export function buildPlayoffTreeFromZones(
                 next_round: 'Final',
                 next_match_index: 0,
                 next_slot: 'player1',
-                slot1_label: 'Ganador Llave 1 (1°A vs 2°B)',
-                slot2_label: 'Ganador Llave 2 (1°C vs 2°D)'
+                slot1_label: 'Ganador Llave 1 (1°A vs 2°C)',
+                slot2_label: 'Ganador Llave 2 (1°B vs 2°D)'
             }
         });
         seeds.push({
@@ -1278,8 +1285,8 @@ export function buildPlayoffTreeFromZones(
                 next_round: 'Final',
                 next_match_index: 0,
                 next_slot: 'player2',
-                slot1_label: 'Ganador Llave 3 (1°B vs 2°A)',
-                slot2_label: 'Ganador Llave 4 (1°D vs 2°C)'
+                slot1_label: 'Ganador Llave 3 (1°C vs 2°A)',
+                slot2_label: 'Ganador Llave 4 (1°D vs 2°B)'
             }
         });
 

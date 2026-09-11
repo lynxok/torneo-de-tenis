@@ -1447,7 +1447,17 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const handleOpenOfficializeModal = () => {
         if (!tournament || zones.length === 0) return;
-        setSelectedOfficialFormat(activeCompetitionFormat);
+        // Si el torneo tiene formato configurado lo respetamos, de lo contrario sugerimos:
+        // 4 zonas o 3 zonas -> 'zonas_playoffs' (criterio tradicional sin repetición)
+        // >= 5 zonas impares -> 'tabla_general_byes'
+        if (activeCompetitionFormat) {
+            setSelectedOfficialFormat(activeCompetitionFormat);
+        } else {
+            const recommended = (zones.length === 4 || zones.length === 3 || zones.length === 2) 
+                ? 'zonas_playoffs' 
+                : 'tabla_general_byes';
+            setSelectedOfficialFormat(recommended);
+        }
         setShowOfficializeModal(true);
     };
 
@@ -5797,6 +5807,43 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 Selecciona el Esquema de Cruces:
                             </label>
 
+                            {/* Cartel de Sugerencia Inteligente según Zonas */}
+                            {zones.length === 4 && (
+                                <div className="p-3 bg-primary/10 border border-primary/30 rounded-xl flex items-start gap-2.5 text-xs">
+                                    <Sparkles size={16} className="text-primary shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="font-bold text-white block">💡 Recomendación para 4 Zonas:</span>
+                                        <span className="text-slate-300">
+                                            Se sugiere <strong>Cruces Directos por Zonas</strong> (1°A vs 2°C, 1°B vs 2°D, 1°C vs 2°A, 1°D vs 2°B). Es el formato tradicional de tenis: cruza zonas alternadas y garantiza que los rivales de un mismo grupo solo puedan reencontrarse en la Final.
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {zones.length === 3 && (
+                                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs">
+                                    <Sparkles size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="font-bold text-amber-300 block">💡 Torneo con 3 Zonas (6 clasificados):</span>
+                                        <span className="text-slate-300">
+                                            Al ser cantidad impar de zonas, se sugiere <strong>Cruces Directos por Zonas</strong>: los 2 mejores primeros obtienen <strong>BYE directo a Semifinales</strong> por mérito deportivo, y se juegan 2 Cuartos de Final (1°C vs 2°A y 2°B vs 2°C) sin repetición de grupo.
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
+                            {zones.length >= 5 && (
+                                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs">
+                                    <Sparkles size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                                    <div>
+                                        <span className="font-bold text-amber-300 block">💡 Torneo con {zones.length} Zonas:</span>
+                                        <span className="text-slate-300">
+                                            Para estructuras con más de 4 zonas, se recomienda <strong>Tabla General Unificada + BYEs</strong> para rankear objetivamente a los clasificados por puntos, sets y games para balancear el cuadro.
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 gap-2.5">
                                 <label
                                     onClick={() => setSelectedOfficialFormat('tabla_general_byes')}
@@ -5817,6 +5864,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         <div className="text-xs font-black text-white flex items-center gap-2">
                                             🏆 Tabla General Unificada + BYEs
                                             <span className="text-[10px] px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">Por Mérito</span>
+                                            {zones.length >= 5 && (
+                                                <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded font-bold">Recomendado</span>
+                                            )}
                                         </div>
                                         <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">
                                             Se ordena a todos los jugadores por puntos, sets y games. El 1° y 2° general pasan con BYE a Semis, y el 1° cruza con el último clasificado (1° vs 8°, 4° vs 5°, 3° vs 6°, 2° vs 7°).
@@ -5843,12 +5893,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         <div className="text-xs font-black text-white flex items-center gap-2">
                                             🎾 Cruces Directos por Zonas
                                             <span className="text-[10px] px-1.5 py-0.2 bg-primary/20 text-primary border border-primary/30 rounded">Anti-Repetición</span>
+                                            {(zones.length === 3 || zones.length === 4) && (
+                                                <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded font-bold">Recomendado</span>
+                                            )}
                                         </div>
                                         <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">
                                             {zones.length === 3 
                                                 ? 'Formato especial para 3 zonas: Los 2 mejores primeros reciben BYE a Semis. Se arman Cuartos entre 1°C vs 2°A y 2°B vs 2°C garantizando que ningún rival de grupo se vuelva a cruzar en el debut.'
                                                 : zones.length === 4
-                                                ? 'Formato clásico de 4 zonas: 1°A vs 2°B, 1°C vs 2°D, 1°B vs 2°A, 1°D vs 2°C en mitades opuestas del cuadro.'
+                                                ? 'Formato tradicional de 4 zonas alternadas: 1°A vs 2°C y 1°B vs 2°D (llave alta), 1°C vs 2°A y 1°D vs 2°B (llave baja). Evita choques tempranos entre zonas cercanas.'
                                                 : 'Cruces directos entre zonas garantizando que rivales de un mismo grupo no se crucen de entrada.'}
                                         </div>
                                     </div>
@@ -5987,9 +6040,9 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         </div>
 
                                         <div className="p-2.5 bg-black/30 rounded-xl border border-white/5 space-y-1">
-                                            <span className="font-bold text-primary block">🎾 4 Zonas (Cuadro Clásico de 8):</span>
+                                            <span className="font-bold text-primary block">🎾 4 Zonas (Cuadro Tradicional de 8):</span>
                                             <p className="text-slate-400 leading-snug">
-                                                1°A vs 2°B, 1°C vs 2°D en la parte alta. 1°B vs 2°A, 1°D vs 2°C en la parte baja. Los del mismo grupo solo se ven en la Final.
+                                                Cruces alternados: <strong>1°A vs 2°C</strong> y <strong>1°B vs 2°D</strong> (llave alta). <strong>1°C vs 2°A</strong> y <strong>1°D vs 2°B</strong> (llave baja). Los del mismo grupo no se cruzan antes de la Final.
                                             </p>
                                         </div>
                                     </div>
