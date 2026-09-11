@@ -2916,16 +2916,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     )
                                 ) : (
                                     <div className="overflow-x-auto pb-4 custom-scrollbar">
-                                        <div className="flex items-stretch gap-6 min-w-[650px] py-2">
+                                        <div className="flex items-stretch gap-8 min-w-[850px] py-3">
                                             {playoffRounds.map((round, rIdx) => (
-                                                <div key={rIdx} className="flex-1 min-w-[220px] flex flex-col space-y-4">
+                                                <div key={rIdx} className="flex-1 min-w-[280px] flex flex-col space-y-4">
                                                     <div className="text-center pb-2 border-b border-white/10">
                                                         <span className="text-xs font-black uppercase tracking-wider text-amber-400 bg-amber-500/10 border border-amber-500/20 px-3 py-1 rounded-full">
                                                             {round.name}
                                                         </span>
                                                     </div>
 
-                                                    <div className="space-y-4 flex flex-col justify-around flex-1">
+                                                    <div className="space-y-6 flex flex-col justify-around flex-1">
                                                         {round.matches.map((m) => {
                                                             const hasBothPlayers = !!(m.player1_id && m.player2_id);
                                                             const isUserInMatch = hasBothPlayers && (m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id);
@@ -2934,8 +2934,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             const canSchedule = hasBothPlayers && (isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id;
                                                             const formattedScore = formatMatchScore(m.score);
                                                             const isFinished = !!m.winner_id || (m.score && m.scheduling_status === 'finished');
-                                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || m.proposal_data?.slot1_label || 'A definir';
-                                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || m.proposal_data?.slot2_label || 'A definir';
+                                                            const p1DisplayName = m.team1_name || (m.player1_name ? formatPlayerName(m.player1_name) : null) || m.proposal_data?.slot1_label || 'A definir';
+                                                            const p2DisplayName = m.team2_name || (m.player2_name ? formatPlayerName(m.player2_name) : null) || m.proposal_data?.slot2_label || 'A definir';
                                                             
                                                             // Accurate team separation for Singles and Doubles
                                                             const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
@@ -2959,45 +2959,67 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                             return (
                                                                 <div 
                                                                     key={m.id} 
-                                                                    className={`relative bg-slate-900/90 border rounded-2xl p-3.5 shadow-lg transition-all space-y-2.5 ${
+                                                                    className={`relative bg-slate-900/90 border rounded-2xl p-4 shadow-xl transition-all space-y-3 ${
                                                                         isFinished 
-                                                                            ? 'border-primary/40' 
+                                                                            ? 'border-primary/40 shadow-primary/5' 
                                                                             : isUserInMatch && scheduledInfo 
                                                                             ? 'border-blue-500/40 bg-blue-950/20' 
                                                                             : !hasBothPlayers
-                                                                            ? 'border-dashed border-amber-500/20 bg-slate-950/40 opacity-90'
+                                                                            ? 'border-dashed border-white/10 bg-slate-950/30'
                                                                             : 'border-white/10 hover:border-white/20'
                                                                     }`}
                                                                 >
                                                                     <div className="space-y-2">
                                                                         {/* Contender 1 */}
-                                                                        <div className={`flex items-center justify-between p-2 rounded-xl text-xs ${
-                                                                            m.winner_id === m.player1_id 
-                                                                                ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' 
+                                                                        <div className={`flex items-center justify-between p-2.5 rounded-xl text-xs transition-all ${
+                                                                            m.winner_id && m.winner_id === m.player1_id 
+                                                                                ? 'bg-emerald-500/20 text-emerald-300 font-black border border-emerald-500/40 shadow-sm' 
                                                                                 : m.player1_id
-                                                                                ? 'bg-white/5 text-white'
-                                                                                : 'bg-white/[0.02] text-slate-400 italic border border-white/5'
+                                                                                ? 'bg-white/5 text-white border border-white/5 font-semibold'
+                                                                                : 'bg-white/[0.03] text-slate-400 border border-dashed border-white/10'
                                                                         }`}>
-                                                                            <span className="truncate font-semibold">{p1DisplayName}</span>
-                                                                            {m.winner_id === m.player1_id && <Check size={14} className="text-green-400 shrink-0" />}
+                                                                            <div className="flex flex-col truncate pr-2">
+                                                                                {!m.player1_id && m.proposal_data?.slot1_label && (
+                                                                                    <span className="text-[10px] text-amber-400/80 font-bold uppercase tracking-wider">{m.proposal_data.slot1_label}</span>
+                                                                                )}
+                                                                                <span className={`truncate ${!m.player1_id ? 'text-[11px] text-slate-400 italic' : 'font-bold'}`}>
+                                                                                    {m.player1_id ? p1DisplayName : (!m.proposal_data?.slot1_label ? 'Por definir' : '')}
+                                                                                </span>
+                                                                            </div>
+                                                                            {m.winner_id && m.winner_id === m.player1_id && (
+                                                                                <div className="p-1 rounded-full bg-emerald-500/30 text-emerald-400">
+                                                                                    <Check size={12} className="stroke-[3]" />
+                                                                                </div>
+                                                                            )}
                                                                         </div>
 
                                                                         {/* Contender 2 */}
-                                                                        <div className={`flex items-center justify-between p-2 rounded-xl text-xs ${
-                                                                            m.winner_id === m.player2_id 
-                                                                                ? 'bg-green-500/20 text-green-300 font-bold border border-green-500/30' 
+                                                                        <div className={`flex items-center justify-between p-2.5 rounded-xl text-xs transition-all ${
+                                                                            m.winner_id && m.winner_id === m.player2_id 
+                                                                                ? 'bg-emerald-500/20 text-emerald-300 font-black border border-emerald-500/40 shadow-sm' 
                                                                                 : m.player2_id
-                                                                                ? 'bg-white/5 text-white'
-                                                                                : 'bg-white/[0.02] text-slate-400 italic border border-white/5'
+                                                                                ? 'bg-white/5 text-white border border-white/5 font-semibold'
+                                                                                : 'bg-white/[0.03] text-slate-400 border border-dashed border-white/10'
                                                                         }`}>
-                                                                            <span className="truncate font-semibold">{p2DisplayName}</span>
-                                                                            {m.winner_id === m.player2_id && <Check size={14} className="text-green-400 shrink-0" />}
+                                                                            <div className="flex flex-col truncate pr-2">
+                                                                                {!m.player2_id && m.proposal_data?.slot2_label && (
+                                                                                    <span className="text-[10px] text-amber-400/80 font-bold uppercase tracking-wider">{m.proposal_data.slot2_label}</span>
+                                                                                )}
+                                                                                <span className={`truncate ${!m.player2_id ? 'text-[11px] text-slate-400 italic' : 'font-bold'}`}>
+                                                                                    {m.player2_id ? p2DisplayName : (!m.proposal_data?.slot2_label ? 'Por definir' : '')}
+                                                                                </span>
+                                                                            </div>
+                                                                            {m.winner_id && m.winner_id === m.player2_id && (
+                                                                                <div className="p-1 rounded-full bg-emerald-500/30 text-emerald-400">
+                                                                                    <Check size={12} className="stroke-[3]" />
+                                                                                </div>
+                                                                            )}
                                                                         </div>
                                                                     </div>
 
                                                                     {/* Scheduled Info Badge (Solo si está pendiente por jugar) */}
                                                                     {scheduledInfo && !m.is_played && !m.winner_id && (
-                                                                        <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2 py-0.5 rounded-lg">
+                                                                        <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold text-blue-300 bg-blue-500/10 border border-blue-500/20 px-2.5 py-1 rounded-lg">
                                                                             <span className="flex items-center gap-1">
                                                                                 <Calendar size={10} className="text-blue-400" /> {scheduledInfo.dateStr}
                                                                             </span>
@@ -3014,7 +3036,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
                                                                     {/* Player Highlight & WhatsApp Coordination Banner */}
                                                                     {isUserInMatch && scheduledInfo && !m.is_played && !m.winner_id && (
-                                                                        <div className="p-1.5 bg-blue-500/15 border border-blue-500/30 rounded-xl flex items-center justify-between gap-1.5 text-[10px]">
+                                                                        <div className="p-2 bg-blue-500/15 border border-blue-500/30 rounded-xl flex items-center justify-between gap-1.5 text-[10px]">
                                                                             <span className="text-blue-200 truncate"><strong>Tu partido:</strong> {scheduledInfo.timeStr} ({scheduledInfo.courtStr})</span>
                                                                             <button
                                                                                 onClick={() => {
@@ -3023,21 +3045,21 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     const msg = encodeURIComponent(`🎾 ¡Hola ${opponentName}! Nuestro partido de "${tournament.name}" (${m.round || 'Playoffs'}) está programado para el ${scheduledInfo.dateStr} a las ${scheduledInfo.timeStr} en ${scheduledInfo.courtStr}. ¿Confirmás?`);
                                                                                     window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
                                                                                 }}
-                                                                                className="px-1.5 py-0.5 bg-green-600/30 hover:bg-green-600/50 text-green-300 border border-green-500/30 rounded text-[9px] font-bold shrink-0 flex items-center gap-0.5"
+                                                                                className="px-2 py-0.5 bg-green-600/30 hover:bg-green-600/50 text-green-300 border border-green-500/30 rounded text-[9px] font-bold shrink-0 flex items-center gap-1 transition-colors"
                                                                                 title="Coordinar por WhatsApp"
                                                                             >
-                                                                                <MessageCircle size={10} /> Avisar
+                                                                                <MessageCircle size={11} /> Avisar
                                                                             </button>
                                                                         </div>
                                                                     )}
 
                                                                     {/* Score & Edit Bar */}
-                                                                    <div className="mt-2.5 pt-2 border-t border-white/5 flex items-center justify-between">
-                                                                        <div className="flex items-center gap-1.5">
+                                                                    <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-2">
+                                                                        <div className="flex items-center gap-1.5 flex-wrap">
                                                                             {m.player1_id && m.player2_id && (
                                                                                 <button
                                                                                     onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
-                                                                                    className="p-1 rounded bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[10px] font-bold flex items-center gap-0.5"
+                                                                                    className="px-2 py-1 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[10px] font-bold flex items-center gap-1 border border-white/5"
                                                                                     title="Ver H2H"
                                                                                 >
                                                                                     <Swords size={11} /> H2H
@@ -3060,22 +3082,22 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     )}
                                                                                 </div>
                                                                             ) : hasBothPlayers ? (
-                                                                                <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded border border-yellow-500/20">
+                                                                                <span className="text-[10px] text-yellow-400 font-semibold bg-yellow-500/10 px-2 py-0.5 rounded-md border border-yellow-500/20">
                                                                                     Por Jugar
                                                                                 </span>
                                                                             ) : (
-                                                                                <span className="text-[10px] text-amber-300/80 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20 font-medium flex items-center gap-1">
-                                                                                    <Clock size={10} /> Esperando clasificados
+                                                                                <span className="text-[10px] text-slate-400 bg-white/[0.02] px-2 py-0.5 rounded-md border border-white/5 font-medium flex items-center gap-1">
+                                                                                    <Clock size={10} className="text-slate-500" /> Esperando clasificados
                                                                                 </span>
                                                                             )}
                                                                         </div>
 
-                                                                        <div className="flex items-center gap-1">
+                                                                        <div className="flex items-center gap-1 shrink-0">
                                                                             {/* Schedule Button for Admin or Assigned Players (Solo si ambos jugadores están definidos y el partido NO fue jugado aún) */}
                                                                             {canSchedule && (
                                                                                 <button
                                                                                     onClick={() => openScheduleModal(m)}
-                                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                    className={`p-1.5 px-2 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
                                                                                         scheduledInfo
                                                                                             ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
                                                                                             : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
@@ -3099,7 +3121,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                                     </button>
                                                                                     <button
                                                                                         onClick={() => openScoreModal(m)}
-                                                                                        className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                                        className={`p-1.5 px-2 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
                                                                                             !m.is_played
                                                                                                 ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
                                                                                                 : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
