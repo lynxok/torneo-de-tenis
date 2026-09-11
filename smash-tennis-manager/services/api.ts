@@ -2123,13 +2123,31 @@ export const api = {
         },
 
         async getByUser(userId: string) {
-            const { data, error } = await supabase
-                .from('matches')
-                .select('*, tournaments(name, institution_id, institutions(name))')
-                .or(`player1_id.eq.${userId},player2_id.eq.${userId},player1_partner_id.eq.${userId},player2_partner_id.eq.${userId}`)
-                .order('created_at', { ascending: false });
+            let data: any[] | null = null;
+            let error: any = null;
 
-            if (error) return [];
+            // Intentar primero con soporte para dobles (si las columnas existen en la base de datos)
+            try {
+                const res = await supabase
+                    .from('matches')
+                    .select('*, tournaments(name, institution_id, institutions(name))')
+                    .or(`player1_id.eq.${userId},player2_id.eq.${userId},player1_partner_id.eq.${userId},player2_partner_id.eq.${userId}`)
+                    .order('created_at', { ascending: false });
+                data = res.data;
+                error = res.error;
+            } catch (e) {
+                error = e;
+            }
+
+            // Fallback resiliente: si player1_partner_id no existe en la tabla matches (Error 400 / 42703), consultar solo singles
+            if (error || !data) {
+                const fallbackRes = await supabase
+                    .from('matches')
+                    .select('*, tournaments(name, institution_id, institutions(name))')
+                    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+                    .order('created_at', { ascending: false });
+                data = fallbackRes.data || [];
+            }
 
             const now = Date.now();
             const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
@@ -3872,17 +3890,30 @@ export const api = {
     stats: {
         async getPlayerDetailedStats(userId: string): Promise<PlayerStatsSummary> {
             try {
-                const [
-                    { data: matchesData },
-                    { data: rankingData },
-                    { data: allProfiles }
-                ] = await Promise.all([
-                    supabase
+                let matchesData: any[] = [];
+                try {
+                    const res = await supabase
                         .from('matches')
                         .select('*, tournaments(name)')
                         .eq('is_played', true)
                         .or(`player1_id.eq.${userId},player2_id.eq.${userId},player1_partner_id.eq.${userId},player2_partner_id.eq.${userId}`)
-                        .order('created_at', { ascending: true }),
+                        .order('created_at', { ascending: true });
+                    if (res.error) throw res.error;
+                    matchesData = res.data || [];
+                } catch (err) {
+                    const fallbackRes = await supabase
+                        .from('matches')
+                        .select('*, tournaments(name)')
+                        .eq('is_played', true)
+                        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
+                        .order('created_at', { ascending: true });
+                    matchesData = fallbackRes.data || [];
+                }
+
+                const [
+                    { data: rankingData },
+                    { data: allProfiles }
+                ] = await Promise.all([
                     supabase
                         .from('ranking_history')
                         .select('*')
