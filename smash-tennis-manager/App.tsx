@@ -548,26 +548,47 @@ const AppContent = () => {
             <button className="md:hidden text-muted" onClick={() => setMobileMenuOpen(true)}>
               <Menu size={24} />
             </button>
-            <h2 className="font-bold text-lg text-white capitalize">
-              {activeView === 'open-matches' 
-                ? 'Partidos Abiertos' 
-                : activeView === 'shop' 
-                ? 'Tienda & Buffet' 
-                : VALID_VIEWS.includes(activeView as any) 
-                ? activeView.replace('-', ' ').replace('detail', 'detalle') 
-                : 'Panel General'}
+            <h2 className="font-bold text-lg text-white">
+              {(() => {
+                const viewLabels: Record<string, string> = {
+                  'dashboard': 'Panel General',
+                  'tournaments': 'Torneos',
+                  'tournament-detail': 'Detalle del Torneo',
+                  'tournaments-map': 'Mapa de Torneos',
+                  'profile': 'Mi Perfil',
+                  'rankings': 'Rankings Oficiales',
+                  'players': 'Jugadores & Sparrings',
+                  'bookings': 'Reservas de Canchas',
+                  'open-matches': 'Partidos Abiertos',
+                  'shop': 'Tienda & Buffet',
+                  'messages': 'Buzón de Mensajes',
+                  'reports': 'Caja & Finanzas',
+                  'coach-dashboard': 'Clases & Alumnos',
+                  'classes': 'Clases de Tenis',
+                  'pricing-commissions': 'Precios & Tarifas',
+                  'admin-users': 'Gestión de Usuarios',
+                  'admin-institutions': 'Sedes & Instituciones',
+                  'admin-settings': 'Ajustes del Sistema',
+                  'tutorials': 'Guías & Tutoriales',
+                  'tv': 'Modo TV Buffet',
+                  'broadcast': 'Modo TV Buffet'
+                };
+                return viewLabels[activeView] || 'Panel General';
+              })()}
             </h2>
           </div>
           <div className="flex items-center gap-4">
             {simulatedRole && (
               <div className="hidden sm:flex items-center gap-2 px-3 py-1 bg-orange-500/10 border border-orange-500/20 rounded-full">
                 <ShieldAlert size={14} className="text-orange-400" />
-                <span className="text-xs font-bold text-orange-200">Modo Simulación: {simulatedRole}</span>
+                <span className="text-xs font-bold text-orange-200">Modo Simulación: {simulatedRole === 'player' ? 'Jugador' : simulatedRole === 'admin' ? 'Organizador' : simulatedRole}</span>
               </div>
             )}
             <div className="text-right hidden sm:block">
               <div className="text-sm font-bold text-white">{effectiveUser.name}</div>
-              <div className="text-xs text-muted capitalize">{effectiveUser.role === 'admin' ? 'Organizador' : effectiveUser.role}</div>
+              <div className="text-xs text-muted">
+                {effectiveUser.role === 'admin' ? 'Organizador' : effectiveUser.role === 'player' ? 'Jugador' : effectiveUser.role === 'professor' ? 'Profesor' : effectiveUser.role === 'superadmin' ? 'Superadmin' : effectiveUser.role}
+              </div>
             </div>
             <div
               className="w-10 h-10 rounded-full bg-gradient-to-br from-primary to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shadow-primary/20 cursor-pointer overflow-hidden"

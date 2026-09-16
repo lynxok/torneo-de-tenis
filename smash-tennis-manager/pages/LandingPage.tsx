@@ -119,7 +119,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                         </span>
-                        <span className="font-bold uppercase tracking-wider text-slate-400 text-[10px]">Comunidad Smash en Vivo</span>
+                        <span className="font-bold uppercase tracking-wider text-slate-400 text-[10px]">Actividad de la Comunidad Smash</span>
                     </div>
 
                     <div className="flex-1 overflow-hidden">
@@ -135,7 +135,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
 
                     <div className="hidden sm:flex items-center gap-2 text-slate-500 text-[10px]">
-                        <span>Actualizado automáticamente</span>
+                        <span className="bg-white/5 px-2 py-0.5 rounded text-[9px] text-slate-400 border border-white/10">Demostración interactiva</span>
                         <Activity size={12} className="text-[#ccff00]" />
                     </div>
                 </div>
@@ -743,9 +743,12 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                                     </div>
 
                                     <div className="p-6 rounded-2xl bg-black/50 border border-white/10 text-center">
-                                        <div className="text-xs text-slate-400 uppercase mb-1">Ganancia Neta para tu Club (95%)</div>
-                                        <div className="text-3xl font-black text-[#ccff00] font-mono mb-3">
+                                        <div className="text-xs text-slate-400 uppercase mb-1">Ingreso estimado post-comisión (95%)</div>
+                                        <div className="text-3xl font-black text-[#ccff00] font-mono mb-1">
                                             ${netClubIncome.toLocaleString('es-AR')}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 mb-3">
+                                            *Ingreso directo a tu cuenta. No deduce gastos operativos internos del torneo (pelotas, trofeos, etc.).
                                         </div>
                                         <button
                                             onClick={() => onOpenAuth('register', 'admin')}

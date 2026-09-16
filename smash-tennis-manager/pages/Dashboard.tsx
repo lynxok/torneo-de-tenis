@@ -848,9 +848,6 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column (2/3) */}
                 <div id="dashboard-main-content" className="lg:col-span-2 space-y-8">
-                    {/* Weather Widget (Clima en Diamante - OpenResa Style) */}
-                    <WeatherWidget />
-
                     {/* --- PENDING SCORE CONFIRMATION ALERTS (24h Window) --- */}
                     {pendingReviewMatches.length > 0 && (
                         <div className="space-y-4 animate-in slide-in-from-top-4 fade-in duration-300">
@@ -1208,11 +1205,14 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 <div id="dashboard-stats-sidebar" className="space-y-6">
 
                     <div className="grid grid-cols-2 gap-3">
-                        <StatCard label="Win Rate" value={`${stats.winRate}%`} icon={TrendingUp} color="text-green-400" />
+                        <StatCard label="% Victorias" value={`${stats.winRate}%`} icon={TrendingUp} color="text-green-400" />
                         <StatCard label="Jugados" value={stats.totalPlayed} icon={Activity} color="text-blue-400" />
                         <StatCard label="Ganados" value={user.matches_won || 0} icon={Trophy} color="text-yellow-400" />
                         <StatCard label="Rank" value="-" icon={Zap} color="text-purple-400" />
                     </div>
+
+                    {/* Tarjeta Pequeña de Clima en Sede (OpenResa Style Compact) */}
+                    <WeatherWidget compact={true} />
 
                     {/* --- NEW SECTION: RANKING BREAKDOWN CARD --- */}
                     <Card className="flex flex-col">

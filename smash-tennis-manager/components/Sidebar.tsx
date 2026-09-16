@@ -110,9 +110,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="text-lg font-bold text-white">{userName.charAt(0).toUpperCase()}</span>
             )}
           </div>
+
           <div className="flex-1 min-w-0">
             <div className="text-sm font-bold text-white truncate">{formatPlayerName(userName)}</div>
-            <div className="text-[10px] text-muted capitalize">{role}</div>
+            <div className="text-[10px] text-muted">
+              {role === 'admin' ? 'Organizador' : role === 'player' ? 'Jugador' : role === 'professor' ? 'Profesor' : role === 'superadmin' ? 'Superadministrador' : role}
+            </div>
           </div>
         </div>
       )}

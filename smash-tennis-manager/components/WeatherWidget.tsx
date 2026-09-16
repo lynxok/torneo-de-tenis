@@ -25,7 +25,8 @@ interface WeatherData {
 const WEATHER_CACHE_KEY = 'smash_weather_cache_v1';
 const WEATHER_CACHE_TTL = 30 * 60 * 1000; // 30 minutos
 
-export const WeatherWidget: React.FC = () => {
+export const WeatherWidget: React.FC<{ compact?: boolean }> = ({ compact = false }) => {
+    const [showForecast, setShowForecast] = useState(!compact);
     const [weather, setWeather] = useState<WeatherData | null>(() => {
         try {
             const cached = sessionStorage.getItem(WEATHER_CACHE_KEY);
@@ -153,9 +154,20 @@ export const WeatherWidget: React.FC = () => {
                 <h3 className="font-bold text-base sm:text-lg text-white flex items-center gap-2">
                     <Sun className="text-amber-400 shrink-0" size={22} /> Clima en Diamante
                 </h3>
-                <button className="text-muted hover:text-white transition-colors" title="Información meteorológica">
-                    <Info size={18} />
-                </button>
+                <div className="flex items-center gap-2">
+                    {compact && (
+                        <button 
+                            type="button"
+                            onClick={() => setShowForecast(prev => !prev)} 
+                            className="text-xs text-primary hover:text-primary-hover font-bold transition-colors bg-primary/10 border border-primary/20 px-2.5 py-1 rounded-lg"
+                        >
+                            {showForecast ? 'Ocultar 7 días' : 'Ver 7 días'}
+                        </button>
+                    )}
+                    <button className="text-muted hover:text-white transition-colors" title="Información meteorológica">
+                        <Info size={18} />
+                    </button>
+                </div>
             </div>
 
             {/* Current Weather Display (Responsive Grid for Mobile, Tablet & Desktop) */}
@@ -169,7 +181,7 @@ export const WeatherWidget: React.FC = () => {
                         <div className="text-4xl sm:text-5xl font-extrabold text-white tracking-tight">{weather.temp}°C</div>
                         <div className="text-sm sm:text-base font-bold text-slate-200 mt-0.5">{weather.condition}</div>
                         <div className="text-xs text-muted mt-1 space-y-0.5">
-                            <div>Sentimiento <strong className="text-slate-200">{weather.sensation}°C</strong></div>
+                            <div>Sensación térmica: <strong className="text-slate-200">{weather.sensation}°C</strong></div>
                             <div>Índice UV: <strong className="text-slate-200">{weather.uvIndex}</strong></div>
                         </div>
                     </div>
@@ -200,58 +212,60 @@ export const WeatherWidget: React.FC = () => {
             </div>
 
             {/* 7-Day Forecast Table (Responsive Scroll & Touch Layout for Tablet/Mobile) */}
-            <div className="border-t border-white/10 pt-4">
-                <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
-                    <table className="w-full text-left text-xs min-w-[500px]">
-                        <tbody>
-                            {weather.forecast.map((item, idx) => (
-                                <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
-                                    {/* Day Name */}
-                                    <td className="py-2.5 sm:py-3 px-2 font-bold text-white w-28 whitespace-nowrap">{item.day}</td>
+            {showForecast && (
+                <div className="border-t border-white/10 pt-4 animate-in fade-in duration-300">
+                    <div className="overflow-x-auto -mx-4 sm:mx-0 px-4 sm:px-0">
+                        <table className="w-full text-left text-xs min-w-[500px]">
+                            <tbody>
+                                {weather.forecast.map((item, idx) => (
+                                    <tr key={idx} className="border-b border-white/5 hover:bg-white/5 transition-colors">
+                                        {/* Day Name */}
+                                        <td className="py-2.5 sm:py-3 px-2 font-bold text-white w-28 whitespace-nowrap">{item.day}</td>
 
-                                    {/* Weather Icon */}
-                                    <td className="py-2.5 sm:py-3 px-2 text-center text-amber-400 w-12">
-                                        {item.icon === 'sun' && <Sun size={20} className="mx-auto" />}
-                                        {item.icon === 'cloud-sun' && <Cloud size={20} className="mx-auto text-slate-300" />}
-                                        {item.icon === 'rain' && <CloudRain size={20} className="mx-auto text-blue-400" />}
-                                        {item.icon === 'cloud' && <Cloud size={20} className="mx-auto text-slate-400" />}
-                                    </td>
+                                        {/* Weather Icon */}
+                                        <td className="py-2.5 sm:py-3 px-2 text-center text-amber-400 w-12">
+                                            {item.icon === 'sun' && <Sun size={20} className="mx-auto" />}
+                                            {item.icon === 'cloud-sun' && <Cloud size={20} className="mx-auto text-slate-300" />}
+                                            {item.icon === 'rain' && <CloudRain size={20} className="mx-auto text-blue-400" />}
+                                            {item.icon === 'cloud' && <Cloud size={20} className="mx-auto text-slate-400" />}
+                                        </td>
 
-                                    {/* Temp Max */}
-                                    <td className="py-2.5 sm:py-3 px-2 font-bold text-white text-sm sm:text-base text-right w-16 whitespace-nowrap">
-                                        {item.tempMax}°C
-                                    </td>
+                                        {/* Temp Max */}
+                                        <td className="py-2.5 sm:py-3 px-2 font-bold text-white text-sm sm:text-base text-right w-16 whitespace-nowrap">
+                                            {item.tempMax}°C
+                                        </td>
 
-                                    {/* Temp Min Badge */}
-                                    <td className="py-2.5 sm:py-3 px-2 w-20 whitespace-nowrap">
-                                        <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 font-bold text-[10px] sm:text-[11px]">
-                                            {item.tempMin}°C
-                                        </span>
-                                    </td>
-
-                                    {/* Wind Speed */}
-                                    <td className="py-2.5 sm:py-3 px-2 text-slate-300 text-[11px] text-right whitespace-nowrap">
-                                        <span className="inline-flex items-center gap-1">
-                                            <Wind size={12} className="text-muted" /> {item.wind} km/h
-                                        </span>
-                                    </td>
-
-                                    {/* Rain Precipitation */}
-                                    <td className="py-2.5 sm:py-3 px-2 text-right whitespace-nowrap">
-                                        {item.rainProb > 0 ? (
-                                            <span className="font-bold text-red-400 text-[11px]">
-                                                {item.rainProb} mm
+                                        {/* Temp Min Badge */}
+                                        <td className="py-2.5 sm:py-3 px-2 w-20 whitespace-nowrap">
+                                            <span className="px-2 py-0.5 rounded-full bg-blue-500/10 border border-blue-500/20 text-blue-300 font-bold text-[10px] sm:text-[11px]">
+                                                {item.tempMin}°C
                                             </span>
-                                        ) : (
-                                            <span className="text-muted text-[10px]">-</span>
-                                        )}
-                                    </td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                                        </td>
+
+                                        {/* Wind Speed */}
+                                        <td className="py-2.5 sm:py-3 px-2 text-slate-300 text-[11px] text-right whitespace-nowrap">
+                                            <span className="inline-flex items-center gap-1">
+                                                <Wind size={12} className="text-muted" /> {item.wind} km/h
+                                            </span>
+                                        </td>
+
+                                        {/* Rain Precipitation */}
+                                        <td className="py-2.5 sm:py-3 px-2 text-right whitespace-nowrap">
+                                            {item.rainProb > 0 ? (
+                                                <span className="font-bold text-red-400 text-[11px]">
+                                                    {item.rainProb} mm
+                                                </span>
+                                            ) : (
+                                                <span className="text-muted text-[10px]">-</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 };

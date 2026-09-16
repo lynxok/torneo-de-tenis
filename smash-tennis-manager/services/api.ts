@@ -1138,7 +1138,7 @@ export const api = {
         }
     },
     players: {
-        async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number, partnerId?: string, partnerName?: string, availabilityNotes?: string) {
+        async enroll(tournamentId: string, playerId: string, playerName: string, category: string, fee?: number, partnerId?: string, partnerName?: string, availabilityNotes?: string, receiptUrl?: string, expiresAt?: string) {
             let finalName = formatPlayerName(playerName);
             let finalCat = category;
             let finalPartnerName = partnerName ? formatPlayerName(partnerName) : undefined;
@@ -1167,22 +1167,32 @@ export const api = {
                 player_name: teamName,
                 name: teamName,
                 category: finalCat,
-                payment_status: 'pending',
+                payment_status: (fee || 0) === 0 ? 'paid' : 'pending',
                 fee_amount: fee || 0,
-                paid: false
+                paid: (fee || 0) === 0
             };
 
             if (availabilityNotes) {
                 insertPayload.availability_notes = availabilityNotes;
+            }
+            if (receiptUrl) {
+                insertPayload.receipt_url = receiptUrl;
+            }
+            if (expiresAt) {
+                insertPayload.expires_at = expiresAt;
             }
 
             try {
                 const { error } = await supabase.from('tournament_players').insert(insertPayload);
                 if (error) throw error;
             } catch (err: any) {
-                // If column availability_notes doesn't exist in DB schema yet, fallback to insert without it
-                if (err.message && err.message.includes('availability_notes')) {
-                    delete insertPayload.availability_notes;
+                // If unmigrated columns fail, strip them progressively
+                if (err.message && (err.message.includes('receipt_url') || err.message.includes('expires_at') || err.message.includes('availability_notes'))) {
+                    delete insertPayload.receipt_url;
+                    delete insertPayload.expires_at;
+                    if (err.message.includes('availability_notes')) {
+                        delete insertPayload.availability_notes;
+                    }
                     const { error: retryError } = await supabase.from('tournament_players').insert(insertPayload);
                     if (retryError) throw retryError;
                 } else {
@@ -2548,6 +2558,9 @@ export const api = {
 
                 return {
                     ...b,
+                    receipt_url: b.receipt_url || (b.extras as any)?.receipt_url,
+                    expires_at: b.expires_at || (b.extras as any)?.expires_at,
+                    is_confirmed: b.is_confirmed ?? (b.extras as any)?.is_confirmed,
                     participants: parts,
                     user_name: creatorFormatted,
                     title: resolvedTitle,
@@ -2639,6 +2652,9 @@ export const api = {
 
                 return {
                     ...b,
+                    receipt_url: b.receipt_url || (b.extras as any)?.receipt_url,
+                    expires_at: b.expires_at || (b.extras as any)?.expires_at,
+                    is_confirmed: b.is_confirmed ?? (b.extras as any)?.is_confirmed,
                     participants: parts,
                     user_name: creatorFormatted,
                     title: resolvedTitle,
@@ -2658,6 +2674,17 @@ export const api = {
                 if (booking.participants) {
                     safeBooking.extras = { ...(safeBooking.extras || {}), participants: booking.participants };
                     delete safeBooking.participants;
+                }
+                if (booking.receipt_url || booking.expires_at || booking.is_confirmed !== undefined) {
+                    safeBooking.extras = {
+                        ...(safeBooking.extras || {}),
+                        receipt_url: booking.receipt_url,
+                        expires_at: booking.expires_at,
+                        is_confirmed: booking.is_confirmed
+                    };
+                    delete safeBooking.receipt_url;
+                    delete safeBooking.expires_at;
+                    delete safeBooking.is_confirmed;
                 }
                 delete safeBooking.deleted_by_user;
                 const resFallback = await supabase.from('bookings').insert(safeBooking).select().single();
@@ -2706,6 +2733,17 @@ export const api = {
                 if (updates.participants) {
                     safeUpdates.extras = { ...(safeUpdates.extras || {}), participants: updates.participants };
                     delete safeUpdates.participants;
+                }
+                if (updates.receipt_url || updates.expires_at || updates.is_confirmed !== undefined) {
+                    safeUpdates.extras = {
+                        ...(safeUpdates.extras || {}),
+                        receipt_url: updates.receipt_url,
+                        expires_at: updates.expires_at,
+                        is_confirmed: updates.is_confirmed
+                    };
+                    delete safeUpdates.receipt_url;
+                    delete safeUpdates.expires_at;
+                    delete safeUpdates.is_confirmed;
                 }
                 delete safeUpdates.deleted_by_user;
                 const { data: fbData, error: fbErr } = await supabase.from('bookings').update(safeUpdates).eq('id', id).select();
@@ -3115,8 +3153,13 @@ export const api = {
                 for (let c = 1; c <= courts; c++) {
                     const courtName = `Cancha ${c}`;
 
-                    const isTaken = safeBookings.some((b: Booking) => {
+                    const isTaken = safeBookings.some((b: any) => {
                         if (b.court_name !== courtName) return false;
+                        const expStr = b.expires_at || (b.extras as any)?.expires_at;
+                        if (expStr && b.status === 'pending') {
+                            const isExpired = new Date(expStr).getTime() < Date.now();
+                            if (isExpired) return false;
+                        }
                         const bStart = toMins(b.start_time);
                         const bEnd = toMins(b.end_time);
                         return currentMins < bEnd && (currentMins + duration) > bStart;

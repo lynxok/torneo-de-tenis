@@ -37,8 +37,15 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
     const [warningTournament, setWarningTournament] = useState<Tournament | null>(null);
     const [deletingTournament, setDeletingTournament] = useState<Tournament | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    const [showCreateModal, setShowCreateModal] = useState(false); // For admins
+    const [showCreateModal, setShowCreateModal] = useState(initialState?.openModal ?? false); // For admins
+    const [showAdvancedCreateConfig, setShowAdvancedCreateConfig] = useState(false);
     const [editingTournament, setEditingTournament] = useState<Tournament | null>(null);
+
+    useEffect(() => {
+        if (initialState?.openModal) {
+            setShowCreateModal(true);
+        }
+    }, [initialState]);
     const [editFormData, setEditFormData] = useState<Partial<Tournament>>({
         name: '',
         start_date: '',
@@ -784,125 +791,61 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                 </div>
                             )}
 
-                            {/* Saga Selector */}
+                            {/* Datos Básicos Obligatorios Primero */}
                             <div className="space-y-1">
-                                <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5"><Layers size={14} className="text-primary" /> Saga / Serie del Torneo</span>
-                                    <span className="text-[10px] text-primary font-normal">Opcional para ascender de nivel</span>
-                                </label>
-                                <select
-                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm"
-                                    value={selectedSagaId}
-                                    onChange={e => handleSelectSaga(e.target.value)}
-                                >
-                                    <option value="">-- Torneo Independiente (Sin Saga) --</option>
-                                    {sagas.map(s => (
-                                        <option key={s.id} value={s.id}>
-                                            {s.name} (Edición {(s.total_editions || 0) + 1} • Nivel: {TIER_META[s.current_tier]?.shortLabel || 'Challenger'})
-                                        </option>
-                                    ))}
-                                </select>
+                                <label className="text-xs text-muted uppercase font-bold">Nombre del Torneo *</label>
+                                <input 
+                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm font-semibold" 
+                                    placeholder="Ej: Torneo Abierto de Primavera 2026"
+                                    value={newTournament.name} 
+                                    onChange={e => setNewTournament({ ...newTournament, name: e.target.value })} 
+                                    required 
+                                />
                             </div>
 
-                            {/* Tier / Categoria ATP Selector */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
-                                    <span className="flex items-center gap-1.5"><Trophy size={14} className="text-amber-400" /> Categoría ATP del Torneo</span>
-                                </label>
-                                <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
-                                    {TIER_ORDER.map(tKey => {
-                                        const meta = TIER_META[tKey];
-                                        const isSelected = selectedTierKey === tKey;
-                                        return (
-                                            <button
-                                                key={tKey}
-                                                type="button"
-                                                onClick={() => setSelectedTierKey(tKey)}
-                                                className={`p-2 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center gap-0.5 ${
-                                                    isSelected 
-                                                        ? `${meta.badgeColor} ${meta.borderColor} ${meta.textColor} ring-2 ring-primary/40 scale-[1.02]`
-                                                        : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-                                                }`}
-                                            >
-                                                <span className="text-base">{meta.icon}</span>
-                                                <span className="text-[10px] leading-tight">{meta.shortLabel}</span>
-                                            </button>
-                                        );
-                                    })}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Fecha de Inicio *</label>
+                                    <input 
+                                        type="date" 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm" 
+                                        value={newTournament.start_date} 
+                                        onChange={e => setNewTournament({ ...newTournament, start_date: e.target.value })} 
+                                        required 
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-xs text-muted uppercase font-bold">Precio Inscripción ($)</label>
+                                    <input 
+                                        type="number" 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm font-mono font-bold" 
+                                        placeholder="0 para gratis"
+                                        value={newTournament.registration_price} 
+                                        onChange={e => setNewTournament({ ...newTournament, registration_price: parseInt(e.target.value) || 0 })} 
+                                        required 
+                                    />
                                 </div>
                             </div>
 
-                            {/* Commission & Free Trial Status Banner */}
-                            {(() => {
-                                const selectedSaga = sagas.find(s => s.id === selectedSagaId);
-                                const activeInst = user.role === 'superadmin' && newTournament.institution_id
-                                    ? institutions.find(i => i.id === newTournament.institution_id)
-                                    : currentInstitution;
-
-                                const tierCalc = getEffectiveTournamentTier(
-                                    12,
-                                    selectedTierKey,
-                                    selectedSaga,
-                                    tournaments,
-                                    systemConfig,
-                                    user,
-                                    activeInst
-                                );
-
-                                const trialRemaining = Math.max(
-                                    user.free_tournaments_remaining || 0,
-                                    activeInst?.free_tournaments_remaining || 0
-                                );
-
-                                return (
-                                    <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
-                                        tierCalc.isTrialFree
-                                            ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-200'
-                                            : tierCalc.isVipWaiver
-                                                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
-                                                : tierCalc.isDirectJump
-                                                    ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
-                                                    : 'bg-green-500/10 border-green-500/30 text-green-200'
-                                    }`}>
-                                        {tierCalc.isTrialFree && <Gift size={18} className="text-cyan-400 shrink-0" />}
-                                        {tierCalc.isVipWaiver && <Sparkles size={18} className="text-emerald-400 shrink-0" />}
-                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaiver && tierCalc.isDirectJump && <Zap size={18} className="text-amber-400 shrink-0" />}
-                                        {!tierCalc.isTrialFree && !tierCalc.isVipWaiver && !tierCalc.isDirectJump && <Award size={18} className="text-green-400 shrink-0" />}
-
-                                        <div className="flex-1 leading-tight">
-                                            <div className="font-bold text-[11px] uppercase tracking-wider">
-                                                {tierCalc.isTrialFree 
-                                                    ? `🎉 Torneo de Bienvenida Bonificado (0% Comisión • Te quedan ${trialRemaining} ${trialRemaining === 1 ? 'cupo' : 'cupos'})`
-                                                    : tierCalc.isVipWaiver 
-                                                        ? '👑 Membresía VIP Bonificada (0% Comisión)'
-                                                        : tierCalc.isDirectJump 
-                                                            ? `⚡ Salto Directo a ${tierCalc.tier.label} (${tierCalc.effectiveFeePct}% Comisión)`
-                                                            : `✓ Tarifa Bonificada por Mérito / Saga (${tierCalc.effectiveFeePct}% Comisión)`
-                                                }
-                                            </div>
-                                            <div className="text-[10px] text-slate-300 mt-0.5">
-                                                {tierCalc.tier.pointsWinner} puntos al campeón • Convocatoria: {tierCalc.tier.minPlayers}{tierCalc.tier.maxPlayers ? `-${tierCalc.tier.maxPlayers}` : '+'} jugadores
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-
-                            <div className="space-y-1">
-                                <label className="text-xs text-muted uppercase font-bold">Nombre del Torneo</label>
-                                <input className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.name} onChange={e => setNewTournament({ ...newTournament, name: e.target.value })} required />
-                            </div>
-                            <div className="grid grid-cols-3 gap-3">
+                            <div className="grid grid-cols-3 gap-2 sm:gap-3">
                                 <div className="space-y-1">
                                     <label className="text-xs text-muted uppercase font-bold">Modalidad</label>
-                                    <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.type} onChange={e => setNewTournament({ ...newTournament, type: e.target.value as any })}>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary text-xs sm:text-sm" 
+                                        value={newTournament.type} 
+                                        onChange={e => setNewTournament({ ...newTournament, type: e.target.value as any })}
+                                    >
                                         <option value="singles">Singles</option>
                                         <option value="doubles">Dobles</option>
                                     </select>
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Cuadro / Rama</label>
-                                    <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.gender || 'Caballeros'} onChange={e => setNewTournament({ ...newTournament, gender: e.target.value as any })}>
+                                    <label className="text-xs text-muted uppercase font-bold">Rama</label>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary text-xs sm:text-sm" 
+                                        value={newTournament.gender || 'Caballeros'} 
+                                        onChange={e => setNewTournament({ ...newTournament, gender: e.target.value as any })}
+                                    >
                                         <option value="Caballeros">Caballeros</option>
                                         <option value="Damas">Damas</option>
                                         <option value="Mixto">Mixto</option>
@@ -910,7 +853,11 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                 </div>
                                 <div className="space-y-1">
                                     <label className="text-xs text-muted uppercase font-bold">Categoría</label>
-                                    <select className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.category} onChange={e => setNewTournament({ ...newTournament, category: e.target.value })}>
+                                    <select 
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white focus:outline-none focus:border-primary text-xs sm:text-sm" 
+                                        value={newTournament.category} 
+                                        onChange={e => setNewTournament({ ...newTournament, category: e.target.value })}
+                                    >
                                         {getCategoriesForInstitution(
                                             user.role === 'superadmin' && newTournament.institution_id 
                                                 ? institutions.find(i => i.id === newTournament.institution_id) 
@@ -919,65 +866,180 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                     </select>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Fecha Inicio</label>
-                                    <input type="date" className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.start_date} onChange={e => setNewTournament({ ...newTournament, start_date: e.target.value })} required />
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Precio Inscripción</label>
-                                    <input type="number" className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary" value={newTournament.registration_price} onChange={e => setNewTournament({ ...newTournament, registration_price: parseInt(e.target.value) })} required />
-                                </div>
+
+                            {/* Collapsible: Configuración Avanzada */}
+                            <div className="pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAdvancedCreateConfig(!showAdvancedCreateConfig)}
+                                    className="w-full py-2.5 px-3 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-bold text-slate-300 flex items-center justify-between transition-all"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Settings2 size={15} className="text-primary" />
+                                        <span>Configuración Avanzada (Saga, Puntos ATP y Cuadros)</span>
+                                    </span>
+                                    <span className="text-[10px] text-primary font-mono">{showAdvancedCreateConfig ? '▲ Ocultar' : '▼ Expandir'}</span>
+                                </button>
                             </div>
-                            <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-3">
-                                <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
-                                    <Layers size={14} /> Formato de Competencia y Cuadros
-                                </div>
-                                <div className="space-y-1">
-                                    <label className="text-[11px] text-muted uppercase font-bold">Esquema de Cuadro</label>
-                                    <select 
-                                        className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-semibold focus:outline-none focus:border-primary"
-                                        value={newTournament.competition_format || 'tabla_general_byes'}
-                                        onChange={e => setNewTournament({ ...newTournament, competition_format: e.target.value as any })}
-                                    >
-                                        <option value="tabla_general_byes">🏆 Tabla General + Playoff con BYEs (Todos clasifican por mérito)</option>
-                                        <option value="zonas_playoffs">🎾 Zonas Tradicionales (Clasifican 1° y 2° por grupo)</option>
-                                        <option value="eliminacion_directa">⚡ Eliminación Directa con BYEs</option>
-                                    </select>
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
+
+                            {showAdvancedCreateConfig && (
+                                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 border-t border-white/10">
+                                    {/* Saga Selector */}
                                     <div className="space-y-1">
-                                        <label className="text-[11px] text-muted uppercase font-bold">Partidos Mínimos Asegurados</label>
-                                        <select 
-                                            className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white text-xs focus:outline-none focus:border-primary"
-                                            value={newTournament.min_guaranteed_matches || 3}
-                                            onChange={e => setNewTournament({ ...newTournament, min_guaranteed_matches: parseInt(e.target.value) })}
+                                        <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                            <span className="flex items-center gap-1.5"><Layers size={14} className="text-primary" /> Saga / Serie del Torneo</span>
+                                            <span className="text-[10px] text-primary font-normal">Opcional</span>
+                                        </label>
+                                        <select
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm"
+                                            value={selectedSagaId}
+                                            onChange={e => handleSelectSaga(e.target.value)}
                                         >
-                                            <option value={1}>1 Partido (Directo)</option>
-                                            <option value={2}>2 Partidos (Zonas de 3)</option>
-                                            <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
-                                            <option value={4}>4 Partidos (Zonas de 5)</option>
+                                            <option value="">-- Torneo Independiente (Sin Saga) --</option>
+                                            {sagas.map(s => (
+                                                <option key={s.id} value={s.id}>
+                                                    {s.name} (Edición {(s.total_editions || 0) + 1} • Nivel: {TIER_META[s.current_tier]?.shortLabel || 'Challenger'})
+                                                </option>
+                                            ))}
                                         </select>
                                     </div>
-                                    <div className="space-y-1">
-                                        <label className="text-[11px] text-muted uppercase font-bold">Pases Directos (BYEs)</label>
-                                        <label className="flex items-center gap-2 p-2 bg-slate-900 rounded-xl border border-white/10 cursor-pointer text-xs text-slate-200">
-                                            <input 
-                                                type="checkbox" 
-                                                className="accent-primary rounded" 
-                                                checked={newTournament.allow_byes !== false} 
-                                                onChange={e => setNewTournament({ ...newTournament, allow_byes: e.target.checked })} 
-                                            />
-                                            <span>Activar BYEs en cuadro</span>
+
+                                    {/* Tier / Categoria ATP Selector */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+                                            <span className="flex items-center gap-1.5"><Trophy size={14} className="text-amber-400" /> Categoría ATP del Torneo</span>
                                         </label>
+                                        <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+                                            {TIER_ORDER.map(tKey => {
+                                                const meta = TIER_META[tKey];
+                                                const isSelected = selectedTierKey === tKey;
+                                                return (
+                                                    <button
+                                                        key={tKey}
+                                                        type="button"
+                                                        onClick={() => setSelectedTierKey(tKey)}
+                                                        className={`p-2 rounded-xl border text-xs font-bold transition-all text-center flex flex-col items-center gap-0.5 ${
+                                                            isSelected 
+                                                                ? `${meta.badgeColor} ${meta.borderColor} ${meta.textColor} ring-2 ring-primary/40 scale-[1.02]`
+                                                                : 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
+                                                        }`}
+                                                    >
+                                                        <span className="text-base">{meta.icon}</span>
+                                                        <span className="text-[10px] leading-tight">{meta.shortLabel}</span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    {/* Commission & Free Trial Status Banner */}
+                                    {(() => {
+                                        const selectedSaga = sagas.find(s => s.id === selectedSagaId);
+                                        const activeInst = user.role === 'superadmin' && newTournament.institution_id
+                                            ? institutions.find(i => i.id === newTournament.institution_id)
+                                            : currentInstitution;
+
+                                        const tierCalc = getEffectiveTournamentTier(
+                                            12,
+                                            selectedTierKey,
+                                            selectedSaga,
+                                            tournaments,
+                                            systemConfig,
+                                            user,
+                                            activeInst
+                                        );
+
+                                        const trialRemaining = Math.max(
+                                            user.free_tournaments_remaining || 0,
+                                            activeInst?.free_tournaments_remaining || 0
+                                        );
+
+                                        return (
+                                            <div className={`p-3.5 rounded-xl border text-xs flex items-center gap-2.5 ${
+                                                tierCalc.isTrialFree
+                                                    ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-200'
+                                                    : tierCalc.isVipWaiver
+                                                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-200'
+                                                        : tierCalc.isDirectJump
+                                                            ? 'bg-amber-500/10 border-amber-500/30 text-amber-200'
+                                                            : 'bg-green-500/10 border-green-500/30 text-green-200'
+                                            }`}>
+                                                {tierCalc.isTrialFree && <Gift size={18} className="text-cyan-400 shrink-0" />}
+                                                {tierCalc.isVipWaiver && <Sparkles size={18} className="text-emerald-400 shrink-0" />}
+                                                {!tierCalc.isTrialFree && !tierCalc.isVipWaiver && tierCalc.isDirectJump && <Zap size={18} className="text-amber-400 shrink-0" />}
+                                                {!tierCalc.isTrialFree && !tierCalc.isVipWaiver && !tierCalc.isDirectJump && <Award size={18} className="text-green-400 shrink-0" />}
+
+                                                <div className="flex-1 leading-tight">
+                                                    <div className="font-bold text-[11px] uppercase tracking-wider">
+                                                        {tierCalc.isTrialFree 
+                                                            ? `🎉 Torneo de Bienvenida Bonificado (0% Comisión • Te quedan ${trialRemaining} ${trialRemaining === 1 ? 'cupo' : 'cupos'})`
+                                                            : tierCalc.isVipWaiver 
+                                                                ? '👑 Membresía VIP Bonificada (0% Comisión)'
+                                                                : tierCalc.isDirectJump 
+                                                                    ? `⚡ Salto Directo a ${tierCalc.tier.label} (${tierCalc.effectiveFeePct}% Comisión)`
+                                                                    : `✓ Tarifa Bonificada por Mérito / Saga (${tierCalc.effectiveFeePct}% Comisión)`
+                                                        }
+                                                    </div>
+                                                    <div className="text-[10px] text-slate-300 mt-0.5">
+                                                        {tierCalc.tier.pointsWinner} puntos al campeón • Convocatoria: {tierCalc.tier.minPlayers}{tierCalc.tier.maxPlayers ? `-${tierCalc.tier.maxPlayers}` : '+'} jugadores
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })()}
+
+                                    {/* Formato de Competencia y Cuadros */}
+                                    <div className="p-4 bg-primary/10 border border-primary/20 rounded-xl space-y-3">
+                                        <div className="text-xs font-bold text-primary uppercase tracking-wider flex items-center gap-1.5">
+                                            <Layers size={14} /> Formato de Competencia y Cuadros
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[11px] text-muted uppercase font-bold">Esquema de Cuadro</label>
+                                            <select 
+                                                className="w-full bg-slate-900 border border-white/10 rounded-xl p-2.5 text-white text-xs font-semibold focus:outline-none focus:border-primary"
+                                                value={newTournament.competition_format || 'tabla_general_byes'}
+                                                onChange={e => setNewTournament({ ...newTournament, competition_format: e.target.value as any })}
+                                            >
+                                                <option value="tabla_general_byes">🏆 Tabla General + Playoff con BYEs (Todos juegan y clasifican por mérito)</option>
+                                                <option value="zonas_playoffs">🎾 Zonas Tradicionales (Clasifican 1° y 2° por grupo)</option>
+                                                <option value="eliminacion_directa">⚡ Eliminación Directa con BYEs</option>
+                                            </select>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] text-muted uppercase font-bold">Partidos Mínimos Asegurados</label>
+                                                <select 
+                                                    className="w-full bg-slate-900 border border-white/10 rounded-xl p-2 text-white text-xs focus:outline-none focus:border-primary"
+                                                    value={newTournament.min_guaranteed_matches || 3}
+                                                    onChange={e => setNewTournament({ ...newTournament, min_guaranteed_matches: parseInt(e.target.value) })}
+                                                >
+                                                    <option value={1}>1 Partido (Directo)</option>
+                                                    <option value={2}>2 Partidos (Zonas de 3)</option>
+                                                    <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
+                                                    <option value={4}>4 Partidos (Zonas de 5)</option>
+                                                </select>
+                                            </div>
+                                            <div className="space-y-1">
+                                                <label className="text-[11px] text-muted uppercase font-bold">Pases Directos (BYEs)</label>
+                                                <label className="flex items-center gap-2 p-2 bg-slate-900 rounded-xl border border-white/10 cursor-pointer text-xs text-slate-200">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        className="accent-primary rounded" 
+                                                        checked={newTournament.allow_byes !== false} 
+                                                        onChange={e => setNewTournament({ ...newTournament, allow_byes: e.target.checked })} 
+                                                    />
+                                                    <span>Activar BYEs en cuadro</span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400">
+                                            {newTournament.competition_format === 'tabla_general_byes' 
+                                                ? '✨ Todos los inscriptos juegan fase previa y avanzan al cuadro final; los mejores clasificados obtienen BYE a Semis o Cuartos.' 
+                                                : 'Organiza partidos por zonas clásicas con llaves eliminatorias.'}
+                                        </p>
                                     </div>
                                 </div>
-                                <p className="text-[10px] text-slate-400">
-                                    {newTournament.competition_format === 'tabla_general_byes' 
-                                        ? '✨ Todos los inscriptos juegan fase previa y avanzan al cuadro final; los mejores clasificados obtienen BYE a Semis o Cuartos.' 
-                                        : 'Organiza partidos por zonas clásicas con llaves eliminatorias.'}
-                                </p>
-                            </div>
+                            )}
 
                             <button type="submit" className="w-full bg-primary hover:bg-primary-hover text-white font-bold py-3 rounded-xl shadow-lg mt-4">Crear Torneo</button>
                         </form>

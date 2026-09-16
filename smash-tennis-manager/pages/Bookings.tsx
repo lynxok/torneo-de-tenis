@@ -10,7 +10,7 @@ import {
     Trash2, Trophy, Grid, Repeat, GraduationCap, AlertCircle, Plus, Search, Building as BuildingIcon, 
     ArrowRight, Edit, AlertTriangle, CalendarX, Settings2, Smartphone, Wallet, Award, Sun, Moon, Info, 
     Sparkles, ShieldCheck, Star, Share2, MessageCircle, CloudRain, CloudLightning, Users, Check, Flame,
-    User, Copy
+    User, Copy, UploadCloud, Eye
 } from 'lucide-react';
 import { SplitBillModal } from '../components/SplitBillModal';
 import { BookingSlotSkeleton } from '../components/ui/Skeleton';
@@ -1104,13 +1104,61 @@ const PlayerNewBookingModal = ({
     const [participants, setParticipants] = useState<BookingParticipant[]>([]);
     const { addToast } = useToast();
 
-    // Payment Flow State
+    // 3-Step Wizard State
+    const [currentStep, setCurrentStep] = useState<1 | 2 | 3>(1);
+
+    // Payment Flow & Hold State
     const [paymentStep, setPaymentStep] = useState<'select' | 'processing' | 'success'>('select');
-    const [paymentMethod, setPaymentMethod] = useState<'mp' | 'cash'>('mp');
     const [successSplitCount, setSuccessSplitCount] = useState<number>(2);
     const [copiedSuccessAlias, setCopiedSuccessAlias] = useState(false);
+    const [receiptImage, setReceiptImage] = useState<string | null>(null);
+    const [reservationSecondsLeft, setReservationSecondsLeft] = useState<number>(900); // 15 minutos
 
     const isReschedule = !!existingBooking;
+
+    // 15-minute countdown for step 3 hold
+    useEffect(() => {
+        let timer: any;
+        if (currentStep === 3 && reservationSecondsLeft > 0) {
+            timer = setInterval(() => {
+                setReservationSecondsLeft(prev => Math.max(0, prev - 1));
+            }, 1000);
+        }
+        return () => clearInterval(timer);
+    }, [currentStep, reservationSecondsLeft]);
+
+    // Receipt image upload with canvas compression (<1200px, 0.82 JPEG)
+    const handleReceiptFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > 10 * 1024 * 1024) {
+            addToast("El comprobante debe ser menor a 10 MB", "error");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1200;
+                const scale = Math.min(1, MAX_WIDTH / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const compressed = canvas.toDataURL('image/jpeg', 0.82);
+                    setReceiptImage(compressed);
+                    soundEffects.playScoreBeep();
+                    addToast("Comprobante cargado y optimizado con éxito", "success");
+                }
+            };
+            img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+    };
 
     useEffect(() => {
         const selfName = formatPlayerName(user.name, user.lastname);
@@ -1217,6 +1265,13 @@ const PlayerNewBookingModal = ({
         return timeStr >= nightStart;
     };
 
+    const hasClubConfiguredPrices = !!(
+        (selectedInst?.price_day && selectedInst.price_day > 0) ||
+        (selectedInst?.price_night && selectedInst.price_night > 0) ||
+        (selectedInst?.price_member_day && selectedInst.price_member_day > 0) ||
+        (selectedInst?.price_member_night && selectedInst.price_member_night > 0)
+    );
+
     const getBaseHourlyPrice = () => {
         if (!selectedInst) return 0;
         const isNight = selectedSlot ? isNightSlot(selectedSlot.start_time) : false;
@@ -1239,35 +1294,45 @@ const PlayerNewBookingModal = ({
         const base = getBaseHourlyPrice();
         let total = base * durationMultiplier;
         
-        if (extras.rackets > 0 && selectedInst.price_racket) {
-            total += extras.rackets * selectedInst.price_racket;
+        const racketPrice = selectedInst.price_racket ?? 1500;
+        const ballPrice = selectedInst.price_ball ?? 2500;
+
+        if (extras.rackets > 0) {
+            total += extras.rackets * racketPrice;
         }
-        if (extras.balls && selectedInst.price_ball) {
-            total += selectedInst.price_ball;
+        if (extras.balls) {
+            total += ballPrice;
         }
         return total;
     };
 
     const addMinutes = (time: string, mins: number) => {
         const [h, m] = time.split(':').map(Number);
-        const date = new Date();
-        date.setHours(h, m + mins, 0);
-        return date.toTimeString().slice(0, 5);
+        const d = new Date();
+        d.setHours(h, m + mins, 0);
+        return d.toTimeString().slice(0, 5);
     };
 
     const handleConfirm = async () => {
         if (!selectedSlot || !selectedInstId) return;
         
+        const totalDuration = minDuration * durationMultiplier;
+        const totalPrice = calculateTotal();
+
+        if (totalPrice > 0 && !receiptImage) {
+            addToast('Por favor adjunta el comprobante de transferencia bancaria o Mercado Pago para confirmar tu reserva.', 'warning');
+            return;
+        }
+
         setIsSubmitting(true);
         setPaymentStep('processing');
 
         setTimeout(async () => {
             try {
-                const totalDuration = minDuration * durationMultiplier;
-                const totalPrice = calculateTotal();
-                
-                const paymentStatus = paymentMethod === 'mp' ? 'completed' : 'pending';
-                const bookingStatus = paymentMethod === 'mp' ? 'confirmed' : 'pending';
+                const isFree = totalPrice === 0;
+                const paymentStatus = isFree ? 'completed' : 'pending';
+                const bookingStatus = isFree ? 'confirmed' : 'pending';
+                const expiresAt = isFree ? undefined : new Date(Date.now() + 15 * 60 * 1000).toISOString();
 
                 const requiredCount = matchType === 'singles' ? 2 : 4;
                 const activeParticipants = participants.slice(0, requiredCount).filter(Boolean);
@@ -1306,11 +1371,17 @@ const PlayerNewBookingModal = ({
                     counts_for_stats: isOfficial,
                     title: resolvedTitle,
                     total_price: totalPrice,
+                    receipt_url: receiptImage || undefined,
+                    expires_at: expiresAt,
+                    is_confirmed: true,
                     extras: { 
                         ...(extras || {}), 
                         match_type: matchType,
                         counts_for_stats: isOfficial,
-                        participants: activeParticipants 
+                        participants: activeParticipants,
+                        receipt_url: receiptImage || undefined,
+                        expires_at: expiresAt,
+                        is_confirmed: true
                     },
                     payment_status: paymentStatus,
                     participants: activeParticipants
@@ -1318,13 +1389,15 @@ const PlayerNewBookingModal = ({
 
                 if (isReschedule && existingBooking) {
                     await api.bookings.update(existingBooking.id, bookingData);
+                    soundEffects.playBookingSuccess();
                     addToast('Reserva reprogramada con éxito.', 'success');
                 } else {
                     await api.bookings.create(bookingData, user);
-                    if (paymentMethod === 'mp') {
-                        addToast('¡Pago exitoso! Reserva confirmada y jugadores notificados.', 'success');
+                    soundEffects.playBookingSuccess();
+                    if (totalPrice > 0) {
+                        addToast('¡Comprobante enviado! Reserva virtual confirmada sujeta a validación.', 'success');
                     } else {
-                        addToast('Reserva solicitada. Paga en el club para confirmar.', 'info');
+                        addToast('¡Reserva confirmada con éxito!', 'success');
                     }
                 }
                 
@@ -1336,20 +1409,21 @@ const PlayerNewBookingModal = ({
                 setIsSubmitting(false);
                 setPaymentStep('select');
             }
-        }, 1500);
+        }, 1200);
     };
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in zoom-in-95">
             <div id="player-booking-modal" className="bg-card border border-white/10 rounded-2xl w-full max-w-lg p-0 shadow-2xl relative flex flex-col max-h-[90vh]">
                 
+                {/* Header with Title and Close */}
                 <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
                     <div>
                         <h3 className="text-lg font-bold text-white">
                             {isReschedule ? 'Reprogramar Reserva' : 'Nueva Reserva de Cancha'}
                         </h3>
                         <p className="text-xs text-muted">
-                            {isReschedule ? 'Selecciona la nueva fecha, modalidad y horario' : 'Selecciona club, modalidad, jugadores y horario'}
+                            {isReschedule ? 'Selecciona la nueva fecha y horario' : 'Completa los 3 pasos: Horario, Jugadores y Confirmación'}
                         </p>
                     </div>
                     {!isSubmitting && (
@@ -1361,6 +1435,62 @@ const PlayerNewBookingModal = ({
                         </button>
                     )}
                 </div>
+
+                {/* 3-Step Wizard Navigation Stepper (Only in Selection Mode) */}
+                {paymentStep === 'select' && (
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-white/5 bg-white/[0.02]">
+                        <button
+                            type="button"
+                            onClick={() => setCurrentStep(1)}
+                            className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                                currentStep === 1 ? 'text-primary' : currentStep > 1 ? 'text-emerald-400' : 'text-muted'
+                            }`}
+                        >
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                                currentStep === 1 ? 'bg-primary text-white' : currentStep > 1 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-muted'
+                            }`}>
+                                {currentStep > 1 ? <Check size={11} /> : '1'}
+                            </span>
+                            <span>Cancha y Horario</span>
+                        </button>
+
+                        <ChevronRight size={14} className="text-white/20" />
+
+                        <button
+                            type="button"
+                            disabled={!selectedSlot}
+                            onClick={() => selectedSlot && setCurrentStep(2)}
+                            className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                                currentStep === 2 ? 'text-primary' : currentStep > 2 ? 'text-emerald-400' : selectedSlot ? 'text-muted hover:text-white' : 'text-muted/40 cursor-not-allowed'
+                            }`}
+                        >
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                                currentStep === 2 ? 'bg-primary text-white' : currentStep > 2 ? 'bg-emerald-500 text-white' : 'bg-white/10 text-muted'
+                            }`}>
+                                {currentStep > 2 ? <Check size={11} /> : '2'}
+                            </span>
+                            <span>Participantes</span>
+                        </button>
+
+                        <ChevronRight size={14} className="text-white/20" />
+
+                        <button
+                            type="button"
+                            disabled={!selectedSlot}
+                            onClick={() => selectedSlot && setCurrentStep(3)}
+                            className={`flex items-center gap-1.5 text-xs font-bold transition-colors ${
+                                currentStep === 3 ? 'text-primary' : selectedSlot ? 'text-muted hover:text-white' : 'text-muted/40 cursor-not-allowed'
+                            }`}
+                        >
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-black ${
+                                currentStep === 3 ? 'bg-primary text-white' : 'bg-white/10 text-muted'
+                            }`}>
+                                3
+                            </span>
+                            <span>Confirmación y Pago</span>
+                        </button>
+                    </div>
+                )}
 
                 <div className="p-6 space-y-5 overflow-y-auto custom-scrollbar">
                     
@@ -1375,12 +1505,32 @@ const PlayerNewBookingModal = ({
                         </div>
                     )}
 
-                    {/* Punto 4: PAYMENT SUCCESS VIEW WITH SPLIT BILL */}
+                    {/* PAYMENT SUCCESS VIEW WITH WHATSAPP & SPLIT BILL */}
                     {paymentStep === 'success' && (() => {
                         const total = calculateTotal();
                         const pricePerPerson = Math.round(total / successSplitCount);
                         const selectedInstObj = institutions.find(i => i.id === selectedInstId);
                         const clubAlias = selectedInstObj?.alias_mp || 'parqueespana.tenis';
+                        const totalDuration = minDuration * durationMultiplier;
+
+                        const handleShareClubWhatsApp = () => {
+                            const clubPhone = selectedInstObj?.phone || '';
+                            const cleanPhone = clubPhone.replace(/\D/g, '');
+                            const msg = `🎾 *Reserva de Cancha - Smash Tenis*\n` +
+                                `📍 Club: *${selectedInstObj?.name || 'Club de Tenis'}*\n` +
+                                `🏟️ Cancha: *${selectedSlot?.court_name || 'Cancha'}*\n` +
+                                `📅 Fecha: *${formatFriendlyDate(date)}* a las *${selectedSlot?.start_time} hs*\n` +
+                                `⏱️ Duración: *${totalDuration} min*\n` +
+                                `👥 Jugador Titular: *${formatPlayerName(user.name, user.lastname)}*\n` +
+                                `💰 Monto: *$${total}*\n\n` +
+                                `Adjunto el comprobante de pago de la reserva. ¡Muchas gracias!`;
+
+                            if (cleanPhone) {
+                                window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(msg)}`, '_blank');
+                            } else {
+                                window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(msg)}`, '_blank');
+                            }
+                        };
 
                         const handleShareSuccessWhatsApp = () => {
                             const msg = `🎾 *División de Cancha - Smash Tenis*\n` +
@@ -1402,84 +1552,98 @@ const PlayerNewBookingModal = ({
                                     <CheckCircle2 className="text-white" size={30} />
                                 </div>
                                 <div className="text-center space-y-0.5">
-                                    <h3 className="font-bold text-white text-xl">¡Reserva Confirmada!</h3>
-                                    <p className="text-emerald-400 text-xs font-bold">Tu cancha ha sido reservada con éxito.</p>
+                                    <h3 className="font-bold text-white text-xl">¡Reserva Registrada!</h3>
+                                    <p className="text-emerald-400 text-xs font-bold">
+                                        {total > 0 
+                                            ? 'Tu reserva virtual ha sido reservada con éxito (sujeta a verificación del club).' 
+                                            : 'Tu cancha ha sido reservada con éxito sin cargo.'}
+                                    </p>
                                 </div>
 
-                                {/* Split Bill Card */}
-                                <div className="w-full bg-sidebar border border-white/10 rounded-2xl p-4 space-y-3 text-left">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-xs font-black text-white flex items-center gap-1.5 uppercase tracking-wider">
-                                            <Users size={14} className="text-emerald-400" /> Dividir Pago (Split Bill)
-                                        </span>
-                                        <span className="text-xs font-bold text-emerald-400 font-mono">
-                                            Total: ${total}
-                                        </span>
-                                    </div>
-
-                                    {/* Toggle 2 vs 4 */}
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <button
-                                            type="button"
-                                            onClick={() => setSuccessSplitCount(2)}
-                                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
-                                                successSplitCount === 2
-                                                    ? 'bg-primary/20 border-primary text-white shadow-md'
-                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
-                                            }`}
-                                        >
-                                            2 Jugadores (Singles)
-                                            <span className="block text-[10px] font-normal opacity-80">${Math.round(total / 2)} c/u</span>
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setSuccessSplitCount(4)}
-                                            className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
-                                                successSplitCount === 4
-                                                    ? 'bg-purple-500/20 border-purple-500 text-white shadow-md'
-                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
-                                            }`}
-                                        >
-                                            4 Jugadores (Dobles)
-                                            <span className="block text-[10px] font-normal opacity-80">${Math.round(total / 4)} c/u</span>
-                                        </button>
-                                    </div>
-
-                                    {/* Per person display */}
-                                    <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
-                                        <span className="text-[10px] uppercase font-bold text-slate-300 block">Cuota por persona</span>
-                                        <span className="text-2xl font-black text-emerald-400 font-mono">${pricePerPerson}</span>
-                                    </div>
-
-                                    {/* Club Alias Info */}
-                                    <div className="flex items-center justify-between text-xs bg-white/5 p-2.5 rounded-xl border border-white/10">
-                                        <div>
-                                            <span className="text-[10px] text-muted uppercase font-bold block">Alias MP del Club</span>
-                                            <span className="font-mono text-emerald-400 font-bold text-xs">{clubAlias}</span>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                navigator.clipboard.writeText(clubAlias);
-                                                setCopiedSuccessAlias(true);
-                                                addToast(`¡Alias "${clubAlias}" copiado!`, "success");
-                                                setTimeout(() => setCopiedSuccessAlias(false), 2000);
-                                            }}
-                                            className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
-                                        >
-                                            {copiedSuccessAlias ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                                            {copiedSuccessAlias ? 'Copiado' : 'Copiar'}
-                                        </button>
-                                    </div>
-
+                                {/* Send Receipt to Club via WhatsApp */}
+                                {total > 0 && (
                                     <button
                                         type="button"
-                                        onClick={handleShareSuccessWhatsApp}
-                                        className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 uppercase tracking-wider"
+                                        onClick={handleShareClubWhatsApp}
+                                        className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl flex items-center justify-center gap-2 transition-all shadow-lg shadow-emerald-600/30"
                                     >
-                                        <MessageCircle size={15} /> Compartir Cobro por WhatsApp
+                                        <MessageCircle size={16} /> Enviar Comprobante al Club por WhatsApp
                                     </button>
-                                </div>
+                                )}
+
+                                {/* Split Bill Card */}
+                                {total > 0 && (
+                                    <div className="w-full bg-sidebar border border-white/10 rounded-2xl p-4 space-y-3 text-left">
+                                        <div className="flex justify-between items-center">
+                                            <span className="text-xs font-black text-white flex items-center gap-1.5 uppercase tracking-wider">
+                                                <Users size={14} className="text-emerald-400" /> Dividir Pago (Split Bill)
+                                            </span>
+                                            <span className="text-xs font-bold text-emerald-400 font-mono">
+                                                Total: ${total}
+                                            </span>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setSuccessSplitCount(2)}
+                                                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                                                    successSplitCount === 2
+                                                        ? 'bg-primary/20 border-primary text-white shadow-md'
+                                                        : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                                }`}
+                                            >
+                                                2 Jugadores (Singles)
+                                                <span className="block text-[10px] font-normal opacity-80">${Math.round(total / 2)} c/u</span>
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setSuccessSplitCount(4)}
+                                                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all text-center ${
+                                                    successSplitCount === 4
+                                                        ? 'bg-purple-500/20 border-purple-500 text-white shadow-md'
+                                                        : 'bg-white/5 border-white/10 text-muted hover:text-white'
+                                                }`}
+                                            >
+                                                4 Jugadores (Dobles)
+                                                <span className="block text-[10px] font-normal opacity-80">${Math.round(total / 4)} c/u</span>
+                                            </button>
+                                        </div>
+
+                                        <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-center">
+                                            <span className="text-[10px] uppercase font-bold text-slate-300 block">Cuota por persona</span>
+                                            <span className="text-2xl font-black text-emerald-400 font-mono">${pricePerPerson}</span>
+                                        </div>
+
+                                        <div className="flex items-center justify-between text-xs bg-white/5 p-2.5 rounded-xl border border-white/10">
+                                            <div>
+                                                <span className="text-[10px] text-muted uppercase font-bold block">Alias MP del Club</span>
+                                                <span className="font-mono text-emerald-400 font-bold text-xs">{clubAlias}</span>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    navigator.clipboard.writeText(clubAlias);
+                                                    setCopiedSuccessAlias(true);
+                                                    addToast(`¡Alias "${clubAlias}" copiado!`, "success");
+                                                    setTimeout(() => setCopiedSuccessAlias(false), 2000);
+                                                }}
+                                                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                            >
+                                                {copiedSuccessAlias ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                                {copiedSuccessAlias ? 'Copiado' : 'Copiar'}
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={handleShareSuccessWhatsApp}
+                                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 transition-all shadow-md shadow-emerald-600/20 uppercase tracking-wider"
+                                        >
+                                            <MessageCircle size={15} /> Compartir Cobro por WhatsApp
+                                        </button>
+                                    </div>
+                                )}
 
                                 <button
                                     type="button"
@@ -1492,307 +1656,514 @@ const PlayerNewBookingModal = ({
                         );
                     })()}
 
-                    {/* SELECTION FORM VIEW */}
+                    {/* SELECTION FORM VIEW (Divided in 3 Progressive Steps) */}
                     {paymentStep === 'select' && (
                         <>
-                            {/* Club selector */}
-                            <div className="space-y-2">
-                                <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                    <BuildingIcon size={14} className="text-primary" /> Club / Sede
-                                </label>
-                                <select 
-                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
-                                    value={selectedInstId}
-                                    onChange={e => setSelectedInstId(e.target.value)}
-                                    disabled={isReschedule}
-                                >
-                                    {institutions.map(inst => (
-                                        <option key={inst.id} value={inst.id}>
-                                            {inst.name} {inst.city ? `- ${inst.city}` : ''} 
-                                            {inst.id === user.institution_id ? ' (Mi Club Principal)' : ''}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            {/* Date Navigation Bar with < > arrows */}
-                            <div className="space-y-2">
-                                <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                    <Calendar size={14} className="text-primary" /> Día de Reserva
-                                </label>
-                                
-                                <div className="flex flex-wrap items-center gap-2 bg-sidebar p-2 rounded-xl border border-white/10">
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            type="button"
-                                            onClick={handlePrevDay}
-                                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
-                                            title="Día anterior"
+                            {/* ===================== PASO 1: CANCHA Y HORARIO ===================== */}
+                            {currentStep === 1 && (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-200">
+                                    {/* Club selector */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
+                                            <BuildingIcon size={14} className="text-primary" /> Club / Sede
+                                        </label>
+                                        <select 
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary transition-colors text-sm"
+                                            value={selectedInstId}
+                                            onChange={e => setSelectedInstId(e.target.value)}
+                                            disabled={isReschedule}
                                         >
-                                            <ChevronLeft size={16} />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={handleNextDay}
-                                            className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
-                                            title="Día siguiente"
-                                        >
-                                            <ChevronRight size={16} />
-                                        </button>
+                                            {institutions.map(inst => (
+                                                <option key={inst.id} value={inst.id}>
+                                                    {inst.name} {inst.city ? `- ${inst.city}` : ''} 
+                                                    {inst.id === user.institution_id ? ' (Mi Club Principal)' : ''}
+                                                </option>
+                                            ))}
+                                        </select>
                                     </div>
 
-                                    <div className="flex-1 text-center font-black text-sm text-primary tracking-wide bg-white/5 py-1.5 px-3 rounded-lg border border-white/5">
-                                        {formatFriendlyDate(date)}
-                                    </div>
+                                    {/* Date Navigation Bar with < > arrows */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
+                                            <Calendar size={14} className="text-primary" /> Día de Reserva
+                                        </label>
+                                        
+                                        <div className="flex flex-wrap items-center gap-2 bg-sidebar p-2 rounded-xl border border-white/10">
+                                            <div className="flex items-center gap-1">
+                                                <button
+                                                    type="button"
+                                                    onClick={handlePrevDay}
+                                                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
+                                                    title="Día anterior"
+                                                >
+                                                    <ChevronLeft size={16} />
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleNextDay}
+                                                    className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
+                                                    title="Día siguiente"
+                                                >
+                                                    <ChevronRight size={16} />
+                                                </button>
+                                            </div>
 
-                                    <button
-                                        type="button"
-                                        onClick={handleToday}
-                                        className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg text-xs font-bold transition-colors"
-                                    >
-                                        Hoy
-                                    </button>
+                                            <div className="flex-1 text-center font-black text-sm text-primary tracking-wide bg-white/5 py-1.5 px-3 rounded-lg border border-white/5">
+                                                {formatFriendlyDate(date)}
+                                            </div>
 
-                                    <input 
-                                        type="date"
-                                        min={new Date().toISOString().split('T')[0]}
-                                        className="bg-card border border-white/10 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-primary text-xs font-bold"
-                                        value={date}
-                                        onChange={e => setDate(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Match & Participant Selector */}
-                            <MatchParticipantSelector
-                                matchType={matchType}
-                                onMatchTypeChange={setMatchType}
-                                participants={participants}
-                                onChange={setParticipants}
-                                currentUser={user}
-                                isAdmin={false}
-                            />
-
-                            {selectedInst && (
-                                <div className="space-y-2">
-                                    <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                        <Clock size={14} className="text-primary" /> Duración del Turno
-                                    </label>
-                                    <div className="flex gap-2">
-                                        {Array.from({ length: maxSlots }, (_, i) => i + 1).map((num) => (
                                             <button
-                                                key={num}
                                                 type="button"
-                                                onClick={() => setDurationMultiplier(num)}
-                                                className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${
-                                                    durationMultiplier === num
-                                                        ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
-                                                        : 'bg-sidebar border-white/10 text-muted hover:text-white'
-                                                }`}
+                                                onClick={handleToday}
+                                                className="px-3 py-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg text-xs font-bold transition-colors"
                                             >
-                                                {num} {num === 1 ? 'Turno' : 'Turnos'}
-                                                <span className="block text-[9px] font-normal opacity-70">
-                                                    {minDuration * num} min
-                                                </span>
+                                                Hoy
                                             </button>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
 
-                            {/* Extra Options */}
-                            {selectedInst && (
-                                <div className="space-y-2 bg-white/5 p-3.5 rounded-xl border border-white/10">
-                                    <label className="text-xs text-muted uppercase font-bold flex items-center gap-1.5">
-                                        <Sparkles size={14} className="text-primary" /> Adicionales Opcionales
-                                    </label>
-                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                        <label className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
-                                            extras.balls ? 'bg-primary/20 border-primary text-white' : 'bg-sidebar border-white/10 text-muted hover:border-white/20'
-                                        }`}>
-                                            <span className="flex items-center gap-2">
-                                                🎾 Tubo de Pelotas Nuevas
-                                            </span>
                                             <input 
-                                                type="checkbox"
-                                                checked={extras.balls}
-                                                onChange={e => {
-                                                    soundEffects.playScoreBeep();
-                                                    setExtras(prev => ({ ...prev, balls: e.target.checked }));
-                                                }}
-                                                className="accent-primary w-4 h-4 rounded cursor-pointer"
+                                                type="date"
+                                                min={new Date().toISOString().split('T')[0]}
+                                                className="bg-card border border-white/10 rounded-lg px-2 py-1.5 text-white focus:outline-none focus:border-primary text-xs font-bold"
+                                                value={date}
+                                                onChange={e => setDate(e.target.value)}
                                             />
-                                        </label>
-
-                                        <label className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
-                                            (extras.rackets || 0) > 0 ? 'bg-primary/20 border-primary text-white' : 'bg-sidebar border-white/10 text-muted hover:border-white/20'
-                                        }`}>
-                                            <span className="flex items-center gap-2">
-                                                🏸 Alquiler de Raquetas
-                                            </span>
-                                            <select
-                                                value={extras.rackets || 0}
-                                                onChange={e => {
-                                                    soundEffects.playScoreBeep();
-                                                    setExtras(prev => ({ ...prev, rackets: Number(e.target.value) }));
-                                                }}
-                                                className="bg-card border border-white/20 rounded px-1.5 py-0.5 text-xs text-white outline-none"
-                                            >
-                                                <option value={0}>0</option>
-                                                <option value={1}>1 ($1500)</option>
-                                                <option value={2}>2 ($3000)</option>
-                                                <option value={4}>4 ($6000)</option>
-                                            </select>
-                                        </label>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div>
-                                <div className="flex justify-between items-center mb-2">
-                                    <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
-                                        <Clock size={14} className="text-primary" /> Horarios Disponibles ({formatFriendlyDate(date)})
-                                    </label>
-                                </div>
-                                {loadingSlots ? (
-                                    <div className="py-8 text-center text-muted"><Loader2 className="animate-spin mx-auto mb-2 text-primary" /> Buscando canchas disponibles...</div>
-                                ) : slots.length === 0 ? (
-                                    <div className="py-6 px-4 text-center border border-dashed border-white/10 rounded-xl flex flex-col items-center gap-3 bg-white/5">
-                                        <Calendar size={24} className="opacity-50 text-primary" />
-                                        <div>
-                                            <p className="font-bold text-white text-sm">No hay horarios disponibles en esta fecha.</p>
-                                            <p className="text-xs text-muted mt-0.5">¿Deseas que te avisemos de inmediato si se libera una cancha?</p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={async () => {
-                                                if (!selectedInstId || !date) return;
-                                                soundEffects.playTennisHit();
-                                                try {
-                                                    await api.bookings.addToWaitlist({
-                                                        institution_id: selectedInstId,
-                                                        date: date,
-                                                        start_time: '18:00',
-                                                        court_name: 'Cualquier Cancha',
-                                                        user_id: user.id,
-                                                        user_name: formatPlayerName(user.name, user.lastname),
-                                                        user_phone: user.phone
-                                                    });
-                                                    soundEffects.playBookingSuccess();
-                                                    addToast('¡Te anotaste en la Lista de Espera! Te notificaremos al buzón si se libera un turno.', 'success');
-                                                } catch (e: any) {
-                                                    addToast('Error al sumarte a la lista de espera: ' + e.message, 'error');
-                                                }
-                                            }}
-                                            className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-200 rounded-xl text-xs font-bold hover:brightness-110 flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10"
-                                        >
-                                            <Flame size={14} className="text-amber-400" /> Anotarme en Lista de Espera
-                                        </button>
                                     </div>
-                                ) : (
-                                    <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
-                                        {slots.map((slot, idx) => (
-                                            <button
-                                                key={idx}
-                                                type="button"
-                                                disabled={!slot.is_active}
-                                                onClick={() => setSelectedSlot(slot)}
-                                                className={`flex flex-col items-center justify-center p-2 rounded-xl border transition-all ${
-                                                    selectedSlot === slot 
-                                                        ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20' 
-                                                        : !slot.is_active 
-                                                            ? 'bg-white/5 text-muted border-transparent opacity-50 cursor-not-allowed'
-                                                            : 'bg-card text-white border-white/10 hover:border-white/30 hover:bg-white/5'
-                                                }`}
-                                            >
-                                                <span className="font-bold text-sm">{slot.start_time}</span>
-                                                <span className="text-[10px] opacity-80 truncate w-full text-center">{slot.court_name}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
 
-                            {selectedSlot && (
-                                <div className="space-y-4 pt-2 border-t border-white/10 animate-in fade-in slide-in-from-top-2">
-                                    {/* Order Summary */}
-                                    <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex justify-between items-center">
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-xs text-primary font-bold uppercase">Total a Pagar</span>
-                                                {isUserMemberOfInst ? (
-                                                    <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-bold">
-                                                        ★ Tarifa Socio Aplicada
-                                                    </span>
-                                                ) : (
-                                                    <span className="text-[10px] bg-white/10 text-muted px-2 py-0.5 rounded-full font-medium">
-                                                        Tarifa General
-                                                    </span>
-                                                )}
-                                            </div>
-                                            <div className="text-white text-sm font-bold">{selectedSlot.court_name} • {selectedSlot.start_time}</div>
-                                            <div className="text-[10px] text-muted space-x-1">
-                                                <span>{durationMultiplier} {durationMultiplier === 1 ? 'turno' : 'turnos'} ({minDuration * durationMultiplier} min)</span>
-                                                <span>•</span>
-                                                <span className="text-slate-300">${getBaseHourlyPrice()}/turno ({isNightSlot(selectedSlot.start_time) ? 'Nocturno' : 'Diurno'})</span>
+                                    {/* Duration Selector */}
+                                    {selectedInst && (
+                                        <div className="space-y-1.5">
+                                            <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
+                                                <Clock size={14} className="text-primary" /> Duración del Turno
+                                            </label>
+                                            <div className="flex gap-2">
+                                                {Array.from({ length: maxSlots }, (_, i) => i + 1).map((num) => (
+                                                    <button
+                                                        key={num}
+                                                        type="button"
+                                                        onClick={() => setDurationMultiplier(num)}
+                                                        className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-all ${
+                                                            durationMultiplier === num
+                                                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20'
+                                                                : 'bg-sidebar border-white/10 text-muted hover:text-white'
+                                                        }`}
+                                                    >
+                                                        {num} {num === 1 ? 'Turno' : 'Turnos'}
+                                                        <span className="block text-[9px] font-normal opacity-70">
+                                                            {minDuration * num} min
+                                                        </span>
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <div className="text-2xl font-bold text-white">
+                                    )}
+
+                                    {/* Available Slots Grid */}
+                                    <div className="space-y-1.5">
+                                        <div className="flex justify-between items-center mb-1">
+                                            <label className="text-xs text-muted uppercase font-bold flex items-center gap-2">
+                                                <Clock size={14} className="text-primary" /> Horarios Disponibles ({formatFriendlyDate(date)})
+                                            </label>
+                                        </div>
+                                        {loadingSlots ? (
+                                            <div className="py-8 text-center text-muted"><Loader2 className="animate-spin mx-auto mb-2 text-primary" /> Buscando canchas disponibles...</div>
+                                        ) : slots.length === 0 ? (
+                                            <div className="py-6 px-4 text-center border border-dashed border-white/10 rounded-xl flex flex-col items-center gap-3 bg-white/5">
+                                                <Calendar size={24} className="opacity-50 text-primary" />
+                                                <div>
+                                                    <p className="font-bold text-white text-sm">No hay horarios disponibles en esta fecha.</p>
+                                                    <p className="text-xs text-muted mt-0.5">¿Deseas que te avisemos si se libera una cancha?</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        if (!selectedInstId || !date) return;
+                                                        soundEffects.playTennisHit();
+                                                        try {
+                                                            await api.bookings.addToWaitlist({
+                                                                institution_id: selectedInstId,
+                                                                date: date,
+                                                                start_time: '18:00',
+                                                                court_name: 'Cualquier Cancha',
+                                                                user_id: user.id,
+                                                                user_name: formatPlayerName(user.name, user.lastname),
+                                                                user_phone: user.phone
+                                                            });
+                                                            soundEffects.playBookingSuccess();
+                                                            addToast('¡Te anotaste en la Lista de Espera! Te notificaremos al buzón si se libera un turno.', 'success');
+                                                        } catch (e: any) {
+                                                            addToast('Error al sumarte a la lista de espera: ' + e.message, 'error');
+                                                        }
+                                                    }}
+                                                    className="px-4 py-2 bg-gradient-to-r from-amber-500/20 to-orange-500/20 border border-amber-500/40 text-amber-200 rounded-xl text-xs font-bold hover:brightness-110 flex items-center gap-1.5 transition-all shadow-md shadow-amber-500/10"
+                                                >
+                                                    <Flame size={14} className="text-amber-400" /> Anotarme en Lista de Espera
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-52 overflow-y-auto custom-scrollbar pr-1">
+                                                {slots.map((slot, idx) => (
+                                                    <button
+                                                        key={idx}
+                                                        type="button"
+                                                        disabled={!slot.is_active}
+                                                        onClick={() => {
+                                                            soundEffects.playScoreBeep();
+                                                            setSelectedSlot(slot);
+                                                        }}
+                                                        className={`flex flex-col items-center justify-center p-2.5 rounded-xl border transition-all ${
+                                                            selectedSlot === slot 
+                                                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 ring-2 ring-primary/40' 
+                                                                : !slot.is_active 
+                                                                    ? 'bg-white/5 text-muted border-transparent opacity-50 cursor-not-allowed'
+                                                                    : 'bg-card text-white border-white/10 hover:border-white/30 hover:bg-white/5'
+                                                        }`}
+                                                    >
+                                                        <span className="font-bold text-sm">{slot.start_time}</span>
+                                                        <span className="text-[10px] opacity-80 truncate w-full text-center">{slot.court_name}</span>
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {/* Selected slot feedback pill */}
+                                    {selectedSlot && (
+                                        <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl flex items-center justify-between animate-in fade-in">
+                                            <div className="flex items-center gap-2">
+                                                <CheckCircle2 size={16} className="text-primary" />
+                                                <span className="text-xs text-white font-bold">
+                                                    {selectedSlot.court_name} • {selectedSlot.start_time} hs ({minDuration * durationMultiplier} min)
+                                                </span>
+                                            </div>
+                                            <span className="text-xs text-primary font-mono font-bold">
                                                 ${calculateTotal()}
-                                            </div>
+                                            </span>
                                         </div>
-                                    </div>
-
-                                    {/* Payment Method Selector */}
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <button 
-                                            type="button"
-                                            onClick={() => setPaymentMethod('mp')}
-                                            className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
-                                                paymentMethod === 'mp' 
-                                                    ? 'bg-blue-500/20 border-blue-500 text-white shadow-lg shadow-blue-500/10' 
-                                                    : 'bg-sidebar border-white/10 text-muted hover:border-white/30'
-                                            }`}
-                                        >
-                                            <Smartphone size={20} className={paymentMethod === 'mp' ? 'text-blue-400' : ''} />
-                                            <span className="text-xs font-bold">Mercado Pago</span>
-                                        </button>
-                                        <button 
-                                            type="button"
-                                            onClick={() => setPaymentMethod('cash')}
-                                            className={`p-3 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all ${
-                                                paymentMethod === 'cash' 
-                                                    ? 'bg-green-500/20 border-green-500 text-white shadow-lg shadow-green-500/10' 
-                                                    : 'bg-sidebar border-white/10 text-muted hover:border-white/30'
-                                            }`}
-                                        >
-                                            <Wallet size={20} className={paymentMethod === 'cash' ? 'text-green-400' : ''} />
-                                            <span className="text-xs font-bold">En el Club</span>
-                                        </button>
-                                    </div>
+                                    )}
                                 </div>
                             )}
+
+                            {/* ===================== PASO 2: PARTICIPANTES Y ADICIONALES ===================== */}
+                            {currentStep === 2 && (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-200">
+                                    {/* Selected Slot Summary Top Banner */}
+                                    {selectedSlot && (
+                                        <div className="bg-white/5 border border-white/10 p-3 rounded-xl flex items-center justify-between">
+                                            <div className="flex items-center gap-2 text-xs text-slate-300">
+                                                <span className="font-bold text-white">{selectedSlot.court_name}</span>
+                                                <span>•</span>
+                                                <span>{formatFriendlyDate(date)}</span>
+                                                <span>•</span>
+                                                <span className="text-primary font-bold">{selectedSlot.start_time} hs</span>
+                                            </div>
+                                            <button 
+                                                type="button" 
+                                                onClick={() => setCurrentStep(1)} 
+                                                className="text-[11px] text-primary hover:underline font-bold"
+                                            >
+                                                Cambiar
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {/* Match & Participant Selector */}
+                                    <MatchParticipantSelector
+                                        matchType={matchType}
+                                        onMatchTypeChange={setMatchType}
+                                        participants={participants}
+                                        onChange={setParticipants}
+                                        currentUser={user}
+                                        isAdmin={false}
+                                    />
+
+                                    {/* Extra Options */}
+                                    {selectedInst && (
+                                        <div className="space-y-2 bg-white/5 p-3.5 rounded-xl border border-white/10">
+                                            <label className="text-xs text-muted uppercase font-bold flex items-center gap-1.5">
+                                                <Sparkles size={14} className="text-primary" /> Adicionales Opcionales
+                                            </label>
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                <label className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                                                    extras.balls ? 'bg-primary/20 border-primary text-white' : 'bg-sidebar border-white/10 text-muted hover:border-white/20'
+                                                }`}>
+                                                    <span className="flex items-center gap-2">
+                                                        🎾 Pelotas Nuevas
+                                                    </span>
+                                                    <input 
+                                                        type="checkbox"
+                                                        checked={extras.balls}
+                                                        onChange={e => {
+                                                            soundEffects.playScoreBeep();
+                                                            setExtras(prev => ({ ...prev, balls: e.target.checked }));
+                                                        }}
+                                                        className="accent-primary w-4 h-4 rounded cursor-pointer"
+                                                    />
+                                                </label>
+
+                                                <label className={`flex items-center justify-between p-2.5 rounded-lg border text-xs cursor-pointer transition-all ${
+                                                    (extras.rackets || 0) > 0 ? 'bg-primary/20 border-primary text-white' : 'bg-sidebar border-white/10 text-muted hover:border-white/20'
+                                                }`}>
+                                                    <span className="flex items-center gap-2">
+                                                        🏸 Raquetas
+                                                    </span>
+                                                    <select
+                                                        value={extras.rackets || 0}
+                                                        onChange={e => {
+                                                            soundEffects.playScoreBeep();
+                                                            setExtras(prev => ({ ...prev, rackets: Number(e.target.value) }));
+                                                        }}
+                                                        className="bg-card border border-white/20 rounded px-1.5 py-0.5 text-xs text-white outline-none"
+                                                    >
+                                                        <option value={0}>0</option>
+                                                        <option value={1}>1 ($1500)</option>
+                                                        <option value={2}>2 ($3000)</option>
+                                                        <option value={4}>4 ($6000)</option>
+                                                    </select>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* ===================== PASO 3: CONFIRMACIÓN Y PAGO ===================== */}
+                            {currentStep === 3 && (() => {
+                                const total = calculateTotal();
+                                const selectedInstObj = institutions.find(i => i.id === selectedInstId);
+                                const clubAlias = selectedInstObj?.alias_mp || 'parqueespana.tenis';
+                                const totalDuration = minDuration * durationMultiplier;
+
+                                return (
+                                    <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-200">
+                                        {/* Order Summary Card */}
+                                        <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex justify-between items-center">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs text-primary font-bold uppercase">Total a Pagar</span>
+                                                    {isUserMemberOfInst ? (
+                                                        <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-bold">
+                                                            ★ Tarifa Socio Aplicada
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-[10px] bg-white/10 text-muted px-2 py-0.5 rounded-full font-medium">
+                                                            Tarifa General
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <div className="text-white text-sm font-bold">{selectedSlot?.court_name} • {selectedSlot?.start_time} hs</div>
+                                                <div className="text-[10px] text-muted space-x-1">
+                                                    <span>{durationMultiplier} {durationMultiplier === 1 ? 'turno' : 'turnos'} ({totalDuration} min)</span>
+                                                    <span>•</span>
+                                                    <span className="text-slate-300">${getBaseHourlyPrice()}/turno ({isNightSlot(selectedSlot?.start_time) ? 'Nocturno' : 'Diurno'})</span>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <div className="text-2xl font-black text-white font-mono">
+                                                    ${total}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Cost > 0: HOLD TIMER & COMPROBANTE METHODOLOGY (BUFFET STYLE) */}
+                                        {total > 0 ? (
+                                            <div className="space-y-4">
+                                                {/* 15-Minute Hold Timer */}
+                                                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-center justify-between gap-3 text-amber-300 text-xs">
+                                                    <div className="flex items-center gap-2">
+                                                        <Clock size={16} className="shrink-0 animate-pulse text-amber-400" />
+                                                        <span>Cancha retenida temporalmente por:</span>
+                                                    </div>
+                                                    <span className="font-mono font-black text-sm bg-black/40 px-2.5 py-1 rounded-lg border border-amber-500/20 text-white">
+                                                        {Math.floor(reservationSecondsLeft / 60)}:{(reservationSecondsLeft % 60).toString().padStart(2, '0')} min
+                                                    </span>
+                                                </div>
+
+                                                {/* Step 1 to pay: Transfer instructions */}
+                                                <div className="p-3.5 bg-sidebar border border-white/10 rounded-xl space-y-2">
+                                                    <div className="flex items-center justify-between text-xs">
+                                                        <span className="text-[10px] uppercase font-bold text-muted">1. Alias Mercado Pago / Banco del Club:</span>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                                navigator.clipboard.writeText(clubAlias);
+                                                                setCopiedSuccessAlias(true);
+                                                                addToast(`¡Alias "${clubAlias}" copiado!`, "success");
+                                                                setTimeout(() => setCopiedSuccessAlias(false), 2000);
+                                                            }}
+                                                            className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                        >
+                                                            {copiedSuccessAlias ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                                            {copiedSuccessAlias ? 'Copiado' : 'Copiar'}
+                                                        </button>
+                                                    </div>
+                                                    <div className="font-mono text-emerald-400 font-black text-base bg-black/30 p-2 rounded-lg border border-white/5">
+                                                        {clubAlias}
+                                                    </div>
+                                                    <p className="text-[11px] text-muted">
+                                                        Realiza la transferencia de <strong>${total}</strong> desde tu app bancaria o MP.
+                                                    </p>
+                                                </div>
+
+                                                {/* Step 2 to pay: Upload receipt (Canvas compressed) */}
+                                                <div className="space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-xs font-bold text-white uppercase tracking-wider block">
+                                                            2. Adjuntar Comprobante de Transferencia *
+                                                        </span>
+                                                        {receiptImage && (
+                                                            <span className="text-[10px] text-emerald-400 font-bold flex items-center gap-1">
+                                                                <CheckCircle2 size={12} /> Adjunto
+                                                            </span>
+                                                        )}
+                                                    </div>
+
+                                                    <div className="p-4 bg-sidebar border-2 border-dashed border-white/20 hover:border-emerald-500/50 rounded-2xl transition-colors text-center space-y-3 relative">
+                                                        {receiptImage ? (
+                                                            <div className="space-y-2">
+                                                                <div className="relative inline-block">
+                                                                    <img 
+                                                                        src={receiptImage} 
+                                                                        alt="Comprobante adjunto" 
+                                                                        className="max-h-36 mx-auto rounded-xl object-contain border border-white/20 shadow-md"
+                                                                    />
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setReceiptImage(null)}
+                                                                        className="absolute -top-2 -right-2 p-1 bg-red-600 text-white rounded-full shadow hover:bg-red-500"
+                                                                        title="Quitar comprobante"
+                                                                    >
+                                                                        <X size={14} />
+                                                                    </button>
+                                                                </div>
+                                                                <p className="text-xs text-slate-300">
+                                                                    Comprobante listo. Haz clic en "Confirmar Reserva" para finalizar.
+                                                                </p>
+                                                            </div>
+                                                        ) : (
+                                                            <label className="cursor-pointer block space-y-2">
+                                                                <div className="w-12 h-12 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner">
+                                                                    <UploadCloud size={24} />
+                                                                </div>
+                                                                <div>
+                                                                    <span className="text-xs font-bold text-white block">
+                                                                        Subir captura o foto del comprobante
+                                                                    </span>
+                                                                    <span className="text-[11px] text-muted block mt-0.5">
+                                                                        JPG o PNG de la transferencia (se optimizará automáticamente)
+                                                                    </span>
+                                                                </div>
+                                                                <input 
+                                                                    type="file" 
+                                                                    accept="image/*" 
+                                                                    onChange={handleReceiptFileChange}
+                                                                    className="hidden" 
+                                                                />
+                                                            </label>
+                                                        )}
+                                                    </div>
+
+                                                    {!receiptImage && (
+                                                        <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[11px] flex items-center gap-2">
+                                                            <AlertTriangle size={14} className="shrink-0 text-amber-400" />
+                                                            <span>La reserva virtual se confirmará automáticamente al adjuntar el comprobante.</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            /* Cost === 0: Free / Member benefit message */
+                                            <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl space-y-1.5 text-center">
+                                                <div className="text-emerald-400 font-bold text-sm flex items-center justify-center gap-1.5">
+                                                    <CheckCircle2 size={16} />
+                                                    {isUserMemberOfInst && hasClubConfiguredPrices 
+                                                        ? 'Turno sin cargo por Beneficio de Socio Activo' 
+                                                        : 'Turno sin costo directo asignado'}
+                                                </div>
+                                                <p className="text-xs text-slate-300">
+                                                    {isUserMemberOfInst && hasClubConfiguredPrices
+                                                        ? 'Tu membresía cubre este turno. No requieres realizar ningún pago ni adjuntar comprobante.'
+                                                        : 'Cualquier costo adicional o tarifa del club se coordina directamente en la administración.'}
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </>
                     )}
                 </div>
 
+                {/* Wizard Navigation Footer */}
                 {paymentStep === 'select' && (
-                    <div className="p-5 border-t border-white/10 bg-white/5 flex justify-end gap-3">
-                        <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors">
-                            Cancelar
-                        </button>
-                        <button 
-                            type="button"
-                            onClick={handleConfirm}
-                            disabled={!selectedSlot}
-                            className={`px-6 py-2 rounded-xl text-white font-bold flex items-center gap-2 shadow-lg transition-all ${
-                                !selectedSlot ? 'opacity-50 cursor-not-allowed bg-slate-700' :
-                                paymentMethod === 'mp' ? 'bg-blue-500 hover:bg-blue-400 shadow-blue-500/20' : 'bg-green-600 hover:bg-green-500 shadow-green-600/20'
-                            }`}
-                        >
-                            {paymentMethod === 'mp' ? 'Pagar y Reservar' : 'Confirmar Reserva'} <CheckCircle2 size={18} />
-                        </button>
+                    <div className="p-5 border-t border-white/10 bg-white/5 flex justify-between items-center gap-3">
+                        {currentStep === 1 ? (
+                            <button 
+                                type="button" 
+                                onClick={onClose} 
+                                className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors text-xs"
+                            >
+                                Cancelar
+                            </button>
+                        ) : (
+                            <button 
+                                type="button" 
+                                onClick={() => setCurrentStep(prev => (prev - 1) as 1 | 2)} 
+                                className="px-4 py-2 rounded-xl text-white font-medium hover:bg-white/10 transition-colors text-xs flex items-center gap-1.5"
+                            >
+                                <ChevronLeft size={16} /> Volver
+                            </button>
+                        )}
+
+                        {currentStep === 1 && (
+                            <button 
+                                type="button"
+                                onClick={() => setCurrentStep(2)}
+                                disabled={!selectedSlot}
+                                className={`px-5 py-2.5 rounded-xl text-white font-bold flex items-center gap-2 text-xs shadow-lg transition-all ${
+                                    !selectedSlot 
+                                        ? 'opacity-50 cursor-not-allowed bg-slate-700' 
+                                        : 'bg-primary hover:bg-primary-hover shadow-primary/20'
+                                }`}
+                            >
+                                Continuar a Participantes <ArrowRight size={14} />
+                            </button>
+                        )}
+
+                        {currentStep === 2 && (
+                            <button 
+                                type="button"
+                                onClick={() => setCurrentStep(3)}
+                                className="px-5 py-2.5 rounded-xl text-white font-bold flex items-center gap-2 text-xs bg-primary hover:bg-primary-hover shadow-lg shadow-primary/20 transition-all"
+                            >
+                                Continuar a Confirmación <ArrowRight size={14} />
+                            </button>
+                        )}
+
+                        {currentStep === 3 && (() => {
+                            const total = calculateTotal();
+                            const canConfirm = total === 0 || !!receiptImage;
+
+                            return (
+                                <button 
+                                    type="button"
+                                    onClick={handleConfirm}
+                                    disabled={!canConfirm || isSubmitting}
+                                    className={`px-6 py-2.5 rounded-xl text-white font-black text-xs uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all ${
+                                        !canConfirm || isSubmitting
+                                            ? 'opacity-50 cursor-not-allowed bg-slate-800 text-slate-500 border border-white/5'
+                                            : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/30'
+                                    }`}
+                                >
+                                    {total === 0 
+                                        ? 'Confirmar Reserva Gratis' 
+                                        : receiptImage 
+                                            ? 'Confirmar Reserva con Comprobante' 
+                                            : 'Adjuntá comprobante para confirmar'}
+                                    <CheckCircle2 size={16} />
+                                </button>
+                            );
+                        })()}
                     </div>
                 )}
             </div>
@@ -1819,6 +2190,7 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     const [participants, setParticipants] = useState<BookingParticipant[]>([]);
     const [matchResult, setMatchResult] = useState(''); 
     const [viewingBooking, setViewingBooking] = useState<Booking | null>(null);
+    const [previewReceiptUrl, setPreviewReceiptUrl] = useState<string | null>(null);
     const [extras, setExtras] = useState({ rackets: 0, balls: false });
     const [tournamentFormat, setTournamentFormat] = useState<'3' | '5'>('3');
     const [isRecurring, setIsRecurring] = useState(false);
@@ -2332,8 +2704,14 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                                 ) : (
                                                     <button 
                                                         onClick={() => handleSlotClick(time, court)} 
-                                                        className="w-full h-full rounded-lg border border-transparent hover:border-white/10 hover:bg-white/5 transition-colors"
-                                                    ></button>
+                                                        className="w-full h-full min-h-[44px] rounded-lg border border-dashed border-white/10 hover:border-primary/50 hover:bg-primary/10 transition-all flex items-center justify-center gap-1 group/btn p-1"
+                                                        title={`Turno disponible: ${time} hs en ${court}. Clic para reservar o bloquear.`}
+                                                    >
+                                                        <span className="text-[10px] text-white/30 group-hover/btn:text-primary font-bold flex items-center gap-1 transition-colors">
+                                                            <Plus size={11} className="opacity-40 group-hover/btn:opacity-100" />
+                                                            <span className="hidden sm:inline">Disponible</span>
+                                                        </span>
+                                                    </button>
                                                 )}
                                             </div>
                                         );
@@ -2378,6 +2756,79 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                 )}
                             </div>
                         </div>
+
+                        {/* Payment Status & Verification */}
+                        {(() => {
+                            const receipt = viewingBooking.receipt_url || (viewingBooking.extras as any)?.receipt_url;
+                            const isPaid = viewingBooking.payment_status === 'completed' || viewingBooking.payment_status === 'paid';
+                            const isFree = viewingBooking.total_price === 0;
+
+                            return (
+                                <div className="p-3 bg-white/5 rounded-xl border border-white/10 space-y-2.5">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-xs font-bold text-muted uppercase">Estado del Pago</span>
+                                        {isPaid ? (
+                                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                <CheckCircle2 size={11} /> Pago Verificado
+                                            </span>
+                                        ) : isFree ? (
+                                            <span className="text-[10px] bg-blue-500/20 text-blue-300 border border-blue-500/30 px-2 py-0.5 rounded-full font-bold">
+                                                Sin Cargo / Socio
+                                            </span>
+                                        ) : (
+                                            <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded-full font-bold flex items-center gap-1">
+                                                <Clock size={11} /> Pendiente de Validación
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {viewingBooking.total_price !== undefined && (
+                                        <div className="text-xs text-slate-300 flex justify-between">
+                                            <span>Monto Total:</span>
+                                            <span className="font-bold text-white">${viewingBooking.total_price}</span>
+                                        </div>
+                                    )}
+
+                                    {receipt && (
+                                        <div className="flex items-center justify-between pt-1 border-t border-white/5">
+                                            <span className="text-xs text-emerald-400 font-bold flex items-center gap-1">
+                                                <CheckCircle2 size={12} /> Comprobante adjunto
+                                            </span>
+                                            <button
+                                                type="button"
+                                                onClick={() => setPreviewReceiptUrl(receipt)}
+                                                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors shadow"
+                                            >
+                                                <Eye size={12} /> Ver Comprobante
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    {!isPaid && !isFree && (
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                try {
+                                                    await api.bookings.update(viewingBooking.id, {
+                                                        payment_status: 'paid',
+                                                        status: 'confirmed'
+                                                    });
+                                                    soundEffects.playBookingSuccess();
+                                                    addToast('¡Pago validado y reserva confirmada!', 'success');
+                                                    setViewingBooking(prev => prev ? { ...prev, payment_status: 'paid', status: 'confirmed' } : null);
+                                                    setBookings(prev => prev.map(b => b.id === viewingBooking.id ? { ...b, payment_status: 'paid', status: 'confirmed' } : b));
+                                                } catch (e: any) {
+                                                    addToast('Error al validar pago: ' + e.message, 'error');
+                                                }
+                                            }}
+                                            className="w-full py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 transition-colors shadow-md shadow-emerald-600/20"
+                                        >
+                                            <Check size={14} /> Validar Pago y Confirmar Turno
+                                        </button>
+                                    )}
+                                </div>
+                            );
+                        })()}
 
                         {/* Display Participants */}
                         {viewingBooking.participants && viewingBooking.participants.length > 0 ? (
@@ -2586,6 +3037,46 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                             >
                                 {weatherActionLoading ? <Loader2 className="animate-spin" size={16} /> : <CloudRain size={16} />}
                                 Confirmar Suspensión
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal de Zoom / Previsualización de Comprobante para Administrador */}
+            {previewReceiptUrl && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in zoom-in-95">
+                    <div className="bg-card border border-white/10 rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                            <h4 className="font-bold text-white text-base">Comprobante de Pago Adjunto</h4>
+                            <button onClick={() => setPreviewReceiptUrl(null)} className="text-muted hover:text-white">
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="flex items-center justify-center bg-black/50 rounded-2xl p-2 border border-white/5">
+                            <img 
+                                src={previewReceiptUrl} 
+                                alt="Comprobante de Transferencia" 
+                                className="max-h-[65vh] w-auto object-contain rounded-xl shadow-lg"
+                            />
+                        </div>
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    const w = window.open('');
+                                    w?.document.write(`<img src="${previewReceiptUrl}" style="max-width:100%"/>`);
+                                }}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl flex items-center gap-1.5 transition-colors"
+                            >
+                                Abrir en pestaña nueva
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setPreviewReceiptUrl(null)}
+                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-colors"
+                            >
+                                Cerrar
                             </button>
                         </div>
                     </div>

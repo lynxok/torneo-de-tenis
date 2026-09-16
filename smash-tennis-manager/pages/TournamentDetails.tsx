@@ -8,7 +8,8 @@ import {
     X, Save, Layers, Award, Sparkles, Share2, MessageCircle, ArrowLeftRight, Lightbulb, Trash2, 
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
-    Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink, Eye, HelpCircle
+    Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink, Eye, HelpCircle,
+    Receipt, Upload
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
@@ -105,9 +106,43 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [deletingPlayerId, setDeletingPlayerId] = useState<string | null>(null);
     const [filterByGender, setFilterByGender] = useState(true);
 
-    // Player Self-Enrollment Modal State (Availability preferences)
+    // Player Self-Enrollment Modal State (Availability preferences & Comprobante)
     const [showPlayerEnrollModal, setShowPlayerEnrollModal] = useState(false);
     const [playerAvailabilityNotes, setPlayerAvailabilityNotes] = useState('');
+    const [enrollmentReceiptImage, setEnrollmentReceiptImage] = useState<string | null>(null);
+    const [viewingReceiptModal, setViewingReceiptModal] = useState<string | null>(null);
+
+    const handleEnrollmentReceiptChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (file.size > 10 * 1024 * 1024) {
+            addToast("El comprobante debe ser menor a 10 MB", "error");
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const MAX_WIDTH = 1200;
+                const scale = Math.min(1, MAX_WIDTH / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                const ctx = canvas.getContext('2d');
+                if (ctx) {
+                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                    const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.82);
+                    setEnrollmentReceiptImage(compressedDataUrl);
+                    soundEffects.playScoreBeep();
+                    addToast("¡Comprobante adjuntado con éxito!", "success");
+                }
+            };
+            img.src = event.target?.result as string;
+        };
+        reader.readAsDataURL(file);
+    };
 
     const matchTournamentGender = (userGender?: string, targetGender?: string) => {
         if (!filterByGender) return true;
@@ -349,8 +384,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const handleConfirmPlayerEnroll = async () => {
         if (!tournament) return;
+
+        if (effectivePrice > 0 && !enrollmentReceiptImage) {
+            addToast("⚠️ Debes adjuntar la foto o captura del comprobante para confirmar tu inscripción.", "error");
+            return;
+        }
+
         setIsEnrolling(true);
         try {
+            const expiresAt = effectivePrice > 0 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : undefined;
             await api.players.enroll(
                 tournament.id, 
                 user.id, 
@@ -359,11 +401,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 effectivePrice,
                 undefined,
                 undefined,
-                playerAvailabilityNotes.trim() || undefined
+                playerAvailabilityNotes.trim() || undefined,
+                enrollmentReceiptImage || undefined,
+                expiresAt
             );
             soundEffects.playBookingSuccess();
-            addToast("¡Inscripción exitosa! Buena suerte en el torneo.", 'success');
+            addToast("¡Inscripción registrada con éxito! El organizador verificará tu comprobante.", 'success');
             setShowPlayerEnrollModal(false);
+            setEnrollmentReceiptImage(null);
             loadTournament();
         } catch (e: any) {
             addToast("Error al inscribirse: " + e.message, 'error');
@@ -3477,20 +3522,22 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 <Users size={18} className="text-primary" /> Inscritos ({players.length})
                             </h3>
                             <div className="flex items-center gap-2">
-                                <button
-                                    onClick={() => {
-                                        if (!tournament) return;
-                                        const profileMap: Record<string, any> = {};
-                                        allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
-                                        exportTournamentPlayersToCSV(tournament, players, profileMap);
-                                        soundEffects.playScoreBeep();
-                                        addToast("¡Listado de inscriptos descargado en CSV!", "success");
-                                    }}
-                                    className="p-1.5 px-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                                    title="Descargar lista de inscriptos en Excel / CSV con datos de contacto y disponibilidad"
-                                >
-                                    <Download size={13} className="text-emerald-400" /> Exportar CSV
-                                </button>
+                                {isClubAdmin && (
+                                    <button
+                                        onClick={() => {
+                                            if (!tournament) return;
+                                            const profileMap: Record<string, any> = {};
+                                            allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
+                                            exportTournamentPlayersToCSV(tournament, players, profileMap);
+                                            soundEffects.playScoreBeep();
+                                            addToast("¡Listado de inscriptos descargado en CSV!", "success");
+                                        }}
+                                        className="p-1.5 px-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                                        title="Descargar lista de inscriptos en Excel / CSV con datos de contacto y disponibilidad"
+                                    >
+                                        <Download size={13} className="text-emerald-400" /> Exportar CSV
+                                    </button>
+                                )}
                                 {isClubAdmin && (
                                     <button
                                         onClick={openManualEnrollModal}
@@ -3510,6 +3557,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 players.map((p, i) => {
                                     const pDisplayName = formatPlayerName(p.name || p.player_name);
                                     const isPaid = p.payment_status === 'paid';
+                                    const isSelf = p.player_id === user.id || p.id === user.id;
                                     const pAvailability = p.availability_notes || p.time_restrictions;
 
                                     return (
@@ -3522,10 +3570,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     <div className="text-xs font-bold text-white truncate">{pDisplayName}</div>
                                                     <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                                         <span className="text-[10px] text-muted">{p.category ? `${p.category} Cat.` : 'Sin Cat.'}</span>
-                                                        {p.fee_amount ? (
+                                                        {(isClubAdmin || isSelf) && p.fee_amount ? (
                                                             <span className="text-[10px] text-slate-400 font-mono">${p.fee_amount}</span>
                                                         ) : null}
-                                                        {pAvailability && (
+                                                        {(isClubAdmin || isSelf) && pAvailability ? (
                                                             <span 
                                                                 className="text-[9px] text-amber-300 font-medium bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex items-center gap-1 max-w-[170px]"
                                                                 title={`Disponibilidad: ${pAvailability}`}
@@ -3533,13 +3581,26 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                                 <Clock size={9} className="text-amber-400 shrink-0" />
                                                                 <span className="truncate">{pAvailability}</span>
                                                             </span>
-                                                        )}
+                                                        ) : null}
                                                     </div>
                                                 </div>
                                             </div>
 
                                             <div className="flex items-center gap-1.5 shrink-0">
-                                                {/* Payment Status Badge / Button for Admin */}
+                                                {/* Comprobante de pago adjunto para Admin */}
+                                                {isClubAdmin && p.receipt_url && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setViewingReceiptModal(p.receipt_url || null)}
+                                                        className="text-[10px] px-2 py-0.5 rounded-lg font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 flex items-center gap-1 transition-all"
+                                                        title="Ver comprobante de pago subido por el jugador"
+                                                    >
+                                                        <Eye size={11} className="text-blue-400" />
+                                                        <span>Comprobante</span>
+                                                    </button>
+                                                )}
+
+                                                {/* Payment Status: Admin or Self only */}
                                                 {isClubAdmin ? (
                                                     <button
                                                         onClick={() => handleTogglePaymentStatus(p)}
@@ -3552,15 +3613,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                                     >
                                                         {isPaid ? 'Pagado' : 'Pendiente'}
                                                     </button>
-                                                ) : (
+                                                ) : isSelf ? (
                                                     <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold border ${
                                                         isPaid ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
                                                     }`}>
-                                                        {isPaid ? 'Pagado' : 'Pendiente'}
+                                                        {isPaid ? 'Inscripción Pagada' : 'Pago Pendiente'}
                                                     </span>
-                                                )}
+                                                ) : null}
 
-                                                {(p.player_id === user.id || p.id === user.id) && (
+                                                {isSelf && (
                                                     <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-md font-bold">
                                                         Tú
                                                     </span>
@@ -5736,6 +5797,60 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </div>
                             )}
 
+                            {/* Step: Adjuntar Comprobante de Transferencia (Obligatorio si arancel > $0) */}
+                            {effectivePrice > 0 && (
+                                <div className="space-y-2.5 p-4 rounded-2xl bg-white/5 border border-white/10">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-xs text-white font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                            <Receipt size={14} className="text-primary" /> Comprobante de Transferencia *
+                                        </label>
+                                        <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                                            Reserva de plaza (15 min)
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-muted">
+                                        Adjuntá la foto o captura del comprobante bancario para asegurar tu lugar en el cuadro:
+                                    </p>
+
+                                    {enrollmentReceiptImage ? (
+                                        <div className="relative group rounded-xl overflow-hidden border border-emerald-500/50 bg-black/40 p-2 flex items-center gap-3">
+                                            <img 
+                                                src={enrollmentReceiptImage} 
+                                                alt="Comprobante" 
+                                                className="w-16 h-16 object-cover rounded-lg border border-white/10 cursor-pointer"
+                                                onClick={() => setViewingReceiptModal(enrollmentReceiptImage)}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                                                    <Check size={14} /> Comprobante adjuntado
+                                                </div>
+                                                <div className="text-[10px] text-muted">Haz clic en "Confirmar Inscripción" para finalizar.</div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setEnrollmentReceiptImage(null)}
+                                                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
+                                                title="Quitar comprobante"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-white/20 hover:border-primary/60 rounded-xl cursor-pointer bg-white/5 hover:bg-white/10 transition-all text-center">
+                                            <Upload size={22} className="text-primary mb-1" />
+                                            <span className="text-xs font-bold text-white">Subir captura o foto del comprobante</span>
+                                            <span className="text-[10px] text-muted mt-0.5">JPG o PNG hasta 10 MB (se comprime automáticamente)</span>
+                                            <input 
+                                                type="file" 
+                                                accept="image/*" 
+                                                className="hidden" 
+                                                onChange={handleEnrollmentReceiptChange}
+                                            />
+                                        </label>
+                                    )}
+                                </div>
+                            )}
+
                             {/* Availability / Schedule Restrictions Section */}
                             <div className="space-y-2">
                                 <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -6236,6 +6351,47 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </div>
                 </div>
             </div>
+
+            {/* Modal de Zoom / Previsualización de Comprobante de Pago */}
+            {viewingReceiptModal && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in" 
+                    onClick={() => setViewingReceiptModal(null)}
+                >
+                    <div 
+                        className="bg-card border border-white/10 rounded-2xl p-5 max-w-lg w-full max-h-[90vh] flex flex-col relative shadow-2xl" 
+                        onClick={e => e.stopPropagation()}
+                    >
+                        <div className="flex justify-between items-center pb-3 border-b border-white/10 mb-3">
+                            <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                <Receipt size={16} className="text-primary" /> Comprobante de Pago de Inscripción
+                            </h4>
+                            <button 
+                                onClick={() => setViewingReceiptModal(null)} 
+                                className="text-muted hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto flex items-center justify-center bg-black/50 rounded-xl p-2 border border-white/5">
+                            <img 
+                                src={viewingReceiptModal} 
+                                alt="Comprobante de Pago" 
+                                className="max-w-full max-h-[68vh] object-contain rounded-lg" 
+                            />
+                        </div>
+                        <div className="pt-3 border-t border-white/10 flex justify-between items-center text-xs text-muted mt-3">
+                            <span>Foto adjuntada por el jugador</span>
+                            <button 
+                                onClick={() => setViewingReceiptModal(null)}
+                                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-all"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

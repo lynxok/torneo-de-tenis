@@ -329,6 +329,9 @@ export interface TournamentPlayer {
   is_doubles_pair?: boolean;
   availability_notes?: string;
   time_restrictions?: string;
+  receipt_url?: string; // Comprobante de pago subido por el jugador
+  is_confirmed?: boolean;
+  expires_at?: string; // Expiración de reserva de cupo virtual (15 min)
 }
 
 export interface Match {
@@ -519,6 +522,9 @@ export interface Booking {
       participants?: BookingParticipant[];
   };
   payment_status?: string;
+  receipt_url?: string; // Comprobante de pago subido
+  is_confirmed?: boolean; // Confirmado tras subir comprobante o ser gratuito
+  expires_at?: string; // Expiración del bloqueo virtual temporal (15 min) para evitar duplicación
   institutions?: { name: string };
   participants?: BookingParticipant[];
   user_name?: string;
