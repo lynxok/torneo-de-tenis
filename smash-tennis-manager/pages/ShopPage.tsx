@@ -611,7 +611,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
     };
 
     return (
-        <div className="space-y-6 animate-fade-up">
+        <div className="space-y-6 pb-28 sm:pb-12 animate-fade-up">
             {/* Top Header Banner */}
             <div className="bg-gradient-to-r from-emerald-950/40 via-slate-900/90 to-primary/20 border border-emerald-500/20 rounded-3xl p-6 shadow-2xl flex flex-col md:flex-row justify-between items-start md:items-center gap-6 relative overflow-hidden">
                 <div className="space-y-2 z-10">
@@ -901,22 +901,22 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                 </div>
             )}
 
-            {/* Sticky Floating Cart Bar */}
+            {/* Sticky Floating Cart Bar - Elevado sobre la barra de navegación móvil */}
             {totalCartItems > 0 && (
-                <div className="fixed bottom-6 left-4 right-4 sm:left-auto sm:right-8 z-40 animate-in slide-in-from-bottom-5">
+                <div className="fixed bottom-cart-floating left-4 right-4 sm:left-auto sm:right-8 z-50 animate-in slide-in-from-bottom-5">
                     <button
                         onClick={() => setShowCartDrawer(true)}
-                        className="w-full sm:w-auto px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-2xl shadow-2xl shadow-emerald-600/50 flex items-center justify-between sm:justify-start gap-4 transition-all"
+                        className="w-full sm:w-auto px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-sm rounded-2xl shadow-[0_10px_30px_rgba(5,150,105,0.6)] border border-emerald-400/40 flex items-center justify-between sm:justify-start gap-4 transition-all active:scale-95"
                     >
                         <div className="flex items-center gap-2.5">
-                            <div className="w-8 h-8 rounded-xl bg-black/20 flex items-center justify-center font-mono">
+                            <div className="w-8 h-8 rounded-xl bg-black/30 flex items-center justify-center font-mono font-bold text-emerald-300">
                                 {totalCartItems}
                             </div>
-                            <span>Ver mi pedido</span>
+                            <span className="tracking-wide">Ver mi pedido</span>
                         </div>
                         <div className="flex items-center gap-2 border-l border-white/20 pl-4 font-mono text-base">
-                            <span>{formatCurrency(totalAmount)}</span>
-                            <ChevronRight size={18} />
+                            <span className="font-extrabold">{formatCurrency(totalAmount)}</span>
+                            <ChevronRight size={18} className="text-emerald-200" />
                         </div>
                     </button>
                 </div>

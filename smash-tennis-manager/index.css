@@ -6,6 +6,21 @@ body {
   font-family: 'Outfit', sans-serif;
 }
 
+/* Safe Area Inset Helpers */
+.safe-area-pb {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.bottom-cart-floating {
+  bottom: calc(4.75rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .bottom-cart-floating {
+    bottom: 2rem;
+  }
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
