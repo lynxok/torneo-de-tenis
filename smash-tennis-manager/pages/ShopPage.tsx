@@ -81,6 +81,27 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
     const [submittingOrder, setSubmittingOrder] = useState(false);
     const [transferInitiated, setTransferInitiated] = useState(false);
 
+    // Modal de Login / Registro de Jugador para usuarios no logueados al confirmar pedido
+    const [currentUser, setCurrentUser] = useState<UserProfile | null>(user || null);
+    const [showAuthModal, setShowAuthModal] = useState(false);
+    const [authModalMode, setAuthModalMode] = useState<'login' | 'register'>('register');
+    const [authEmail, setAuthEmail] = useState('');
+    const [authPassword, setAuthPassword] = useState('');
+    const [authName, setAuthName] = useState('');
+    const [authLastname, setAuthLastname] = useState('');
+    const [authPhone, setAuthPhone] = useState('');
+    const [authDni, setAuthDni] = useState('');
+    const [authLoading, setAuthLoading] = useState(false);
+
+    // Sincronizar usuario si cambia la prop
+    useEffect(() => {
+        if (user) {
+            setCurrentUser(user);
+            setCustomerName(formatPlayerName(user.name, user.lastname));
+            if (user.phone) setCustomerPhone(user.phone);
+        }
+    }, [user]);
+
     // Admin Mode (for club admins & superadmins)
     const [showAdminModal, setShowAdminModal] = useState(false);
     const [adminOrders, setAdminOrders] = useState<StoreOrder[]>([]);
@@ -356,14 +377,11 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
         window.open(mpUrl, '_blank', 'noopener,noreferrer');
     };
 
-    const handleConfirmOrder = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (cartItems.length === 0) return;
-
-        if (!receiptImage) {
-            addToast("⚠️ Debes adjuntar la foto o captura del comprobante para confirmar el pedido", "error");
-            return;
-        }
+    // Ejecución final de la creación del pedido (cuando ya tenemos usuario verificado)
+    const executeSubmitOrder = async (confirmedUser?: UserProfile | null) => {
+        const effectiveUserForOrder = confirmedUser !== undefined ? confirmedUser : currentUser;
+        const buyerName = effectiveUserForOrder ? formatPlayerName(effectiveUserForOrder.name, effectiveUserForOrder.lastname) : customerName;
+        const buyerPhone = effectiveUserForOrder?.phone || customerPhone;
 
         setSubmittingOrder(true);
         try {
@@ -378,9 +396,9 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
             const newOrder = await api.shop.createOrder({
                 institution_id: selectedInstId,
                 institution_name: activeInstitution?.name || 'Club de Tenis',
-                user_id: user?.id,
-                customer_name: customerName,
-                customer_phone: customerPhone,
+                user_id: effectiveUserForOrder?.id,
+                customer_name: buyerName,
+                customer_phone: buyerPhone,
                 customer_notes: customerNotes,
                 items: orderItems,
                 total_amount: totalAmount,
@@ -400,6 +418,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
             setCart({});
             setReceiptImage(null);
             setShowCheckoutModal(false);
+            setShowAuthModal(false);
             loadProducts();
             loadReservedStock();
             addToast("¡Pedido registrado con éxito! El buffet lo ha recibido.", "success");
@@ -407,6 +426,107 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
             addToast("Error al procesar pedido: " + err.message, "error");
         } finally {
             setSubmittingOrder(false);
+        }
+    };
+
+    const handleConfirmOrder = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (cartItems.length === 0) return;
+
+        if (!receiptImage) {
+            addToast("⚠️ Debes adjuntar la foto o captura del comprobante para confirmar el pedido", "error");
+            return;
+        }
+
+        // Si el usuario no está autenticado, solicitar inicio de sesión o creación de cuenta Jugador
+        if (!currentUser) {
+            // Prellenar datos si el usuario ya escribió en el formulario de contacto
+            if (customerName) {
+                const parts = customerName.trim().split(' ');
+                setAuthName(parts[0] || '');
+                setAuthLastname(parts.slice(1).join(' ') || '');
+            }
+            if (customerPhone) {
+                setAuthPhone(customerPhone);
+            }
+            setShowAuthModal(true);
+            return;
+        }
+
+        await executeSubmitOrder(currentUser);
+    };
+
+    // Procesar Login o Registro rápido de Jugador dentro de la Tienda
+    const handleAuthSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setAuthLoading(true);
+        try {
+            if (authModalMode === 'login') {
+                const { data, error } = await api.auth.signIn(authEmail.trim(), authPassword);
+                if (error) throw error;
+                if (data?.user) {
+                    const profile = await api.auth.getUserProfile(data.user.id);
+                    setCurrentUser(profile);
+                    setCustomerName(formatPlayerName(profile.name, profile.lastname));
+                    if (profile.phone) setCustomerPhone(profile.phone);
+                    addToast(`¡Bienvenido ${profile.name}! Confirmando tu pedido...`, "success");
+                    setShowAuthModal(false);
+                    await executeSubmitOrder(profile);
+                }
+            } else {
+                // Registro Jugador
+                if (!authName.trim() || !authLastname.trim()) {
+                    addToast("Por favor ingresa tu Nombre y Apellido", "error");
+                    setAuthLoading(false);
+                    return;
+                }
+                if (!authEmail.trim() || !authPassword || authPassword.length < 6) {
+                    addToast("Ingresa un email válido y contraseña (mínimo 6 caracteres)", "error");
+                    setAuthLoading(false);
+                    return;
+                }
+
+                const { data, error } = await api.auth.signUp(authEmail.trim(), authPassword, {
+                    name: authName.trim(),
+                    lastname: authLastname.trim(),
+                    phone: authPhone.trim(),
+                    dni: authDni.trim() || undefined,
+                    role: 'player',
+                    institution_id: selectedInstId,
+                    is_approved: true
+                });
+
+                if (error) throw error;
+
+                let createdProfile: UserProfile | null = null;
+                if (data?.user) {
+                    try {
+                        createdProfile = await api.auth.getUserProfile(data.user.id);
+                    } catch (pErr) {}
+                }
+
+                const finalUser: UserProfile = createdProfile || {
+                    id: data?.user?.id || 'guest-' + Date.now(),
+                    name: authName.trim(),
+                    lastname: authLastname.trim(),
+                    email: authEmail.trim(),
+                    phone: authPhone.trim(),
+                    role: 'player',
+                    institution_id: selectedInstId,
+                    created_at: new Date().toISOString()
+                };
+
+                setCurrentUser(finalUser);
+                setCustomerName(formatPlayerName(finalUser.name, finalUser.lastname));
+                setCustomerPhone(finalUser.phone || '');
+                addToast("¡Cuenta creada con éxito! Confirmando tu pedido...", "success");
+                setShowAuthModal(false);
+                await executeSubmitOrder(finalUser);
+            }
+        } catch (err: any) {
+            addToast(err.message || "Error al autenticar", "error");
+        } finally {
+            setAuthLoading(false);
         }
     };
 
@@ -1226,6 +1346,180 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                     </div>
                 );
             })()}
+
+            {/* Modal de Inicio de Sesión o Registro Rápido (Jugador) para confirmar pedido */}
+            {showAuthModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in zoom-in-95">
+                    <div className="bg-card border border-emerald-500/30 rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-gradient-to-r from-emerald-950/40 via-slate-900 to-slate-900">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl">
+                                    <User size={20} />
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-white text-base">Identificación de Jugador</h3>
+                                    <p className="text-[11px] text-slate-300">Para asociar tu pedido y notificarte la entrega</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowAuthModal(false)}
+                                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Tabs Login vs Registro */}
+                        <div className="flex border-b border-white/10 bg-slate-900/60 p-1">
+                            <button
+                                type="button"
+                                onClick={() => setAuthModalMode('register')}
+                                className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+                                    authModalMode === 'register' 
+                                        ? 'bg-emerald-600 text-white shadow-md' 
+                                        : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                ✨ Soy Nuevo / Crear Cuenta
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setAuthModalMode('login')}
+                                className={`flex-1 py-2 text-xs font-black rounded-xl transition-all ${
+                                    authModalMode === 'login' 
+                                        ? 'bg-emerald-600 text-white shadow-md' 
+                                        : 'text-slate-400 hover:text-white'
+                                }`}
+                            >
+                                🔑 Ya tengo cuenta
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleAuthSubmit} className="p-5 space-y-4">
+                            {authModalMode === 'register' ? (
+                                <>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[11px] text-muted uppercase font-bold block mb-1">Nombre *</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={authName}
+                                                onChange={e => setAuthName(e.target.value)}
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                placeholder="ej: Juan"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[11px] text-muted uppercase font-bold block mb-1">Apellido *</label>
+                                            <input
+                                                type="text"
+                                                required
+                                                value={authLastname}
+                                                onChange={e => setAuthLastname(e.target.value)}
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                                placeholder="ej: Pérez"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="text-[11px] text-muted uppercase font-bold block mb-1">Teléfono / WhatsApp *</label>
+                                            <input
+                                                type="tel"
+                                                required
+                                                value={authPhone}
+                                                onChange={e => setAuthPhone(e.target.value)}
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                                                placeholder="ej: 3434567890"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-[11px] text-muted uppercase font-bold block mb-1">DNI (opcional)</label>
+                                            <input
+                                                type="text"
+                                                value={authDni}
+                                                onChange={e => setAuthDni(e.target.value)}
+                                                className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                                                placeholder="ej: 38123456"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] text-muted uppercase font-bold block mb-1">Email *</label>
+                                        <input
+                                            type="email"
+                                            required
+                                            value={authEmail}
+                                            onChange={e => setAuthEmail(e.target.value)}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                            placeholder="tunombre@email.com"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] text-muted uppercase font-bold block mb-1">Contraseña * (mínimo 6 letras)</label>
+                                        <input
+                                            type="password"
+                                            required
+                                            minLength={6}
+                                            value={authPassword}
+                                            onChange={e => setAuthPassword(e.target.value)}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                            placeholder="••••••••"
+                                        />
+                                    </div>
+
+                                    <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-[11px] flex items-center gap-2">
+                                        <Sparkles size={14} className="shrink-0 text-emerald-400" />
+                                        <span>Tu cuenta de jugador quedará lista para seguir tu pedido y reservar canchas.</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div>
+                                        <label className="text-[11px] text-muted uppercase font-bold block mb-1">Email *</label>
+                                        <input
+                                            type="email"
+                                            required
+                                            value={authEmail}
+                                            onChange={e => setAuthEmail(e.target.value)}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                            placeholder="tunombre@email.com"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="text-[11px] text-muted uppercase font-bold block mb-1">Contraseña *</label>
+                                        <input
+                                            type="password"
+                                            required
+                                            value={authPassword}
+                                            onChange={e => setAuthPassword(e.target.value)}
+                                            className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white text-xs focus:outline-none focus:border-emerald-500"
+                                            placeholder="••••••••"
+                                        />
+                                    </div>
+                                </>
+                            )}
+
+                            <button
+                                type="submit"
+                                disabled={authLoading}
+                                className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs uppercase tracking-wider rounded-xl transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 mt-2"
+                            >
+                                {authLoading 
+                                    ? 'Procesando...' 
+                                    : authModalMode === 'register' 
+                                    ? '✅ Crear Cuenta y Confirmar Pedido' 
+                                    : '🔑 Iniciar Sesión y Confirmar Pedido'}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
 
             {/* Admin Management Modal */}
             {showAdminModal && (
