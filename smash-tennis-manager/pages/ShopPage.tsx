@@ -720,10 +720,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                     </div>
                     <div>
                         <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                            <span>Pagos Express por Transferencia</span>
-                            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                                0% Comisión
-                            </span>
+                            <span>Pagos Directos por Transferencia</span>
                         </h4>
                         <p className="text-xs text-slate-400">
                             Alias de {activeInstitution?.name || 'el club'}:{' '}

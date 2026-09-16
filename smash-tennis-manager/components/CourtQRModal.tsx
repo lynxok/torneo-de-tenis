@@ -183,7 +183,7 @@ export const CourtQRModal: React.FC<CourtQRModalProps> = ({
                                         </div>
                                         <div className="flex items-center gap-1.5">
                                             <span className="font-bold text-slate-900">3.</span>
-                                            <span>Aboná con Mercado Pago (0% comisión) y ¡a jugar!</span>
+                                            <span>Aboná por transferencia al buffet y ¡a jugar!</span>
                                         </div>
                                     </div>
 
