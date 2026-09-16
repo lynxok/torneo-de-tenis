@@ -132,7 +132,8 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
         freeSlotsRemaining > 0
     );
 
-    const appliedFeePct = isUserWaived ? 0 : effectiveFeePct;
+    // En el simulador siempre se proyecta según las reglas del torneo/saga elegida
+    const appliedFeePct = effectiveFeePct;
     const platformCommission = (grossTotal * appliedFeePct) / 100;
     const clubNetTotal = grossTotal - platformCommission;
 
@@ -527,7 +528,7 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
                             <div className="flex justify-between items-center text-xs">
                                 <span className="text-slate-300 flex items-center gap-1">
                                     Comisión App ({appliedFeePct}%):
-                                    {isUserWaived && <span className="text-[10px] text-green-400 font-bold">(Bonificado 0%)</span>}
+                                    <span className="text-[10px] text-slate-400">({simIsDirectJump ? 'Salto Directo' : 'Por Mérito / Saga'})</span>
                                 </span>
                                 <span className="font-mono font-bold text-red-400">-${platformCommission.toLocaleString('es-AR')}</span>
                             </div>
