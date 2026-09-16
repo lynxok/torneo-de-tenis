@@ -40,6 +40,7 @@ export const DEFAULT_TIER_CONFIG = {
 
     // Monetization Fixed & Payouts
     monetization_base_fee_fixed: 0,
+    buffet_commission_pct: 0.2, // Comisión de buffet/tienda por defecto
     platform_payout_alias: '',
     platform_payout_holder: ''
 };

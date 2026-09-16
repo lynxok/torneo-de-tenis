@@ -724,9 +724,29 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                         </div>
 
                         {/* Extra Settings & Simulator Inputs */}
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-2">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                            <div className="space-y-1 bg-amber-500/10 border border-amber-500/20 rounded-2xl p-3">
+                                <label className="text-xs text-amber-300 uppercase font-bold flex items-center gap-1.5">
+                                    <Percent size={14} /> Comisión Buffet & Tienda (%)
+                                </label>
+                                <div className="relative mt-1">
+                                    <input
+                                        type="number"
+                                        min={0}
+                                        max={100}
+                                        step="0.05"
+                                        placeholder="0.2"
+                                        className="w-full bg-slate-900 border border-amber-500/30 rounded-xl px-3 py-2 text-amber-300 font-bold text-sm focus:border-primary outline-none"
+                                        value={config.buffet_commission_pct ?? 0.2}
+                                        onChange={e => setConfig({ ...config, buffet_commission_pct: Number(e.target.value) })}
+                                    />
+                                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-amber-400 font-bold text-xs">%</span>
+                                </div>
+                                <p className="text-[10px] text-amber-200/80 mt-1">Uso de plataforma sobre ventas con comprobante.</p>
+                            </div>
+
                             <div className="space-y-1">
-                                <label className="text-xs text-muted uppercase font-bold">Cargo Fijo Base por Jugador ($)</label>
+                                <label className="text-xs text-muted uppercase font-bold">Cargo Fijo Base Torneos ($)</label>
                                 <div className="relative">
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted font-bold">$</span>
                                     <input
@@ -739,7 +759,7 @@ export const AdminSettings: React.FC<AdminSettingsProps> = ({ user }) => {
                                         onChange={e => setConfig({ ...config, monetization_base_fee_fixed: Number(e.target.value) })}
                                     />
                                 </div>
-                                <p className="text-[10px] text-muted">Monto adicional fijo cobrado por jugador.</p>
+                                <p className="text-[10px] text-muted">Monto adicional fijo cobrado por inscripto.</p>
                             </div>
 
                             <div className="space-y-1">

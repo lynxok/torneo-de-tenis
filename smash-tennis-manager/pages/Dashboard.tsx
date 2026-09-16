@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { UserProfile, Match, Tournament, Booking, RankingPointRecord, StoreOrder, Institution } from '../types';
+import { UserProfile, Match, Tournament, Booking, RankingPointRecord, StoreOrder, Institution, SystemConfig } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import {
@@ -10,6 +10,7 @@ import {
     ArrowRight,
     Users,
     TrendingUp,
+    Percent,
     Clock,
     Plus,
     Search,
@@ -72,9 +73,10 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
     const [todayBookings, setTodayBookings] = useState<Booking[]>([]);
     const [pendingUsersList, setPendingUsersList] = useState<UserProfile[]>([]);
 
-    // SuperAdmin Buffet Monthly Fee Calculation (0.2%)
+    // SuperAdmin Buffet Monthly Fee Calculation
     const [buffetOrders, setBuffetOrders] = useState<StoreOrder[]>([]);
     const [institutionsList, setInstitutionsList] = useState<Institution[]>([]);
+    const [systemConfig, setSystemConfig] = useState<SystemConfig | null>(null);
     const [selectedMonth, setSelectedMonth] = useState<string>(() => {
         const now = new Date();
         return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -115,7 +117,8 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 playerMatches,
                 playerRanking,
                 allBuffetOrders,
-                allInstitutions
+                allInstitutions,
+                sysConfig
             ] = await Promise.all([
                 api.tournaments.getActive(),
                 api.auth.getPendingProfiles(targetInstitutionId),
@@ -124,7 +127,8 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 showPlayerSection ? api.matches.getByUser(user.id) : Promise.resolve([]),
                 showPlayerSection ? api.rankings.getHistory(user.id) : Promise.resolve([]),
                 isSuperAdmin ? api.shop.getOrders('all') : Promise.resolve([]),
-                isSuperAdmin ? api.institutions.getAll() : Promise.resolve([])
+                isSuperAdmin ? api.institutions.getAll() : Promise.resolve([]),
+                api.settings.getConfig()
             ]);
 
             // Calculate real revenue from today's and yesterday's transactions
@@ -156,6 +160,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             });
             setPendingUsersList(pendingProfiles);
             setTodayBookings(bookingsData);
+            setSystemConfig(sysConfig || null);
             if (isSuperAdmin) {
                 setBuffetOrders(allBuffetOrders || []);
                 setInstitutionsList(allInstitutions || []);
@@ -192,7 +197,10 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
     const myTotalPoints = myRankingHistory.reduce((sum, pt) => sum + pt.points, 0);
     const myNextMatch = myMatches.find(m => !m.winner_id && m.scheduled_at);
 
-    // Calculate SuperAdmin monthly buffet commission metrics (0.2% fee on orders with payment receipt)
+    // Calculate SuperAdmin monthly buffet commission metrics (dynamic fee from systemConfig or default 0.2%)
+    const buffetFeePct = systemConfig?.buffet_commission_pct ?? 0.2;
+    const buffetFeeRate = buffetFeePct / 100;
+
     const availableMonths = React.useMemo(() => {
         if (!isSuperAdmin || buffetOrders.length === 0) {
             const now = new Date();
@@ -253,7 +261,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             };
             current.totalSales += Number(order.total_amount || 0);
             current.ordersCount += 1;
-            current.feeToCharge = current.totalSales * 0.002; // 0.2% commission
+            current.feeToCharge = current.totalSales * buffetFeeRate;
             map.set(instId, current);
         });
 
@@ -262,7 +270,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             .sort((a, b) => b.totalSales - a.totalSales);
 
         const grandTotalSales = validOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
-        const grandTotalFee = grandTotalSales * 0.002; // 0.2%
+        const grandTotalFee = grandTotalSales * buffetFeeRate;
 
         return {
             totalOrders: validOrders.length,
@@ -270,7 +278,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             grandTotalFee,
             clubBreakdown
         };
-    }, [isSuperAdmin, buffetOrders, institutionsList, selectedMonth]);
+    }, [isSuperAdmin, buffetOrders, institutionsList, selectedMonth, buffetFeeRate]);
 
     return (
         <div className="space-y-8 animate-fade-up">
@@ -307,7 +315,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 <KPICard label="Solicitudes" value={stats.pendingUsers} sub="Pendientes de aprobación" icon={Users} color="text-purple-400" onClick={() => onNavigate('admin-users')} />
             </div>
 
-            {/* SUPER ADMIN: LIQUIDACIÓN MENSUAL BUFFET & TIENDA (0.2% COMISIÓN) */}
+            {/* SUPER ADMIN: LIQUIDACIÓN MENSUAL BUFFET & TIENDA */}
             {isSuperAdmin && superAdminBuffetSummary && (
                 <div className="bg-gradient-to-br from-card via-card to-primary/5 border border-primary/20 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
                     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-white/10">
@@ -319,7 +327,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                 <div className="flex items-center gap-2">
                                     <h2 className="text-xl font-black text-white">Liquidación Buffet & Tienda</h2>
                                     <span className="bg-primary/20 text-primary text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-primary/30">
-                                        Comisión 0.2%
+                                        Comisión {buffetFeePct}%
                                     </span>
                                 </div>
                                 <p className="text-xs text-muted mt-0.5">
@@ -328,25 +336,36 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                             </div>
                         </div>
 
-                        {/* Month Selector */}
-                        <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-2xl p-1.5 self-stretch md:self-auto">
-                            <Calendar size={16} className="text-primary ml-2" />
-                            <select 
-                                value={selectedMonth} 
-                                onChange={(e) => setSelectedMonth(e.target.value)}
-                                className="bg-transparent text-white text-xs font-bold py-1 px-2 focus:outline-none cursor-pointer"
+                        {/* Month Selector & Link to Settings */}
+                        <div className="flex items-center gap-2 self-stretch md:self-auto">
+                            <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-2xl p-1.5 flex-1 md:flex-none">
+                                <Calendar size={16} className="text-primary ml-2" />
+                                <select 
+                                    value={selectedMonth} 
+                                    onChange={(e) => setSelectedMonth(e.target.value)}
+                                    className="bg-transparent text-white text-xs font-bold py-1 px-2 focus:outline-none cursor-pointer"
+                                >
+                                    {availableMonths.map(m => {
+                                        const [year, month] = m.split('-');
+                                        const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                        const label = dateObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+                                        return (
+                                            <option key={m} value={m} className="bg-slate-900 text-white capitalize">
+                                                {label}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            <button 
+                                onClick={() => onNavigate('admin-settings')}
+                                title="Editar porcentaje de comisión en Ajustes"
+                                className="px-3 py-2 bg-white/5 hover:bg-white/10 text-muted hover:text-white border border-white/10 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all"
                             >
-                                {availableMonths.map(m => {
-                                    const [year, month] = m.split('-');
-                                    const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
-                                    const label = dateObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
-                                    return (
-                                        <option key={m} value={m} className="bg-slate-900 text-white capitalize">
-                                            {label}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                                <Settings size={14} />
+                                <span className="hidden sm:inline">Configurar %</span>
+                            </button>
                         </div>
                     </div>
 
@@ -374,7 +393,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
 
                         <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4 shadow-lg shadow-primary/5">
                             <div className="text-[11px] font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
-                                <Sparkles size={14} /> Comisión a Cobrar (0.2%)
+                                <Sparkles size={14} /> Comisión a Cobrar ({buffetFeePct}%)
                             </div>
                             <div className="text-2xl font-black text-primary">
                                 ${superAdminBuffetSummary.grandTotalFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -401,7 +420,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                         <th className="py-3 px-4">Club / Institución</th>
                                         <th className="py-3 px-4 text-center">Pedidos con Comprobante</th>
                                         <th className="py-3 px-4 text-right">Venta Total ($)</th>
-                                        <th className="py-3 px-4 text-right text-primary font-bold">Comisión 0.2% a Cobrar</th>
+                                        <th className="py-3 px-4 text-right text-primary font-bold">Comisión ({buffetFeePct}%) a Cobrar</th>
                                         <th className="py-3 px-4 text-center">Estado de Cobro</th>
                                     </tr>
                                 </thead>

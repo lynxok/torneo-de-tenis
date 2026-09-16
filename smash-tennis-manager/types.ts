@@ -116,6 +116,7 @@ export interface SystemConfig {
 
     // Platform Monetization Settings
     monetization_base_fee_fixed?: number; // Fee fijo por inscripto (opcional)
+    buffet_commission_pct?: number;       // % Comisión uso de plataforma en ventas de Buffet/Tienda (Default: 0.2%)
     platform_payout_alias?: string;       // Alias Mercado Pago / CVU de la app
     platform_payout_holder?: string;      // Titular de la cuenta
 }
