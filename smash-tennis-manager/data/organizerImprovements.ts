@@ -23,6 +23,50 @@ export interface OrganizerRelease {
 
 export const ORGANIZER_RELEASES: OrganizerRelease[] = [
   {
+    id: 'release_2026_w38_v1_7_5',
+    version: 'v1.7.5',
+    title: 'Novedades para Organizadores & Clubes',
+    subtitle: 'Carteles QR para Canchas en A4 Vertical, Pedidos Directos y Control de Buffet',
+    badge: 'Nueva Versión v1.7.5',
+    releaseDate: '2026-09-16',
+    validityDays: 14,
+    targetRoles: ['admin', 'superadmin', 'professor', 'coordinator'],
+    items: [
+      {
+        id: 'feat_qr_can_print_portrait',
+        title: 'Carteles QR Imprimibles en Formato A4 Vertical',
+        description: 'Generá e imprimí carteles QR para cada cancha listos en formato vertical para plastificar y colgar en la red. El jugador escanea y pide directamente al buffet.',
+        tag: 'Canchas & Buffet',
+        tagColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30',
+        iconName: 'printer'
+      },
+      {
+        id: 'feat_direct_transfer_shop',
+        title: 'Cobros Directos por Transferencia Bancaria o MP',
+        description: 'Se simplificó la experiencia de pago: cobrá con tu Alias/CVU directamente. El jugador adjunta la foto o captura del comprobante bancario antes de enviar la orden.',
+        tag: 'Finanzas & Buffet',
+        tagColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30',
+        iconName: 'credit-card'
+      },
+      {
+        id: 'feat_guest_shopping_and_auth',
+        title: 'Carta Digital Abierta para Invitados y Socios',
+        description: 'Cualquier tenista que escanee el QR puede armar su pedido al instante sin bloqueos previos de login. Solo al confirmar el pedido se autentica o registra rápidamente como Jugador.',
+        tag: 'Experiencia Jugador',
+        tagColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+        iconName: 'shopping-bag'
+      },
+      {
+        id: 'feat_stock_reservation_cash_sync',
+        title: 'Reserva Virtual de Stock y Asiento en Caja',
+        description: 'Control anti-sobreventa: el stock se bloquea preventivamente por 15 minutos mientras el jugador transfiere. Al marcar el pedido como entregado, el ingreso se asienta automáticamente en la Caja del club.',
+        tag: 'Stock & Caja',
+        tagColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30',
+        iconName: 'wallet'
+      }
+    ]
+  },
+  {
     id: 'release_2026_w37_v1_7_0',
     version: 'v1.7.0',
     title: 'Novedades para Organizadores & Clubes',
