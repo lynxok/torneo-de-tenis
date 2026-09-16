@@ -127,7 +127,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 showPlayerSection ? api.matches.getByUser(user.id) : Promise.resolve([]),
                 showPlayerSection ? api.rankings.getHistory(user.id) : Promise.resolve([]),
                 isSuperAdmin ? api.shop.getOrders('all') : Promise.resolve([]),
-                isSuperAdmin ? api.institutions.getAll() : Promise.resolve([]),
+                api.institutions.getAll(),
                 api.settings.getConfig()
             ]);
 
@@ -161,9 +161,9 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             setPendingUsersList(pendingProfiles);
             setTodayBookings(bookingsData);
             setSystemConfig(sysConfig || null);
+            setInstitutionsList(allInstitutions || []);
             if (isSuperAdmin) {
                 setBuffetOrders(allBuffetOrders || []);
-                setInstitutionsList(allInstitutions || []);
             }
 
             if (showPlayerSection) {
@@ -280,6 +280,16 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
         };
     }, [isSuperAdmin, buffetOrders, institutionsList, selectedMonth, buffetFeeRate]);
 
+    const effectiveInstitutionName = React.useMemo(() => {
+        if (user.institution && user.institution !== 'Club Smash') return user.institution;
+        if (user.institution_id && institutionsList.length > 0) {
+            const match = institutionsList.find(i => i.id === user.institution_id);
+            if (match && match.name !== 'Club Smash') return match.name;
+        }
+        const active = institutionsList.find(i => i.is_active !== false && i.name !== 'Club Smash');
+        return active?.name || user.institution || 'Sede Central';
+    }, [user.institution, user.institution_id, institutionsList]);
+
     return (
         <div className="space-y-8 animate-fade-up">
             {/* Historias Temporales Smash */}
@@ -292,7 +302,7 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             <div id="dashboard-header" className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-1">Hola, {user.name}</h1>
-                    <p className="text-muted">Panel de Gestión Operativa • <span className="text-primary font-bold">{user.institution || 'Vista General'}</span></p>
+                    <p className="text-muted">Panel de Gestión Operativa • <span className="text-primary font-bold">{effectiveInstitutionName}</span></p>
                 </div>
 
                 <div className="flex gap-3">
@@ -1049,9 +1059,23 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                             <div className="w-16 h-16 bg-slate-800/50 rounded-full flex items-center justify-center text-muted">
                                 <Calendar size={32} />
                             </div>
-                            <div>
+                            <div className="space-y-1">
                                 <h3 className="text-lg font-bold text-white">Sin partidos programados</h3>
                                 <p className="text-muted text-sm">No tienes partidos coordinados próximamente.</p>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                                <button
+                                    onClick={() => onNavigate('open-matches')}
+                                    className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 flex items-center gap-2 transition-all cursor-pointer"
+                                >
+                                    <Swords size={15} /> Buscar partido
+                                </button>
+                                <button
+                                    onClick={() => onNavigate('bookings')}
+                                    className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                                >
+                                    <Calendar size={14} /> Reservar Cancha
+                                </button>
                             </div>
                         </div>
                     )}

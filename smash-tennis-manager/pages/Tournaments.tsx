@@ -3,7 +3,7 @@ import { Tournament, UserProfile, Institution, TournamentSaga } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List, Tv, Eye } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List, Tv, Eye, Settings2 } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, TIER_META, TIER_ORDER, getEffectiveTournamentTier, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
 import { TournamentsMap } from '../components/TournamentsMap';
@@ -193,13 +193,13 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            // Use selected institution for superadmin, or fallback to user's institution
+            // Use selected institution for superadmin, or fallback to user's institution / active institution
             const targetInstitutionId = (user.role === 'superadmin' && newTournament.institution_id)
                 ? newTournament.institution_id
-                : user.institution_id;
+                : (user.institution_id || newTournament.institution_id || (institutions.length > 0 ? institutions[0].id : null));
 
             if (!targetInstitutionId) {
-                addToast("Error: Institución no definida", 'error');
+                addToast("Error: Institución no seleccionada. Por favor elige un Club.", 'error');
                 return;
             }
 
@@ -346,12 +346,21 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
         }
     };
 
-    const [institutions, setInstitutions] = useState<any[]>([]);
+    const [institutions, setInstitutions] = useState<Institution[]>([]);
     useEffect(() => {
-        if (user.role === 'superadmin') {
-            api.institutions.getAll().then(setInstitutions);
-        }
-    }, [user.role]);
+        api.institutions.getAll()
+            .then(data => {
+                const active = (data || []).filter(i => i.is_active !== false);
+                setInstitutions(active);
+                if (active.length > 0 && !newTournament.institution_id) {
+                    const defaultId = user.institution_id && active.some(i => i.id === user.institution_id)
+                        ? user.institution_id
+                        : active[0].id;
+                    setNewTournament(prev => ({ ...prev, institution_id: defaultId }));
+                }
+            })
+            .catch(console.error);
+    }, [user.institution_id]);
 
     // Group tournaments by start month
     const groupedTournaments = React.useMemo(() => {
@@ -773,19 +782,19 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                         </div>
                         <form onSubmit={handleCreate} className="p-6 space-y-4 overflow-y-auto">
 
-                            {/* Superadmin: Select Institution */}
-                            {user.role === 'superadmin' && (
+                            {/* Club / Sede del Torneo */}
+                            {(user.role === 'superadmin' || !user.institution_id || institutions.length > 1) && (
                                 <div className="space-y-1">
-                                    <label className="text-xs text-muted uppercase font-bold">Institución</label>
+                                    <label className="text-xs text-muted uppercase font-bold">Club / Sede del Torneo *</label>
                                     <select
-                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary"
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-white focus:outline-none focus:border-primary text-sm font-semibold"
                                         value={newTournament.institution_id || ''}
                                         onChange={e => setNewTournament({ ...newTournament, institution_id: e.target.value })}
                                         required
                                     >
                                         <option value="">Selecciona un Club...</option>
                                         {institutions.map(inst => (
-                                            <option key={inst.id} value={inst.id}>{inst.name}</option>
+                                            <option key={inst.id} value={inst.id}>{inst.name} {inst.city ? `(${inst.city})` : ''}</option>
                                         ))}
                                     </select>
                                 </div>

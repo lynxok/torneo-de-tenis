@@ -179,7 +179,33 @@ export const api = {
 
             if (!data.gender) data.gender = 'masculino';
 
-            return { ...data, institution: data.institutions?.name } as UserProfile;
+            let resolvedInstitutionName = data.institutions?.name;
+            let resolvedInstitutionId = data.institution_id;
+
+            // Heal inactive legacy institution reference
+            if (!resolvedInstitutionName || resolvedInstitutionName === 'Club Smash' || resolvedInstitutionId === '4c2d5501-e394-46bb-85bd-6848cb8d065f') {
+                try {
+                    const { data: activeInst } = await supabase
+                        .from('institutions')
+                        .select('id, name')
+                        .neq('is_active', false)
+                        .neq('name', 'Club Smash')
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (activeInst) {
+                        resolvedInstitutionName = activeInst.name;
+                        resolvedInstitutionId = activeInst.id;
+                        data.institutions = activeInst;
+                        data.institution_id = activeInst.id;
+                    }
+                } catch (e) {
+                    console.warn("Could not fallback to active institution:", e);
+                }
+            }
+
+            return { ...data, institution: resolvedInstitutionName, institution_id: resolvedInstitutionId } as UserProfile;
         },
         async getPendingProfiles(institutionId?: string) {
             try {

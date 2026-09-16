@@ -1555,8 +1555,10 @@ const PlayerNewBookingModal = ({
                                     <h3 className="font-bold text-white text-xl">¡Reserva Registrada!</h3>
                                     <p className="text-emerald-400 text-xs font-bold">
                                         {total > 0 
-                                            ? 'Tu reserva virtual ha sido reservada con éxito (sujeta a verificación del club).' 
-                                            : 'Tu cancha ha sido reservada con éxito sin cargo.'}
+                                            ? 'Tu reserva virtual ha sido registrada con éxito (sujeta a verificación del comprobante por el club).' 
+                                            : isUserMemberOfInst && hasClubConfiguredPrices
+                                                ? 'Tu cancha ha sido reservada con éxito sin cargo por beneficio de socio.'
+                                                : 'Tu turno fue registrado en el sistema. El canon correspondiente se coordina directamente con administración del club.'}
                                     </p>
                                 </div>
 
@@ -1940,7 +1942,11 @@ const PlayerNewBookingModal = ({
                                         <div className="bg-primary/10 border border-primary/20 p-4 rounded-xl flex justify-between items-center">
                                             <div>
                                                 <div className="flex items-center gap-2 mb-1">
-                                                    <span className="text-xs text-primary font-bold uppercase">Total a Pagar</span>
+                                                    <span className="text-xs text-primary font-bold uppercase">
+                                                        {total === 0 && !(isUserMemberOfInst && hasClubConfiguredPrices)
+                                                            ? 'Modalidad de Cobro'
+                                                            : 'Total a Pagar'}
+                                                    </span>
                                                     {isUserMemberOfInst ? (
                                                         <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-2 py-0.5 rounded-full font-bold">
                                                             ★ Tarifa Socio Aplicada
@@ -1955,12 +1961,18 @@ const PlayerNewBookingModal = ({
                                                 <div className="text-[10px] text-muted space-x-1">
                                                     <span>{durationMultiplier} {durationMultiplier === 1 ? 'turno' : 'turnos'} ({totalDuration} min)</span>
                                                     <span>•</span>
-                                                    <span className="text-slate-300">${getBaseHourlyPrice()}/turno ({isNightSlot(selectedSlot?.start_time) ? 'Nocturno' : 'Diurno'})</span>
+                                                    <span className="text-slate-300">
+                                                        {total === 0 && !(isUserMemberOfInst && hasClubConfiguredPrices)
+                                                            ? 'Canon de cancha a coordinar en club'
+                                                            : `$${getBaseHourlyPrice()}/turno (${isNightSlot(selectedSlot?.start_time) ? 'Nocturno' : 'Diurno'})`}
+                                                    </span>
                                                 </div>
                                             </div>
                                             <div className="text-right">
-                                                <div className="text-2xl font-black text-white font-mono">
-                                                    ${total}
+                                                <div className="text-xl sm:text-2xl font-black text-white font-mono">
+                                                    {total === 0 && !(isUserMemberOfInst && hasClubConfiguredPrices)
+                                                        ? 'A Coordinar'
+                                                        : `$${total}`}
                                                 </div>
                                             </div>
                                         </div>
@@ -2078,12 +2090,12 @@ const PlayerNewBookingModal = ({
                                                     <CheckCircle2 size={16} />
                                                     {isUserMemberOfInst && hasClubConfiguredPrices 
                                                         ? 'Turno sin cargo por Beneficio de Socio Activo' 
-                                                        : 'Turno sin costo directo asignado'}
+                                                        : 'Turno sin canon online fijado'}
                                                 </div>
                                                 <p className="text-xs text-slate-300">
                                                     {isUserMemberOfInst && hasClubConfiguredPrices
                                                         ? 'Tu membresía cubre este turno. No requieres realizar ningún pago ni adjuntar comprobante.'
-                                                        : 'Cualquier costo adicional o tarifa del club se coordina directamente en la administración.'}
+                                                        : 'Este club no cobra a través de la plataforma. Cualquier canon de cancha o luz se abona y coordina directamente con administración.'}
                                                 </p>
                                             </div>
                                         )}
@@ -2156,7 +2168,9 @@ const PlayerNewBookingModal = ({
                                     }`}
                                 >
                                     {total === 0 
-                                        ? 'Confirmar Reserva Gratis' 
+                                        ? (isUserMemberOfInst && hasClubConfiguredPrices
+                                            ? 'Confirmar Reserva (Beneficio Socio)'
+                                            : 'Confirmar reserva — pago a coordinar')
                                         : receiptImage 
                                             ? 'Confirmar Reserva con Comprobante' 
                                             : 'Adjuntá comprobante para confirmar'}
@@ -2267,9 +2281,9 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                 setAllInstitutions(active);
 
                 let targetId = selectedInstId || user.institution_id;
-                let current = targetId ? active.find(i => i.id === targetId) : null;
+                let current = targetId ? active.find(i => i.id === targetId && i.name !== 'Club Smash') : null;
                 if (!current && active.length > 0) {
-                    current = active[0];
+                    current = active.find(i => i.name !== 'Club Smash') || active[0];
                     setSelectedInstId(current.id);
                 }
                 setInstitution(current || null);
@@ -2704,12 +2718,12 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                                 ) : (
                                                     <button 
                                                         onClick={() => handleSlotClick(time, court)} 
-                                                        className="w-full h-full min-h-[44px] rounded-lg border border-dashed border-white/10 hover:border-primary/50 hover:bg-primary/10 transition-all flex items-center justify-center gap-1 group/btn p-1"
-                                                        title={`Turno disponible: ${time} hs en ${court}. Clic para reservar o bloquear.`}
+                                                        className="w-full h-full min-h-[46px] rounded-lg border-2 border-dashed border-emerald-500/35 bg-emerald-500/[0.04] hover:border-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-1.5 group/btn p-1.5 shadow-sm"
+                                                        title={`Turno disponible: ${time} hs en ${court}. Clic para registrar turno o bloquear cancha.`}
                                                     >
-                                                        <span className="text-[10px] text-white/30 group-hover/btn:text-primary font-bold flex items-center gap-1 transition-colors">
-                                                            <Plus size={11} className="opacity-40 group-hover/btn:opacity-100" />
-                                                            <span className="hidden sm:inline">Disponible</span>
+                                                        <span className="text-xs text-emerald-300 group-hover/btn:text-emerald-200 font-extrabold flex items-center gap-1 transition-colors">
+                                                            <Plus size={13} className="text-emerald-400 group-hover/btn:scale-110 transition-transform stroke-[2.5]" />
+                                                            <span className="hidden sm:inline tracking-tight">Disponible</span>
                                                         </span>
                                                     </button>
                                                 )}
