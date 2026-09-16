@@ -3388,6 +3388,74 @@ export const api = {
             return true;
         },
 
+        // --- SISTEMA DE RESERVA TEMPORAL (15 MIN) Y PEDIDOS CON COMPROBANTE ---
+        async reserveStock(institutionId: string, items: StoreOrderItem[], customerName: string): Promise<string> {
+            const reservationId = `res-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+            const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString(); // 15 minutos
+
+            const reservationOrder: Partial<StoreOrder> = {
+                id: reservationId,
+                institution_id: institutionId || 'default',
+                customer_name: customerName || 'Cliente',
+                items: items,
+                total_amount: items.reduce((acc, it) => acc + (it.price * it.quantity), 0),
+                payment_method: 'transfer_mp',
+                payment_status: 'pending',
+                is_confirmed: false,
+                expires_at: expiresAt,
+                created_at: new Date().toISOString()
+            };
+
+            try {
+                const key = `store_reservations_${institutionId || 'default'}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                const current: any[] = (setting?.value && Array.isArray(setting.value)) ? setting.value : [];
+                // Filtrar reservas que ya expiraron
+                const now = new Date().toISOString();
+                const active = current.filter((r: any) => r.expires_at > now);
+                await supabase.from('system_settings').upsert({
+                    key,
+                    value: [...active, reservationOrder],
+                    updated_at: new Date()
+                });
+            } catch (e) {
+                console.error("Error creating reservation:", e);
+            }
+
+            return reservationId;
+        },
+
+        async getReservedStockMap(institutionId: string): Promise<{ [productId: string]: number }> {
+            const reservedMap: { [productId: string]: number } = {};
+            try {
+                const key = `store_reservations_${institutionId || 'default'}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    const now = new Date().toISOString();
+                    const activeReservations = setting.value.filter((r: any) => r.expires_at > now && !r.is_confirmed);
+                    activeReservations.forEach((res: any) => {
+                        res.items?.forEach((it: StoreOrderItem) => {
+                            reservedMap[it.product_id] = (reservedMap[it.product_id] || 0) + it.quantity;
+                        });
+                    });
+                }
+            } catch (e) {
+                console.error("Error fetching reserved stock:", e);
+            }
+            return reservedMap;
+        },
+
+        async cancelReservation(institutionId: string, reservationId: string): Promise<void> {
+            try {
+                const key = `store_reservations_${institutionId || 'default'}`;
+                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                if (setting?.value && Array.isArray(setting.value)) {
+                    const updated = setting.value.filter((r: any) => r.id !== reservationId);
+                    await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
+                }
+            } catch (e) {}
+        },
+
         async createOrder(order: Partial<StoreOrder>): Promise<StoreOrder> {
             const newOrder: StoreOrder = {
                 id: `order-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -3401,28 +3469,47 @@ export const api = {
                 total_amount: Number(order.total_amount) || 0,
                 payment_method: order.payment_method || 'transfer_mp',
                 payment_status: 'pending',
+                receipt_url: order.receipt_url || undefined,
+                is_confirmed: order.is_confirmed ?? true,
                 created_at: new Date().toISOString()
             };
 
-            // 1. Try table
+            // Descontar stock definitivo de los productos
+            try {
+                for (const it of newOrder.items) {
+                    const products = await api.shop.getProducts(newOrder.institution_id);
+                    const prod = products.find(p => p.id === it.product_id);
+                    if (prod && typeof prod.stock === 'number') {
+                        const newStock = Math.max(0, prod.stock - it.quantity);
+                        await api.shop.updateProduct(prod.id, { stock: newStock, institution_id: newOrder.institution_id });
+                    }
+                }
+            } catch (err) {
+                console.error("Error decrementing stock:", err);
+            }
+
+            // 1. Guardar en tabla si existe
             try {
                 const { data, error } = await supabase.from('store_orders').insert(newOrder).select().single();
                 if (!error && data) return data;
             } catch (e) {}
 
-            // 2. Fallback to system_settings
+            // 2. Fallback a system_settings
             try {
                 const key = `store_orders_${newOrder.institution_id}`;
                 const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
                 const current = (setting?.value && Array.isArray(setting.value)) ? setting.value : [];
-                const updated = [newOrder, ...current].slice(0, 100);
+                const updated = [newOrder, ...current].slice(0, 150);
                 await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
             } catch (e) {}
+
             return newOrder;
         },
 
         async getOrders(institutionId?: string): Promise<StoreOrder[]> {
             const instId = institutionId || 'default';
+            let orders: StoreOrder[] = [];
+
             try {
                 let query = supabase.from('store_orders').select('*').order('created_at', { ascending: false });
                 if (institutionId && institutionId !== 'all') {
@@ -3430,21 +3517,25 @@ export const api = {
                 }
                 const { data, error } = await query;
                 if (!error && data && data.length > 0) {
-                    return data as StoreOrder[];
+                    orders = data as StoreOrder[];
                 }
             } catch (e) {}
 
-            try {
-                const key = `store_orders_${instId}`;
-                const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
-                if (setting?.value && Array.isArray(setting.value)) {
-                    return setting.value as StoreOrder[];
-                }
-            } catch (e) {}
-            return [];
+            if (orders.length === 0) {
+                try {
+                    const key = `store_orders_${instId}`;
+                    const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                    if (setting?.value && Array.isArray(setting.value)) {
+                        orders = setting.value as StoreOrder[];
+                    }
+                } catch (e) {}
+            }
+
+            // Filtrar para que solo aparezcan los pedidos confirmados (con comprobante o confirmados)
+            return orders.filter(o => o.is_confirmed !== false && (o.receipt_url || o.payment_status === 'verified' || o.payment_status === 'delivered'));
         },
 
-        async updateOrderStatus(orderId: string, status: 'pending' | 'verified' | 'delivered' | 'cancelled', institutionId?: string): Promise<boolean> {
+        async updateOrderStatus(orderId: string, status: 'pending' | 'verified' | 'delivered' | 'cancelled', institutionId?: string, orderDetails?: StoreOrder): Promise<boolean> {
             try {
                 await supabase.from('store_orders').update({ payment_status: status }).eq('id', orderId);
             } catch (e) {}
@@ -3457,7 +3548,73 @@ export const api = {
                     await supabase.from('system_settings').upsert({ key, value: updated, updated_at: new Date() });
                 }
             } catch (e) {}
+
+            // Sincronizar automáticamente con la CAJA DEL CLUB si se verifica o entrega
+            if ((status === 'verified' || status === 'delivered') && orderDetails && institutionId) {
+                try {
+                    await api.reports.createTransaction({
+                        institution_id: institutionId,
+                        date: new Date().toISOString(),
+                        description: `Buffet / Tienda: Pedido #${orderId.slice(-6).toUpperCase()} (${orderDetails.customer_name || 'Socio'})`,
+                        amount: orderDetails.total_amount,
+                        type: 'income',
+                        category: 'buffet_sale',
+                        status: 'completed',
+                        payment_method: 'transfer',
+                        user_name: orderDetails.customer_name
+                    });
+                } catch (txErr) {
+                    console.error("Error creating income transaction for order:", txErr);
+                }
+            }
+
             return true;
+        },
+
+        // Reabastecimiento de stock + Registro de Egreso en Caja
+        async restockProduct(params: {
+            productId: string;
+            institutionId: string;
+            addedUnits: number;
+            unitCost?: number;
+            totalCost?: number;
+            recordExpenseInCash: boolean;
+            productName: string;
+        }): Promise<boolean> {
+            try {
+                // 1. Actualizar stock del producto
+                const products = await api.shop.getProducts(params.institutionId);
+                const currentProduct = products.find(p => p.id === params.productId);
+                if (currentProduct) {
+                    const currentStock = currentProduct.stock || 0;
+                    const newStock = currentStock + params.addedUnits;
+                    await api.shop.updateProduct(params.productId, {
+                        stock: newStock,
+                        cost_price: params.unitCost || currentProduct.cost_price,
+                        institution_id: params.institutionId
+                    });
+                }
+
+                // 2. Si se solicitó registrar como egreso en la Caja del Club
+                if (params.recordExpenseInCash && params.totalCost && params.totalCost > 0) {
+                    await api.reports.createTransaction({
+                        institution_id: params.institutionId,
+                        date: new Date().toISOString(),
+                        description: `Compra de Stock Buffet: ${params.addedUnits}x ${params.productName}`,
+                        amount: params.totalCost,
+                        type: 'expense',
+                        category: 'buffet_stock',
+                        status: 'completed',
+                        payment_method: 'transfer',
+                        user_name: 'Administración Buffet'
+                    });
+                }
+
+                return true;
+            } catch (err) {
+                console.error("Error restocking product:", err);
+                throw err;
+            }
         }
     },
     reports: {

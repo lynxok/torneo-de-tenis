@@ -450,6 +450,7 @@ export interface ClubProduct {
   description?: string;
   category: ProductCategory;
   price: number;
+  cost_price?: number;
   image_url?: string;
   is_available: boolean;
   stock?: number;
@@ -476,6 +477,9 @@ export interface StoreOrder {
   total_amount: number;
   payment_method: 'transfer_mp' | 'cash';
   payment_status: 'pending' | 'verified' | 'delivered' | 'cancelled';
+  receipt_url?: string; // Comprobante de pago cargado
+  is_confirmed?: boolean; // True solo cuando el usuario sube el comprobante
+  expires_at?: string; // Fecha de expiración de reserva (15 min)
   created_at: string;
 }
 
@@ -596,7 +600,7 @@ export interface Transaction {
     description: string;
     amount: number;
     type: 'income' | 'expense';
-    category: 'booking' | 'tournament_fee' | 'product_sale' | 'maintenance' | 'other';
+    category: 'booking' | 'tournament_fee' | 'product_sale' | 'maintenance' | 'other' | 'buffet_sale' | 'buffet_stock';
     status: 'completed' | 'pending';
     payment_method: 'cash' | 'mercadopago' | 'transfer';
     user_name?: string;
