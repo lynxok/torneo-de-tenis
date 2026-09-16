@@ -45,10 +45,14 @@ export const CourtQRModal: React.FC<CourtQRModalProps> = ({
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in overflow-y-auto">
-            {/* CSS print-specific styles to ensure only posters print in A4 */}
+            {/* CSS print-specific styles to ensure posters print in vertical A4 (portrait) */}
             <style>
                 {`
                     @media print {
+                        @page {
+                            size: A4 portrait !important;
+                            margin: 10mm 15mm !important;
+                        }
                         body * {
                             visibility: hidden;
                         }
@@ -67,11 +71,14 @@ export const CourtQRModal: React.FC<CourtQRModalProps> = ({
                         }
                         .qr-print-card {
                             page-break-after: always;
+                            break-after: page;
                             box-shadow: none !important;
                             border: 3px solid #0f172a !important;
                             color: #0f172a !important;
                             background: #ffffff !important;
-                            margin-bottom: 2rem !important;
+                            margin: 0 auto 2rem auto !important;
+                            max-width: 480px !important;
+                            padding: 2rem !important;
                         }
                         .no-print {
                             display: none !important;
