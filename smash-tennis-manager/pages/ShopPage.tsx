@@ -14,11 +14,12 @@ import { CourtQRModal } from '../components/CourtQRModal';
 import { soundEffects } from '../services/soundEffects';
 
 interface ShopPageProps {
-    user: UserProfile;
+    user?: UserProfile | null;
     institutions?: Institution[];
+    onNavigateToBookings?: () => void;
 }
 
-export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInstitutions }) => {
+export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInstitutions, onNavigateToBookings }) => {
     const { addToast } = useToast();
     const [institutions, setInstitutions] = useState<Institution[]>(propInstitutions || []);
 
@@ -28,12 +29,12 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
 
     // FILTRO DE CLUBES:
     // Si es superadmin, ve todos. Si es admin/coordinator de club, ve solo el suyo.
-    const isSuperAdmin = user.role === 'superadmin';
-    const isClubAdmin = user.role === 'admin' || user.role === 'superadmin' || user.role === 'coordinator';
+    const isSuperAdmin = user?.role === 'superadmin';
+    const isClubAdmin = user?.role === 'admin' || user?.role === 'superadmin' || user?.role === 'coordinator';
 
     const [selectedInstId, setSelectedInstId] = useState<string>(() => {
         if (clubFromUrl) return clubFromUrl;
-        if (user.institution_id) return user.institution_id;
+        if (user?.institution_id) return user.institution_id;
         return (propInstitutions && propInstitutions[0]?.id) || 'default';
     });
 
@@ -41,19 +42,19 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
         if (!propInstitutions || propInstitutions.length === 0) {
             api.institutions.getAll().then(list => {
                 let filteredList = list;
-                if (!isSuperAdmin && user.institution_id) {
+                if (!isSuperAdmin && user?.institution_id) {
                     filteredList = list.filter(i => i.id === user.institution_id);
                 }
                 setInstitutions(filteredList);
                 if (!selectedInstId || selectedInstId === 'default') {
-                    const fallbackId = user.institution_id || (filteredList[0]?.id) || 'default';
+                    const fallbackId = user?.institution_id || (filteredList[0]?.id) || 'default';
                     setSelectedInstId(fallbackId);
                 }
             }).catch(console.error);
-        } else if (!isSuperAdmin && user.institution_id) {
+        } else if (!isSuperAdmin && user?.institution_id) {
             setInstitutions(propInstitutions.filter(i => i.id === user.institution_id));
         }
-    }, [propInstitutions, user.institution_id, isSuperAdmin]);
+    }, [propInstitutions, user?.institution_id, isSuperAdmin]);
 
     const [detectedCourt, setDetectedCourt] = useState<string | null>(courtFromUrl);
     const [showCourtQRModal, setShowCourtQRModal] = useState(false);
@@ -73,8 +74,8 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
     const [reservationSecondsLeft, setReservationSecondsLeft] = useState<number>(15 * 60);
 
     // Checkout Form & Comprobante
-    const [customerName, setCustomerName] = useState(() => formatPlayerName(user.name, user.lastname));
-    const [customerPhone, setCustomerPhone] = useState(() => user.phone || '');
+    const [customerName, setCustomerName] = useState(() => user ? formatPlayerName(user.name, user.lastname) : '');
+    const [customerPhone, setCustomerPhone] = useState(() => user?.phone || '');
     const [customerNotes, setCustomerNotes] = useState(() => courtFromUrl ? `Cancha ${courtFromUrl}` : '');
     const [receiptImage, setReceiptImage] = useState<string | null>(null);
     const [submittingOrder, setSubmittingOrder] = useState(false);
@@ -377,7 +378,7 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
             const newOrder = await api.shop.createOrder({
                 institution_id: selectedInstId,
                 institution_name: activeInstitution?.name || 'Club de Tenis',
-                user_id: user.id,
+                user_id: user?.id,
                 customer_name: customerName,
                 customer_phone: customerPhone,
                 customer_notes: customerNotes,
@@ -568,15 +569,26 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                             </p>
                         </div>
                     </div>
-                    <button
-                        onClick={() => {
-                            setDetectedCourt(null);
-                            setCustomerNotes('');
-                        }}
-                        className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
-                    >
-                        Cambiar cancha
-                    </button>
+                    <div className="flex items-center gap-2">
+                        {onNavigateToBookings && (
+                            <button
+                                onClick={onNavigateToBookings}
+                                className="text-xs text-white bg-white/10 hover:bg-white/20 border border-white/20 px-3 py-1.5 rounded-xl font-bold transition-colors flex items-center gap-1.5"
+                                title="Ver disponibilidad y turnos de canchas"
+                            >
+                                <Clock size={13} /> Reservar Canchas
+                            </button>
+                        )}
+                        <button
+                            onClick={() => {
+                                setDetectedCourt(null);
+                                setCustomerNotes('');
+                            }}
+                            className="text-xs text-slate-400 hover:text-white px-3 py-1.5 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 transition-colors"
+                        >
+                            Cambiar cancha
+                        </button>
+                    </div>
                 </div>
             )}
 

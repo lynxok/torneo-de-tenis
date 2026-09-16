@@ -182,6 +182,13 @@ const AppContent = () => {
       return;
     }
 
+    const isShopQr = viewParam === 'shop' || params.get('court') || params.get('cancha');
+    if (isShopQr) {
+      setUnauthView('shop' as any);
+      setActiveView('shop');
+      return;
+    }
+
     if (modeParam === 'login' || modeParam === 'register' || clubParam || viewParam === 'auth' || viewParam === 'login' || viewParam === 'register') {
       setUnauthView('auth');
       if (modeParam === 'register' || viewParam === 'register') setAuthMode('register');
@@ -211,6 +218,9 @@ const AppContent = () => {
 
     if (isExplicitInicio) {
       setActiveView('landing');
+    } else if (viewParam === 'shop' || params.get('court') || params.get('cancha')) {
+      setActiveView('shop');
+      if (clubId) setNavData({ clubId });
     } else if (tournamentId) {
       setActiveView('tournament-detail');
       setNavData(tournamentId);
@@ -372,6 +382,22 @@ const AppContent = () => {
               setActiveView('landing');
             }}
           />
+        </Suspense>
+      );
+    }
+
+    if ((unauthView as any) === 'shop' || activeView === 'shop') {
+      return (
+        <Suspense fallback={<div className="h-screen bg-dark flex items-center justify-center text-primary">Cargando Carta del Club...</div>}>
+          <div className="min-h-screen bg-dark text-white p-4 md:p-8">
+            <ShopPage
+              user={null}
+              onNavigateToBookings={() => {
+                setUnauthView('auth');
+                setActiveView('bookings');
+              }}
+            />
+          </div>
         </Suspense>
       );
     }
@@ -584,7 +610,12 @@ const AppContent = () => {
                 {activeView === 'rankings' && <Rankings user={effectiveUser} />}
                 {activeView === 'players' && <Players user={effectiveUser} onNavigate={handleNavigate} />}
                 {activeView === 'open-matches' && <MatchmakingBoard user={effectiveUser} />}
-                {activeView === 'shop' && <ShopPage user={effectiveUser} />}
+                {activeView === 'shop' && (
+                  <ShopPage
+                    user={effectiveUser}
+                    onNavigateToBookings={() => handleNavigate('bookings')}
+                  />
+                )}
                 {activeView === 'bookings' && <Bookings user={effectiveUser} />}
                 {activeView === 'messages' && (
                   <Messages
