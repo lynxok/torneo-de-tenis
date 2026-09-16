@@ -6,7 +6,7 @@ import { useToast } from '../components/ui/Toast';
 import {
     ShieldCheck, Trophy, Sparkles, TrendingUp, DollarSign, Percent, Calculator,
     Gift, CheckCircle2, AlertCircle, ArrowRight, Flame, Clock, Award, Users,
-    Plus, HelpCircle, Layers, Star, Zap, Info
+    Plus, HelpCircle, Layers, Star, Zap, Info, Utensils, Coffee, ShoppingBag
 } from 'lucide-react';
 import { TIER_META, TIER_ORDER, calculateTournamentFinances, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
 
@@ -37,11 +37,14 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
     const [creatingSaga, setCreatingSaga] = useState(false);
     const [currentInst, setCurrentInst] = useState<Institution | null>(null);
 
-    // Live Simulator State
+    // Live Simulator State (Torneos)
     const [simPlayers, setSimPlayers] = useState<number>(24);
     const [simPrice, setSimPrice] = useState<number>(20000);
     const [simTierKey, setSimTierKey] = useState<'challenger' | '250' | '500' | '1000' | 'masters'>('250');
     const [simIsDirectJump, setSimIsDirectJump] = useState<boolean>(false);
+
+    // Live Simulator State (Buffet & Tienda Mensual)
+    const [simBuffetMonthlySales, setSimBuffetMonthlySales] = useState<number>(1500000);
 
     useEffect(() => {
         loadData();
@@ -136,6 +139,12 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
     const appliedFeePct = effectiveFeePct;
     const platformCommission = (grossTotal * appliedFeePct) / 100;
     const clubNetTotal = grossTotal - platformCommission;
+
+    // Métricas del Simulador Mensual de Buffet
+    const buffetFeePct = config.buffet_commission_pct ?? 0.2;
+    const buffetMonthlySales = simBuffetMonthlySales;
+    const buffetTotalCommission = (buffetMonthlySales * buffetFeePct) / 100;
+    const buffetNetClub = buffetMonthlySales - buffetTotalCommission;
 
     return (
         <div className="space-y-8 animate-fade-up max-w-6xl mx-auto pb-12">
@@ -559,7 +568,115 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
                 </div>
             </Card>
 
-            {/* 5. TUS SAGAS DE TORNEO REGISTRADAS */}
+            {/* 5. SIMULADOR DE VENTAS MENSUALES DE BUFFET Y TIENDA */}
+            <Card className="border-amber-500/30 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6 md:p-8">
+                <div className="border-b border-white/10 pb-4 mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                    <div>
+                        <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Utensils className="text-amber-400" /> Simulador de Buffet y Tienda (Mensual)
+                        </h3>
+                        <p className="text-xs text-slate-300 mt-1">
+                            Calcula la comisión mensual de la plataforma en base a las ventas totales de buffet y pro-shop de tu club.
+                        </p>
+                    </div>
+                    <span className="px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-bold flex items-center gap-1.5">
+                        <Percent size={14} /> Comisión App: {buffetFeePct}%
+                    </span>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+                    {/* Control de Ventas Totales Mensuales */}
+                    <div className="lg:col-span-7 space-y-6">
+                        <div>
+                            <div className="flex justify-between items-center text-xs font-bold text-white mb-2">
+                                <span className="text-muted uppercase flex items-center gap-1.5">
+                                    <ShoppingBag size={15} className="text-amber-400" /> Ventas Totales Estimadas del Mes:
+                                </span>
+                                <span className="text-amber-300 font-mono text-base font-black">
+                                    ${simBuffetMonthlySales.toLocaleString('es-AR')}
+                                </span>
+                            </div>
+
+                            {/* Slider interactivo */}
+                            <input
+                                type="range"
+                                min={50000}
+                                max={10000000}
+                                step={50000}
+                                value={simBuffetMonthlySales}
+                                onChange={e => setSimBuffetMonthlySales(Number(e.target.value))}
+                                className="w-full accent-amber-500 h-2 bg-slate-800 rounded-lg cursor-pointer"
+                            />
+
+                            {/* Presets rápidos */}
+                            <div className="flex flex-wrap gap-2 mt-3">
+                                {[500000, 1000000, 1500000, 3000000, 5000000].map(amount => (
+                                    <button
+                                        key={amount}
+                                        type="button"
+                                        onClick={() => setSimBuffetMonthlySales(amount)}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
+                                            simBuffetMonthlySales === amount
+                                                ? 'bg-amber-500 text-black shadow-md'
+                                                : 'bg-white/5 border border-white/10 text-slate-400 hover:text-white hover:bg-white/10'
+                                        }`}
+                                    >
+                                        ${(amount / 1000).toLocaleString('es-AR')}k
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Explicación de la modalidad */}
+                        <div className="p-3.5 bg-amber-500/10 border border-amber-500/20 rounded-2xl flex items-start gap-2.5 text-xs text-amber-200/90">
+                            <Info size={18} className="text-amber-400 shrink-0 mt-0.5" />
+                            <div className="leading-relaxed">
+                                <strong>Liquidación Transparente:</strong> Los pedidos abonados con alias/CVU o efectivo ingresan directamente a tu club. Al cierre de mes, se calcula la alícuota de servicio ({buffetFeePct}%) únicamente sobre las ventas registradas y confirmadas con comprobante en la plataforma.
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tarjeta de Resultados */}
+                    <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-black border border-amber-500/20 rounded-3xl p-6 shadow-2xl space-y-4">
+                        <div className="text-xs uppercase font-bold text-muted tracking-wider border-b border-white/10 pb-2 flex justify-between items-center">
+                            <span>Resumen Mensual Buffet</span>
+                            <span className="text-amber-400 font-mono font-bold">{buffetFeePct}% Comisión</span>
+                        </div>
+
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-300">Ventas Totales Mensuales:</span>
+                                <span className="font-mono font-bold text-white text-base">
+                                    ${buffetMonthlySales.toLocaleString('es-AR')}
+                                </span>
+                            </div>
+
+                            <div className="flex justify-between items-center text-xs">
+                                <span className="text-slate-300 flex items-center gap-1">
+                                    Comisión Total App ({buffetFeePct}%):
+                                </span>
+                                <span className="font-mono font-bold text-red-400 text-sm">
+                                    -${buffetTotalCommission.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                </span>
+                            </div>
+
+                            <div className="pt-3 border-t border-white/15 space-y-1">
+                                <div className="text-[11px] text-emerald-400 uppercase font-extrabold tracking-wider">
+                                    Ingreso Neto para el Club (Mensual)
+                                </div>
+                                <div className="text-3xl sm:text-4xl font-black text-emerald-300 font-mono">
+                                    ${buffetNetClub.toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                </div>
+                                <p className="text-[10px] text-muted mt-1">
+                                    El club retiene el {(100 - buffetFeePct).toFixed(2)}% del volumen mensual total de buffet.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </Card>
+
+            {/* 6. TUS SAGAS DE TORNEO REGISTRADAS */}
             <div className="space-y-4">
                 <div className="flex justify-between items-center">
                     <div>
