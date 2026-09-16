@@ -3507,7 +3507,6 @@ export const api = {
         },
 
         async getOrders(institutionId?: string): Promise<StoreOrder[]> {
-            const instId = institutionId || 'default';
             let orders: StoreOrder[] = [];
 
             try {
@@ -3523,15 +3522,27 @@ export const api = {
 
             if (orders.length === 0) {
                 try {
-                    const key = `store_orders_${instId}`;
-                    const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
-                    if (setting?.value && Array.isArray(setting.value)) {
-                        orders = setting.value as StoreOrder[];
+                    if (!institutionId || institutionId === 'all') {
+                        // Buscar todos los keys que comiencen con store_orders_
+                        const { data: allSettings } = await supabase.from('system_settings').select('value').like('key', 'store_orders_%');
+                        if (allSettings && Array.isArray(allSettings)) {
+                            allSettings.forEach(s => {
+                                if (s.value && Array.isArray(s.value)) {
+                                    orders.push(...(s.value as StoreOrder[]));
+                                }
+                            });
+                        }
+                    } else {
+                        const key = `store_orders_${institutionId}`;
+                        const { data: setting } = await supabase.from('system_settings').select('value').eq('key', key).single();
+                        if (setting?.value && Array.isArray(setting.value)) {
+                            orders = setting.value as StoreOrder[];
+                        }
                     }
                 } catch (e) {}
             }
 
-            // Filtrar para que solo aparezcan los pedidos confirmados (con comprobante o confirmados)
+            // Filtrar para que solo aparezcan los pedidos confirmados con comprobante adjunto (o verificados/entregados)
             return orders.filter(o => o.is_confirmed !== false && (o.receipt_url || o.payment_status === 'verified' || o.payment_status === 'delivered'));
         },
 

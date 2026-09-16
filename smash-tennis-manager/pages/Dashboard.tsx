@@ -1,6 +1,6 @@
 
 import React, { useEffect, useState } from 'react';
-import { UserProfile, Match, Tournament, Booking, RankingPointRecord } from '../types';
+import { UserProfile, Match, Tournament, Booking, RankingPointRecord, StoreOrder, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import {
@@ -32,7 +32,11 @@ import {
     X,
     Loader2,
     Camera,
-    Eye
+    Eye,
+    ShoppingBag,
+    Receipt,
+    Building2,
+    Download
 } from 'lucide-react';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { StoriesBar } from '../components/stories/StoriesBar';
@@ -68,6 +72,14 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
     const [todayBookings, setTodayBookings] = useState<Booking[]>([]);
     const [pendingUsersList, setPendingUsersList] = useState<UserProfile[]>([]);
 
+    // SuperAdmin Buffet Monthly Fee Calculation (0.2%)
+    const [buffetOrders, setBuffetOrders] = useState<StoreOrder[]>([]);
+    const [institutionsList, setInstitutionsList] = useState<Institution[]>([]);
+    const [selectedMonth, setSelectedMonth] = useState<string>(() => {
+        const now = new Date();
+        return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    });
+
     // Player Data for Professor & Admin
     const [myMatches, setMyMatches] = useState<Match[]>([]);
     const [myRankingHistory, setMyRankingHistory] = useState<RankingPointRecord[]>([]);
@@ -101,14 +113,18 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 transactionsData,
                 bookingsData,
                 playerMatches,
-                playerRanking
+                playerRanking,
+                allBuffetOrders,
+                allInstitutions
             ] = await Promise.all([
                 api.tournaments.getActive(),
                 api.auth.getPendingProfiles(targetInstitutionId),
                 api.reports.getTransactions(user.institution_id || 'all', 1, 50),
                 user.institution_id ? api.bookings.getByInstitutionAndDate(user.institution_id, today) : Promise.resolve([]),
                 showPlayerSection ? api.matches.getByUser(user.id) : Promise.resolve([]),
-                showPlayerSection ? api.rankings.getHistory(user.id) : Promise.resolve([])
+                showPlayerSection ? api.rankings.getHistory(user.id) : Promise.resolve([]),
+                isSuperAdmin ? api.shop.getOrders('all') : Promise.resolve([]),
+                isSuperAdmin ? api.institutions.getAll() : Promise.resolve([])
             ]);
 
             // Calculate real revenue from today's and yesterday's transactions
@@ -140,6 +156,10 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             });
             setPendingUsersList(pendingProfiles);
             setTodayBookings(bookingsData);
+            if (isSuperAdmin) {
+                setBuffetOrders(allBuffetOrders || []);
+                setInstitutionsList(allInstitutions || []);
+            }
 
             if (showPlayerSection) {
                 setMyMatches(playerMatches);
@@ -172,7 +192,85 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
     const myTotalPoints = myRankingHistory.reduce((sum, pt) => sum + pt.points, 0);
     const myNextMatch = myMatches.find(m => !m.winner_id && m.scheduled_at);
 
-    if (loading) return <div className="flex h-96 items-center justify-center text-primary animate-pulse">Cargando panel administrativo...</div>;
+    // Calculate SuperAdmin monthly buffet commission metrics (0.2% fee on orders with payment receipt)
+    const availableMonths = React.useMemo(() => {
+        if (!isSuperAdmin || buffetOrders.length === 0) {
+            const now = new Date();
+            return [`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`];
+        }
+        const setMonths = new Set<string>();
+        buffetOrders.forEach(o => {
+            if (o.created_at) {
+                setMonths.add(o.created_at.substring(0, 7));
+            }
+        });
+        const currentMonthStr = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+        setMonths.add(currentMonthStr);
+        return Array.from(setMonths).sort().reverse();
+    }, [isSuperAdmin, buffetOrders]);
+
+    const superAdminBuffetSummary = React.useMemo(() => {
+        if (!isSuperAdmin) return null;
+
+        // Condition: order must have receipt_url (or verified/delivered status) and not cancelled
+        const validOrders = buffetOrders.filter(order => {
+            if (order.payment_status === 'cancelled') return false;
+            const matchesMonth = order.created_at?.startsWith(selectedMonth);
+            if (!matchesMonth) return false;
+            // Must have receipt proof uploaded or confirmed by customer
+            const hasReceipt = Boolean(order.receipt_url || order.is_confirmed || order.payment_status === 'verified' || order.payment_status === 'delivered');
+            return hasReceipt;
+        });
+
+        // Group by institution
+        const map = new Map<string, {
+            institutionId: string;
+            institutionName: string;
+            totalSales: number;
+            ordersCount: number;
+            feeToCharge: number;
+        }>();
+
+        // Initialize known institutions
+        institutionsList.forEach(inst => {
+            map.set(inst.id, {
+                institutionId: inst.id,
+                institutionName: inst.name,
+                totalSales: 0,
+                ordersCount: 0,
+                feeToCharge: 0
+            });
+        });
+
+        validOrders.forEach(order => {
+            const instId = order.institution_id || 'general';
+            const current = map.get(instId) || {
+                institutionId: instId,
+                institutionName: order.institution_name || 'Institución General',
+                totalSales: 0,
+                ordersCount: 0,
+                feeToCharge: 0
+            };
+            current.totalSales += Number(order.total_amount || 0);
+            current.ordersCount += 1;
+            current.feeToCharge = current.totalSales * 0.002; // 0.2% commission
+            map.set(instId, current);
+        });
+
+        const clubBreakdown = Array.from(map.values())
+            .filter(c => c.ordersCount > 0 || institutionsList.some(i => i.id === c.institutionId))
+            .sort((a, b) => b.totalSales - a.totalSales);
+
+        const grandTotalSales = validOrders.reduce((sum, o) => sum + Number(o.total_amount || 0), 0);
+        const grandTotalFee = grandTotalSales * 0.002; // 0.2%
+
+        return {
+            totalOrders: validOrders.length,
+            grandTotalSales,
+            grandTotalFee,
+            clubBreakdown
+        };
+    }, [isSuperAdmin, buffetOrders, institutionsList, selectedMonth]);
 
     return (
         <div className="space-y-8 animate-fade-up">
@@ -208,6 +306,163 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 <KPICard label="Torneos Activos" value={stats.activeTournaments} sub="En fase de grupos" icon={Trophy} color="text-amber-400" onClick={() => onNavigate('tournaments')} />
                 <KPICard label="Solicitudes" value={stats.pendingUsers} sub="Pendientes de aprobación" icon={Users} color="text-purple-400" onClick={() => onNavigate('admin-users')} />
             </div>
+
+            {/* SUPER ADMIN: LIQUIDACIÓN MENSUAL BUFFET & TIENDA (0.2% COMISIÓN) */}
+            {isSuperAdmin && superAdminBuffetSummary && (
+                <div className="bg-gradient-to-br from-card via-card to-primary/5 border border-primary/20 rounded-3xl p-6 shadow-2xl relative overflow-hidden">
+                    <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 border-b border-white/10">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary shadow-lg shadow-primary/20">
+                                <ShoppingBag size={24} />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-2">
+                                    <h2 className="text-xl font-black text-white">Liquidación Buffet & Tienda</h2>
+                                    <span className="bg-primary/20 text-primary text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full border border-primary/30">
+                                        Comisión 0.2%
+                                    </span>
+                                </div>
+                                <p className="text-xs text-muted mt-0.5">
+                                    Cálculo mensual de cobros a clubes por utilización de la plataforma en ventas con comprobante de pago subido.
+                                </p>
+                            </div>
+                        </div>
+
+                        {/* Month Selector */}
+                        <div className="flex items-center gap-2 bg-black/40 border border-white/10 rounded-2xl p-1.5 self-stretch md:self-auto">
+                            <Calendar size={16} className="text-primary ml-2" />
+                            <select 
+                                value={selectedMonth} 
+                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                className="bg-transparent text-white text-xs font-bold py-1 px-2 focus:outline-none cursor-pointer"
+                            >
+                                {availableMonths.map(m => {
+                                    const [year, month] = m.split('-');
+                                    const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+                                    const label = dateObj.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+                                    return (
+                                        <option key={m} value={m} className="bg-slate-900 text-white capitalize">
+                                            {label}
+                                        </option>
+                                    );
+                                })}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* KPI Totals for the Month */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                            <div className="text-[11px] font-bold text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                <Receipt size={14} className="text-primary" /> Ventas con Comprobante
+                            </div>
+                            <div className="text-2xl font-black text-white">
+                                {superAdminBuffetSummary.totalOrders} <span className="text-xs text-muted font-normal">pedidos</span>
+                            </div>
+                            <div className="text-[10px] text-muted mt-1">Con voucher adjunto o verificado</div>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-2xl p-4">
+                            <div className="text-[11px] font-bold text-muted uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                <DollarSign size={14} className="text-green-400" /> Total Facturado Clubes
+                            </div>
+                            <div className="text-2xl font-black text-green-400">
+                                ${superAdminBuffetSummary.grandTotalSales.toLocaleString()}
+                            </div>
+                            <div className="text-[10px] text-muted mt-1">Volumen bruto de ventas en el mes</div>
+                        </div>
+
+                        <div className="bg-primary/10 border border-primary/30 rounded-2xl p-4 shadow-lg shadow-primary/5">
+                            <div className="text-[11px] font-bold text-primary uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                                <Sparkles size={14} /> Comisión a Cobrar (0.2%)
+                            </div>
+                            <div className="text-2xl font-black text-primary">
+                                ${superAdminBuffetSummary.grandTotalFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </div>
+                            <div className="text-[10px] text-primary/80 mt-1">Ingreso neto para la plataforma</div>
+                        </div>
+                    </div>
+
+                    {/* Breakdown by Institution Table */}
+                    <div className="bg-black/30 border border-white/10 rounded-2xl overflow-hidden">
+                        <div className="p-3.5 bg-white/5 border-b border-white/10 flex items-center justify-between text-xs font-bold text-muted uppercase tracking-wider">
+                            <span className="flex items-center gap-2">
+                                <Building2 size={15} className="text-primary" /> Desglose por Club / Institución
+                            </span>
+                            <span className="text-[11px] text-muted font-normal lowercase">
+                                {superAdminBuffetSummary.clubBreakdown.length} instituciones registradas
+                            </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs">
+                                <thead>
+                                    <tr className="border-b border-white/10 text-muted uppercase text-[10px] tracking-wider bg-black/20">
+                                        <th className="py-3 px-4">Club / Institución</th>
+                                        <th className="py-3 px-4 text-center">Pedidos con Comprobante</th>
+                                        <th className="py-3 px-4 text-right">Venta Total ($)</th>
+                                        <th className="py-3 px-4 text-right text-primary font-bold">Comisión 0.2% a Cobrar</th>
+                                        <th className="py-3 px-4 text-center">Estado de Cobro</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {superAdminBuffetSummary.clubBreakdown.map((item) => (
+                                        <tr key={item.institutionId} className="hover:bg-white/5 transition-colors">
+                                            <td className="py-3 px-4">
+                                                <div className="font-bold text-white flex items-center gap-2">
+                                                    <div className="w-6 h-6 rounded-lg bg-white/10 flex items-center justify-center text-[10px] font-black text-primary">
+                                                        {item.institutionName.charAt(0)}
+                                                    </div>
+                                                    <span>{item.institutionName}</span>
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-center text-muted font-mono font-bold">
+                                                {item.ordersCount}
+                                            </td>
+                                            <td className="py-3 px-4 text-right font-mono font-bold text-white">
+                                                ${item.totalSales.toLocaleString()}
+                                            </td>
+                                            <td className="py-3 px-4 text-right font-mono font-bold text-primary">
+                                                ${item.feeToCharge.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                            </td>
+                                            <td className="py-3 px-4 text-center">
+                                                {item.feeToCharge > 0 ? (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                                                        Pendiente Facturación
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-white/5 text-muted border border-white/10">
+                                                        Sin ventas
+                                                    </span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+
+                                    {superAdminBuffetSummary.clubBreakdown.length === 0 && (
+                                        <tr>
+                                            <td colSpan={5} className="py-6 text-center text-muted">
+                                                No hay registros de ventas para el período seleccionado.
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                                {superAdminBuffetSummary.clubBreakdown.length > 0 && (
+                                    <tfoot>
+                                        <tr className="bg-black/50 border-t border-white/10 font-bold">
+                                            <td className="py-3 px-4 text-white">Total Consolidado</td>
+                                            <td className="py-3 px-4 text-center font-mono text-white">{superAdminBuffetSummary.totalOrders}</td>
+                                            <td className="py-3 px-4 text-right font-mono text-green-400">${superAdminBuffetSummary.grandTotalSales.toLocaleString()}</td>
+                                            <td className="py-3 px-4 text-right font-mono text-primary">${superAdminBuffetSummary.grandTotalFee.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                                            <td className="py-3 px-4 text-center text-[10px] text-muted">Mes en curso</td>
+                                        </tr>
+                                    </tfoot>
+                                )}
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div id="dashboard-main-content" className="lg:col-span-2 space-y-8">
