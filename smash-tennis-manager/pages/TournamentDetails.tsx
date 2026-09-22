@@ -894,6 +894,113 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         return list;
     }, [tournament]);
 
+    // --- ORDER OF PLAY (OOP) CALCULATIONS & HOOKS (TOP-LEVEL BEFORE EARLY RETURNS) ---
+    const getMatchDate = (m: Match): string | null => {
+        const raw = m.scheduled_at || m.proposal_data?.scheduled_at;
+        if (raw) {
+            try {
+                const d = new Date(raw);
+                if (!isNaN(d.getTime())) {
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            } catch (e) {}
+        }
+        return m.oop_date || m.proposal_data?.oop_date || null;
+    };
+
+    const getMatchTime = (m: Match): string => {
+        const raw = m.scheduled_at || m.proposal_data?.scheduled_at;
+        if (raw) {
+            try {
+                const d = new Date(raw);
+                if (!isNaN(d.getTime())) {
+                    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' hs';
+                }
+            } catch (e) {}
+        }
+        return m.oop_turn || m.proposal_data?.oop_turn || 'A confirmar';
+    };
+
+    const getMatchOopStatus = (m: Match): 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished' => {
+        if (m.is_played || m.winner_id || m.score_status === 'confirmed') return 'finished';
+        return m.oop_status || m.proposal_data?.oop_status || 'scheduled';
+    };
+
+    const oopDates = useMemo(() => {
+        const dateSet = new Set<string>();
+        if (tournament?.start_date) dateSet.add(tournament.start_date);
+        
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        dateSet.add(todayStr);
+
+        matches.forEach(m => {
+            const d = getMatchDate(m);
+            if (d) dateSet.add(d);
+        });
+
+        return Array.from(dateSet).sort();
+    }, [tournament?.start_date, matches]);
+
+    useEffect(() => {
+        if (oopDates.length > 0 && !oopDates.includes(selectedOopDate)) {
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            if (oopDates.includes(todayStr)) {
+                setSelectedOopDate(todayStr);
+            } else {
+                setSelectedOopDate(oopDates[0]);
+            }
+        }
+    }, [oopDates, selectedOopDate]);
+
+    const oopDateMatches = useMemo(() => {
+        if (!selectedOopDate) return [];
+        return matches.filter(m => {
+            if (m.is_bye) return false;
+            const mDate = getMatchDate(m);
+            return mDate === selectedOopDate;
+        }).sort((a, b) => {
+            const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 9999999999999;
+            const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 9999999999999;
+            if (timeA !== timeB) return timeA - timeB;
+            const courtA = a.court_name || a.proposal_data?.court_name || '';
+            const courtB = b.court_name || b.proposal_data?.court_name || '';
+            return courtA.localeCompare(courtB);
+        });
+    }, [matches, selectedOopDate]);
+
+    const unscheduledMatches = useMemo(() => {
+        return matches.filter(m => {
+            if (m.is_bye || m.is_played) return false;
+            const hasSchedule = !!m.scheduled_at || !!m.proposal_data?.scheduled_at || !!m.proposal_data?.oop_date;
+            return !hasSchedule;
+        });
+    }, [matches]);
+
+    const oopMatchesByCourt = useMemo(() => {
+        const groups: { [court: string]: Match[] } = {};
+        courtOptions.forEach(c => {
+            groups[c] = [];
+        });
+
+        oopDateMatches.forEach(m => {
+            const court = m.court_name || m.proposal_data?.court_name || 'Cancha 1';
+            if (!groups[court]) groups[court] = [];
+            groups[court].push(m);
+        });
+
+        const entries = Object.entries(groups);
+        const filtered = entries.filter(([court, list], idx) => list.length > 0 || idx < 2);
+        return filtered.map(([court, courtMatches]) => ({
+            court,
+            matches: courtMatches
+        }));
+    }, [oopDateMatches, courtOptions]);
+
     const formatFullDateDisplay = (dateStr: string) => {
         if (!dateStr) return '';
         try {
@@ -1518,113 +1625,6 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const championName = tournament?.champion_name || (finalMatch?.winner_id ? (
         finalMatch.winner_id === finalMatch.player1_id ? finalMatch.player1_name : finalMatch.player2_name
     ) : null);
-
-    // --- ORDER OF PLAY (OOP) CALCULATIONS & HANDLERS ---
-    const getMatchDate = (m: Match): string | null => {
-        const raw = m.scheduled_at || m.proposal_data?.scheduled_at;
-        if (raw) {
-            try {
-                const d = new Date(raw);
-                if (!isNaN(d.getTime())) {
-                    const year = d.getFullYear();
-                    const month = String(d.getMonth() + 1).padStart(2, '0');
-                    const day = String(d.getDate()).padStart(2, '0');
-                    return `${year}-${month}-${day}`;
-                }
-            } catch (e) {}
-        }
-        return m.oop_date || m.proposal_data?.oop_date || null;
-    };
-
-    const getMatchTime = (m: Match): string => {
-        const raw = m.scheduled_at || m.proposal_data?.scheduled_at;
-        if (raw) {
-            try {
-                const d = new Date(raw);
-                if (!isNaN(d.getTime())) {
-                    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' hs';
-                }
-            } catch (e) {}
-        }
-        return m.oop_turn || m.proposal_data?.oop_turn || 'A confirmar';
-    };
-
-    const getMatchOopStatus = (m: Match): 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished' => {
-        if (m.is_played || m.winner_id || m.score_status === 'confirmed') return 'finished';
-        return m.oop_status || m.proposal_data?.oop_status || 'scheduled';
-    };
-
-    const oopDates = useMemo(() => {
-        const dateSet = new Set<string>();
-        if (tournament?.start_date) dateSet.add(tournament.start_date);
-        
-        const now = new Date();
-        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-        dateSet.add(todayStr);
-
-        matches.forEach(m => {
-            const d = getMatchDate(m);
-            if (d) dateSet.add(d);
-        });
-
-        return Array.from(dateSet).sort();
-    }, [tournament?.start_date, matches]);
-
-    useEffect(() => {
-        if (oopDates.length > 0 && !oopDates.includes(selectedOopDate)) {
-            const now = new Date();
-            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-            if (oopDates.includes(todayStr)) {
-                setSelectedOopDate(todayStr);
-            } else {
-                setSelectedOopDate(oopDates[0]);
-            }
-        }
-    }, [oopDates, selectedOopDate]);
-
-    const oopDateMatches = useMemo(() => {
-        if (!selectedOopDate) return [];
-        return matches.filter(m => {
-            if (m.is_bye) return false;
-            const mDate = getMatchDate(m);
-            return mDate === selectedOopDate;
-        }).sort((a, b) => {
-            const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 9999999999999;
-            const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 9999999999999;
-            if (timeA !== timeB) return timeA - timeB;
-            const courtA = a.court_name || a.proposal_data?.court_name || '';
-            const courtB = b.court_name || b.proposal_data?.court_name || '';
-            return courtA.localeCompare(courtB);
-        });
-    }, [matches, selectedOopDate]);
-
-    const unscheduledMatches = useMemo(() => {
-        return matches.filter(m => {
-            if (m.is_bye || m.is_played) return false;
-            const hasSchedule = !!m.scheduled_at || !!m.proposal_data?.scheduled_at || !!m.proposal_data?.oop_date;
-            return !hasSchedule;
-        });
-    }, [matches]);
-
-    const oopMatchesByCourt = useMemo(() => {
-        const groups: { [court: string]: Match[] } = {};
-        courtOptions.forEach(c => {
-            groups[c] = [];
-        });
-
-        oopDateMatches.forEach(m => {
-            const court = m.court_name || m.proposal_data?.court_name || 'Cancha 1';
-            if (!groups[court]) groups[court] = [];
-            groups[court].push(m);
-        });
-
-        const entries = Object.entries(groups);
-        const filtered = entries.filter(([court, list], idx) => list.length > 0 || idx < 2);
-        return filtered.map(([court, courtMatches]) => ({
-            court,
-            matches: courtMatches
-        }));
-    }, [oopDateMatches, courtOptions]);
 
     const handleQuickChangeOopStatus = async (matchId: string, newStatus: 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished') => {
         setUpdatingOopMatchId(matchId);
