@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { Tournament, UserProfile, TournamentPlayer, Match, Booking, Institution } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
@@ -60,6 +60,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     // Social Media Graphics Generator State
     const [showGraphicModal, setShowGraphicModal] = useState(false);
+
+    // Enrolled Players Modal State
+    const [showEnrolledModal, setShowEnrolledModal] = useState(false);
+    const [enrolledSearchQuery, setEnrolledSearchQuery] = useState('');
 
     // H2H State
     const [h2hPlayers, setH2hPlayers] = useState<{ p1Id: string; p2Id: string } | null>(null);
@@ -220,6 +224,16 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     // Derived state
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
     const [matches, setMatches] = useState<Match[]>([]);
+
+    const filteredEnrolledPlayers = useMemo(() => {
+        if (!enrolledSearchQuery.trim()) return players;
+        const q = enrolledSearchQuery.toLowerCase().trim();
+        return players.filter(p => {
+            const name = (p.name || p.player_name || '').toLowerCase();
+            const cat = (p.category || '').toLowerCase();
+            return name.includes(q) || cat.includes(q);
+        });
+    }, [players, enrolledSearchQuery]);
 
     // Masters Eligibility: top-N players per category only
     const [allProfilesForMasters, setAllProfilesForMasters] = useState<UserProfile[]>([]);
@@ -1767,12 +1781,34 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                             <div className="flex flex-wrap items-center gap-4 text-xs text-slate-300">
                                 <span className="flex items-center gap-1"><Calendar size={14} className="text-primary" /> {new Date(tournament.start_date + 'T00:00:00').toLocaleDateString()}</span>
                                 <span className="flex items-center gap-1"><MapPin size={14} className="text-primary" /> {tournament.institutions?.name}</span>
-                                <span className="flex items-center gap-1"><Users size={14} className="text-primary" /> {players.length} Inscritos</span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        soundEffects.playScoreBeep();
+                                        setShowEnrolledModal(true);
+                                    }}
+                                    className="flex items-center gap-1.5 text-slate-300 hover:text-white transition-colors cursor-pointer bg-white/5 hover:bg-white/10 px-2 py-0.5 rounded-lg border border-white/5 font-semibold"
+                                    title="Abrir listado de jugadores inscriptos"
+                                >
+                                    <Users size={14} className="text-primary" /> {players.length} Inscritos
+                                </button>
                             </div>
                         </div>
 
                         {/* Action and Share Buttons */}
                         <div className="flex flex-wrap items-center gap-2">
+                            {/* Ver Inscriptos Modal Button */}
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    soundEffects.playScoreBeep();
+                                    setShowEnrolledModal(true);
+                                }}
+                                className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white font-bold rounded-xl transition-all border border-white/10 flex items-center gap-2 text-sm shadow-md"
+                                title="Ver lista completa de jugadores inscriptos"
+                            >
+                                <Users size={16} className="text-primary" /> Ver Inscriptos ({players.length})
+                            </button>
                             {canEditTournament(tournament, user) && (
                                 <button
                                     onClick={() => {
@@ -2238,8 +2274,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </div>
                 )}
 
-                {/* Left: Matches & Brackets (Full width on playoffs tab for expansive bracket view) */}
-                <div className={`${activeTab === 'playoffs' ? 'col-span-1 lg:col-span-3' : 'lg:col-span-2'} space-y-6`}>
+                {/* Left: Matches & Brackets (Full width on playoffs tab or once tournament has started) */}
+                <div className={`${matches.length > 0 || activeTab === 'playoffs' ? 'col-span-1 lg:col-span-3' : 'lg:col-span-2'} space-y-6`}>
                     <Card className="p-6">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-6 border-b border-white/10 pb-4">
                             <h3 className="text-lg font-bold text-white flex items-center gap-2">
@@ -3514,154 +3550,156 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     </Card>
                 </div>
 
-                {/* Right: Players List (Only shown on groups/all tabs or as a bottom section when playoffs) */}
-                <div className={`${activeTab === 'playoffs' ? 'col-span-1 lg:col-span-3' : ''} space-y-6`}>
-                    <Card className="p-6">
-                        <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-                            <h3 className="font-bold text-white flex items-center gap-2 text-base">
-                                <Users size={18} className="text-primary" /> Inscritos ({players.length})
-                            </h3>
-                            <div className="flex items-center gap-2">
-                                {isClubAdmin && (
-                                    <button
-                                        onClick={() => {
-                                            if (!tournament) return;
-                                            const profileMap: Record<string, any> = {};
-                                            allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
-                                            exportTournamentPlayersToCSV(tournament, players, profileMap);
-                                            soundEffects.playScoreBeep();
-                                            addToast("¡Listado de inscriptos descargado en CSV!", "success");
-                                        }}
-                                        className="p-1.5 px-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                                        title="Descargar lista de inscriptos en Excel / CSV con datos de contacto y disponibilidad"
-                                    >
-                                        <Download size={13} className="text-emerald-400" /> Exportar CSV
-                                    </button>
-                                )}
-                                {isClubAdmin && (
-                                    <button
-                                        onClick={openManualEnrollModal}
-                                        className="p-1.5 px-2.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
-                                        title="Inscribir jugador manualmente"
-                                    >
-                                        <UserPlus size={13} /> + Inscribir
-                                    </button>
+                {/* Right: Players List (Only shown on registration phase / before tournament starts) */}
+                {matches.length === 0 && (
+                    <div className="space-y-6">
+                        <Card className="p-6">
+                            <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+                                <h3 className="font-bold text-white flex items-center gap-2 text-base">
+                                    <Users size={18} className="text-primary" /> Inscritos ({players.length})
+                                </h3>
+                                <div className="flex items-center gap-2">
+                                    {isClubAdmin && (
+                                        <button
+                                            onClick={() => {
+                                                if (!tournament) return;
+                                                const profileMap: Record<string, any> = {};
+                                                allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
+                                                exportTournamentPlayersToCSV(tournament, players, profileMap);
+                                                soundEffects.playScoreBeep();
+                                                addToast("¡Listado de inscriptos descargado en CSV!", "success");
+                                            }}
+                                            className="p-1.5 px-2.5 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                                            title="Descargar lista de inscriptos en Excel / CSV con datos de contacto y disponibilidad"
+                                        >
+                                            <Download size={13} className="text-emerald-400" /> Exportar CSV
+                                        </button>
+                                    )}
+                                    {isClubAdmin && (
+                                        <button
+                                            onClick={openManualEnrollModal}
+                                            className="p-1.5 px-2.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1 transition-all"
+                                            title="Inscribir jugador manualmente"
+                                        >
+                                            <UserPlus size={13} /> + Inscribir
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2 max-h-[460px] overflow-y-auto custom-scrollbar">
+                                {players.length === 0 ? (
+                                    <div className="text-muted text-sm text-center py-6">Aún no hay jugadores inscritos.</div>
+                                ) : (
+                                    players.map((p, i) => {
+                                        const pDisplayName = formatPlayerName(p.name || p.player_name);
+                                        const isPaid = p.payment_status === 'paid';
+                                        const isSelf = p.player_id === user.id || p.id === user.id;
+                                        const pAvailability = p.availability_notes || p.time_restrictions;
+
+                                        return (
+                                            <div key={p.id || i} className="flex items-center justify-between gap-2 p-2.5 bg-sidebar/50 border border-white/5 rounded-xl hover:border-white/20 transition-all">
+                                                <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                    <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                                                        {pDisplayName.charAt(0).toUpperCase()}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="text-xs font-bold text-white truncate">{pDisplayName}</div>
+                                                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                                            <span className="text-[10px] text-muted">{p.category ? `${p.category} Cat.` : 'Sin Cat.'}</span>
+                                                            {(isClubAdmin || isSelf) && p.fee_amount ? (
+                                                                <span className="text-[10px] text-slate-400 font-mono">${p.fee_amount}</span>
+                                                            ) : null}
+                                                            {(isClubAdmin || isSelf) && pAvailability ? (
+                                                                <span 
+                                                                    className="text-[9px] text-amber-300 font-medium bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex items-center gap-1 max-w-[170px]"
+                                                                    title={`Disponibilidad: ${pAvailability}`}
+                                                                >
+                                                                    <Clock size={9} className="text-amber-400 shrink-0" />
+                                                                    <span className="truncate">{pAvailability}</span>
+                                                                </span>
+                                                            ) : null}
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                    {/* Comprobante de pago adjunto para Admin */}
+                                                    {isClubAdmin && p.receipt_url && (
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setViewingReceiptModal(p.receipt_url || null)}
+                                                            className="text-[10px] px-2 py-0.5 rounded-lg font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 flex items-center gap-1 transition-all"
+                                                            title="Ver comprobante de pago subido por el jugador"
+                                                        >
+                                                            <Eye size={11} className="text-blue-400" />
+                                                            <span>Comprobante</span>
+                                                        </button>
+                                                    )}
+
+                                                    {/* Payment Status: Admin or Self only */}
+                                                    {isClubAdmin ? (
+                                                        <button
+                                                            onClick={() => handleTogglePaymentStatus(p)}
+                                                            title="Click para cambiar estado de pago"
+                                                            className={`text-[10px] px-2 py-0.5 rounded-lg font-bold border transition-all ${
+                                                                isPaid
+                                                                    ? 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30'
+                                                                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
+                                                            }`}
+                                                        >
+                                                            {isPaid ? 'Pagado' : 'Pendiente'}
+                                                        </button>
+                                                    ) : isSelf ? (
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold border ${
+                                                            isPaid ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                                        }`}>
+                                                            {isPaid ? 'Inscripción Pagada' : 'Pago Pendiente'}
+                                                        </span>
+                                                    ) : null}
+
+                                                    {isSelf && (
+                                                        <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-md font-bold">
+                                                            Tú
+                                                        </span>
+                                                    )}
+
+                                                    {/* Action Buttons for Admin */}
+                                                    {isClubAdmin && (
+                                                        <div className="flex items-center gap-1.5 ml-1">
+                                                            <button
+                                                                onClick={() => handleOpenReplaceModal(p)}
+                                                                className="p-1.5 bg-primary/15 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
+                                                                title="Sustituir / Reemplazar jugador en el torneo"
+                                                            >
+                                                                <RefreshCw size={14} />
+                                                            </button>
+
+                                                            {matches.length === 0 && (
+                                                                <button
+                                                                    onClick={() => handleUnenrollPlayer(p)}
+                                                                    disabled={deletingPlayerId === p.id}
+                                                                    className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
+                                                                    title="Dar de baja / Quitar inscripto"
+                                                                >
+                                                                    {deletingPlayerId === p.id ? (
+                                                                        <Loader2 size={14} className="animate-spin text-red-400" />
+                                                                    ) : (
+                                                                        <Trash2 size={14} />
+                                                                    )}
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        );
+                                    })
                                 )}
                             </div>
-                        </div>
-
-                        <div className="space-y-2 max-h-[460px] overflow-y-auto custom-scrollbar">
-                            {players.length === 0 ? (
-                                <div className="text-muted text-sm text-center py-6">Aún no hay jugadores inscritos.</div>
-                            ) : (
-                                players.map((p, i) => {
-                                    const pDisplayName = formatPlayerName(p.name || p.player_name);
-                                    const isPaid = p.payment_status === 'paid';
-                                    const isSelf = p.player_id === user.id || p.id === user.id;
-                                    const pAvailability = p.availability_notes || p.time_restrictions;
-
-                                    return (
-                                        <div key={p.id || i} className="flex items-center justify-between gap-2 p-2.5 bg-sidebar/50 border border-white/5 rounded-xl hover:border-white/20 transition-all">
-                                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                                                    {pDisplayName.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="text-xs font-bold text-white truncate">{pDisplayName}</div>
-                                                    <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                                                        <span className="text-[10px] text-muted">{p.category ? `${p.category} Cat.` : 'Sin Cat.'}</span>
-                                                        {(isClubAdmin || isSelf) && p.fee_amount ? (
-                                                            <span className="text-[10px] text-slate-400 font-mono">${p.fee_amount}</span>
-                                                        ) : null}
-                                                        {(isClubAdmin || isSelf) && pAvailability ? (
-                                                            <span 
-                                                                className="text-[9px] text-amber-300 font-medium bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded-md flex items-center gap-1 max-w-[170px]"
-                                                                title={`Disponibilidad: ${pAvailability}`}
-                                                            >
-                                                                <Clock size={9} className="text-amber-400 shrink-0" />
-                                                                <span className="truncate">{pAvailability}</span>
-                                                            </span>
-                                                        ) : null}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-1.5 shrink-0">
-                                                {/* Comprobante de pago adjunto para Admin */}
-                                                {isClubAdmin && p.receipt_url && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setViewingReceiptModal(p.receipt_url || null)}
-                                                        className="text-[10px] px-2 py-0.5 rounded-lg font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 flex items-center gap-1 transition-all"
-                                                        title="Ver comprobante de pago subido por el jugador"
-                                                    >
-                                                        <Eye size={11} className="text-blue-400" />
-                                                        <span>Comprobante</span>
-                                                    </button>
-                                                )}
-
-                                                {/* Payment Status: Admin or Self only */}
-                                                {isClubAdmin ? (
-                                                    <button
-                                                        onClick={() => handleTogglePaymentStatus(p)}
-                                                        title="Click para cambiar estado de pago"
-                                                        className={`text-[10px] px-2 py-0.5 rounded-lg font-bold border transition-all ${
-                                                            isPaid
-                                                                ? 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30'
-                                                                : 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
-                                                        }`}
-                                                    >
-                                                        {isPaid ? 'Pagado' : 'Pendiente'}
-                                                    </button>
-                                                ) : isSelf ? (
-                                                    <span className={`text-[10px] px-2 py-0.5 rounded-lg font-bold border ${
-                                                        isPaid ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                                                    }`}>
-                                                        {isPaid ? 'Inscripción Pagada' : 'Pago Pendiente'}
-                                                    </span>
-                                                ) : null}
-
-                                                {isSelf && (
-                                                    <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded-md font-bold">
-                                                        Tú
-                                                    </span>
-                                                )}
-
-                                                {/* Action Buttons for Admin */}
-                                                {isClubAdmin && (
-                                                    <div className="flex items-center gap-1.5 ml-1">
-                                                        <button
-                                                            onClick={() => handleOpenReplaceModal(p)}
-                                                            className="p-1.5 bg-primary/15 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
-                                                            title="Sustituir / Reemplazar jugador en el torneo"
-                                                        >
-                                                            <RefreshCw size={14} />
-                                                        </button>
-
-                                                        {matches.length === 0 && (
-                                                            <button
-                                                                onClick={() => handleUnenrollPlayer(p)}
-                                                                disabled={deletingPlayerId === p.id}
-                                                                className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
-                                                                title="Dar de baja / Quitar inscripto"
-                                                            >
-                                                                {deletingPlayerId === p.id ? (
-                                                                    <Loader2 size={14} className="animate-spin text-red-400" />
-                                                                ) : (
-                                                                    <Trash2 size={14} />
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-                    </Card>
-                </div>
+                        </Card>
+                    </div>
+                )}
             </div>
 
             {/* MANUAL ENROLL MODAL */}
@@ -5922,6 +5960,233 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
                             >
                                 {isEnrolling ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Confirmar Inscripción
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE JUGADORES INSCRIPTOS */}
+            {showEnrolledModal && (
+                <div 
+                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
+                    onClick={() => setShowEnrolledModal(false)}
+                >
+                    <div 
+                        className="bg-slate-900 border border-white/10 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] text-white"
+                        onClick={e => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 rounded-xl bg-primary/20 text-primary">
+                                    <Users size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-black flex items-center gap-2">
+                                        Jugadores Inscriptos
+                                        <span className="text-xs bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-bold">
+                                            {players.length}
+                                        </span>
+                                    </h3>
+                                    <p className="text-xs text-slate-400">
+                                        {tournament?.name} • Categoría: {tournament?.category || 'Todas'}
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setShowEnrolledModal(false)}
+                                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Search and Action Bar */}
+                        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                            <div className="relative flex-1 min-w-[200px]">
+                                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por jugador o categoría..."
+                                    value={enrolledSearchQuery}
+                                    onChange={e => setEnrolledSearchQuery(e.target.value)}
+                                    className="w-full bg-slate-950/60 border border-white/10 rounded-xl pl-10 pr-9 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-primary transition-all"
+                                />
+                                {enrolledSearchQuery && (
+                                    <button
+                                        onClick={() => setEnrolledSearchQuery('')}
+                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md"
+                                    >
+                                        <X size={13} />
+                                    </button>
+                                )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                {isClubAdmin && (
+                                    <button
+                                        onClick={() => {
+                                            if (!tournament) return;
+                                            const profileMap: Record<string, any> = {};
+                                            allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
+                                            exportTournamentPlayersToCSV(tournament, players, profileMap);
+                                            soundEffects.playScoreBeep();
+                                            addToast("¡Listado de inscriptos descargado en CSV!", "success");
+                                        }}
+                                        className="p-2 px-3 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                                        title="Descargar lista de inscriptos en Excel / CSV con datos de contacto y disponibilidad"
+                                    >
+                                        <Download size={14} className="text-emerald-400" /> Exportar CSV
+                                    </button>
+                                )}
+                                {isClubAdmin && (
+                                    <button
+                                        onClick={() => {
+                                            setShowEnrolledModal(false);
+                                            openManualEnrollModal();
+                                        }}
+                                        className="p-2 px-3 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
+                                        title="Inscribir jugador manualmente"
+                                    >
+                                        <UserPlus size={14} /> Inscribir
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* List */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 max-h-[55vh]">
+                            {filteredEnrolledPlayers.length === 0 ? (
+                                <div className="text-center py-12 text-slate-400 text-xs">
+                                    {enrolledSearchQuery ? 'No se encontraron jugadores que coincidan con la búsqueda.' : 'Aún no hay jugadores inscriptos en este torneo.'}
+                                </div>
+                            ) : (
+                                filteredEnrolledPlayers.map((p, i) => {
+                                    const pDisplayName = formatPlayerName(p.name || p.player_name);
+                                    const isPaid = p.payment_status === 'paid';
+                                    const isSelf = p.player_id === user.id || p.id === user.id;
+                                    const pAvailability = p.availability_notes || p.time_restrictions;
+
+                                    return (
+                                        <div 
+                                            key={p.id || i} 
+                                            className="flex items-center justify-between gap-3 p-3 bg-slate-950/40 border border-white/5 rounded-xl hover:border-white/20 transition-all"
+                                        >
+                                            <div className="flex items-center gap-3 min-w-0 flex-1">
+                                                <div className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold text-primary shrink-0 shadow-inner">
+                                                    {pDisplayName.charAt(0).toUpperCase()}
+                                                </div>
+                                                <div className="min-w-0 flex-1">
+                                                    <div className="text-xs font-bold text-white truncate flex items-center gap-2">
+                                                        <span>{pDisplayName}</span>
+                                                        {isSelf && (
+                                                            <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">
+                                                                Tú
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                        <span className="text-[10px] text-slate-400 font-medium bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                                                            {p.category ? `${p.category} Cat.` : 'Sin Cat.'}
+                                                        </span>
+                                                        {(isClubAdmin || isSelf) && p.fee_amount ? (
+                                                            <span className="text-[10px] text-emerald-400 font-mono font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                                                                ${p.fee_amount}
+                                                            </span>
+                                                        ) : null}
+                                                        {(isClubAdmin || isSelf) && pAvailability ? (
+                                                            <span 
+                                                                className="text-[10px] text-amber-300 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1 max-w-[200px]"
+                                                                title={`Disponibilidad: ${pAvailability}`}
+                                                            >
+                                                                <Clock size={10} className="text-amber-400 shrink-0" />
+                                                                <span className="truncate">{pAvailability}</span>
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2 shrink-0">
+                                                {/* Comprobante de pago adjunto para Admin */}
+                                                {isClubAdmin && p.receipt_url && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setViewingReceiptModal(p.receipt_url || null)}
+                                                        className="text-[11px] px-2.5 py-1 rounded-lg font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 flex items-center gap-1 transition-all"
+                                                        title="Ver comprobante de pago subido por el jugador"
+                                                    >
+                                                        <Eye size={12} className="text-blue-400" />
+                                                        <span>Comprobante</span>
+                                                    </button>
+                                                )}
+
+                                                {/* Payment Status: Admin or Self only */}
+                                                {isClubAdmin ? (
+                                                    <button
+                                                        onClick={() => handleTogglePaymentStatus(p)}
+                                                        title="Click para cambiar estado de pago"
+                                                        className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
+                                                            isPaid
+                                                                ? 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30'
+                                                                : 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
+                                                        }`}
+                                                    >
+                                                        {isPaid ? 'Pagado' : 'Pendiente'}
+                                                    </button>
+                                                ) : isSelf ? (
+                                                    <span className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border ${
+                                                        isPaid ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                                    }`}>
+                                                        {isPaid ? 'Pagado' : 'Pendiente'}
+                                                    </span>
+                                                ) : null}
+
+                                                {/* Action Buttons for Admin */}
+                                                {isClubAdmin && (
+                                                    <div className="flex items-center gap-1.5 ml-1">
+                                                        <button
+                                                            onClick={() => {
+                                                                handleOpenReplaceModal(p);
+                                                            }}
+                                                            className="p-1.5 bg-primary/15 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
+                                                            title="Sustituir / Reemplazar jugador en el torneo"
+                                                        >
+                                                            <RefreshCw size={14} />
+                                                        </button>
+
+                                                        {matches.length === 0 && (
+                                                            <button
+                                                                onClick={() => handleUnenrollPlayer(p)}
+                                                                disabled={deletingPlayerId === p.id}
+                                                                className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
+                                                                title="Dar de baja / Quitar inscripto"
+                                                            >
+                                                                {deletingPlayerId === p.id ? (
+                                                                    <Loader2 size={14} className="animate-spin text-red-400" />
+                                                                ) : (
+                                                                    <Trash2 size={14} />
+                                                                )}
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="pt-4 border-t border-white/10 flex justify-between items-center text-xs text-slate-400 mt-4">
+                            <span>Mostrando {filteredEnrolledPlayers.length} de {players.length} jugadores</span>
+                            <button
+                                onClick={() => setShowEnrolledModal(false)}
+                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-all text-xs"
+                            >
+                                Cerrar
                             </button>
                         </div>
                     </div>
