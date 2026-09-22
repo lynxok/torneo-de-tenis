@@ -46,7 +46,8 @@ import {
     TournamentAdminPanel,
     TournamentHeader,
     TournamentBanners,
-    TournamentPrintSheets
+    TournamentPrintSheets,
+    TournamentModalsContainer
 } from '../components/tournament-details';
 
 
@@ -2186,404 +2187,198 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 />
             </div>
 
-                        {/* MANUAL ENROLL MODAL */}
-            {showManualEnrollModal && (
-                <ManualEnrollModal
-                    isOpen={showManualEnrollModal}
-                    onClose={() => setShowManualEnrollModal(false)}
-                    tournament={tournament}
-                    players={players}
-                    allProfiles={allProfiles}
-                    loadingProfiles={loadingProfiles}
-                    enrollMode={enrollMode}
-                    onEnrollModeChange={setEnrollMode}
-                    searchUserQuery={searchUserQuery}
-                    onSearchUserQueryChange={setSearchUserQuery}
-                    filterByGender={filterByGender}
-                    onToggleFilterByGender={() => setFilterByGender(!filterByGender)}
-                    selectedUserForEnroll={selectedUserForEnroll}
-                    onSelectUserForEnroll={setSelectedUserForEnroll}
-                    guestName={guestName}
-                    onGuestNameChange={setGuestName}
-                    guestPartnerName={guestPartnerName}
-                    onGuestPartnerNameChange={setGuestPartnerName}
-                    guestCategory={guestCategory}
-                    onGuestCategoryChange={setGuestCategory}
-                    manualFee={manualFee}
-                    onManualFeeChange={setManualFee}
-                    manualPaymentStatus={manualPaymentStatus}
-                    onManualPaymentStatusChange={setManualPaymentStatus}
-                    manualAvailabilityNotes={manualAvailabilityNotes}
-                    onManualAvailabilityNotesChange={setManualAvailabilityNotes}
-                    onSubmit={handleManualEnrollSubmit}
-                    submitting={submittingEnroll}
-                    matchTournamentGender={matchTournamentGender}
-                    getUserMasterEligibility={getUserMasterEligibility}
-                    allProfilesForMasters={allProfilesForMasters}
-                />
-            )}
-
-            {/* SCORE INPUT MODAL */}
-            {selectedMatchForScore && (
-                <ScoreInputModal
-                    isOpen={!!selectedMatchForScore}
-                    onClose={() => setSelectedMatchForScore(null)}
-                    match={selectedMatchForScore}
-                    isClubAdmin={isClubAdmin}
-                    isWalkover={isWalkover}
-                    onToggleWalkover={setIsWalkover}
-                    walkoverWinnerId={walkoverWinnerId}
-                    onWalkoverWinnerIdChange={setWalkoverWinnerId}
-                    scoreP1Set1={scoreP1Set1}
-                    onScoreP1Set1Change={setScoreP1Set1}
-                    scoreP2Set1={scoreP2Set1}
-                    onScoreP2Set1Change={setScoreP2Set1}
-                    tbP1Set1={tbP1Set1}
-                    onTbP1Set1Change={setTbP1Set1}
-                    tbP2Set1={tbP2Set1}
-                    onTbP2Set1Change={setTbP2Set1}
-                    scoreP1Set2={scoreP1Set2}
-                    onScoreP1Set2Change={setScoreP1Set2}
-                    scoreP2Set2={scoreP2Set2}
-                    onScoreP2Set2Change={setScoreP2Set2}
-                    tbP1Set2={tbP1Set2}
-                    onTbP1Set2Change={setTbP1Set2}
-                    tbP2Set2={tbP2Set2}
-                    onTbP2Set2Change={setTbP2Set2}
-                    hasSet3={hasSet3}
-                    onAddSet3={() => {
-                        setHasSet3(true);
-                        setIsSet3SuperTiebreak(true);
-                        setScoreP1Set3('');
-                        setScoreP2Set3('');
-                    }}
-                    onRemoveSet3={() => {
-                        setHasSet3(false);
-                        setScoreP1Set3('');
-                        setScoreP2Set3('');
-                        setTbP1Set3('');
-                        setTbP2Set3('');
-                    }}
-                    isSet3SuperTiebreak={isSet3SuperTiebreak}
-                    onSetIsSet3SuperTiebreak={setIsSet3SuperTiebreak}
-                    scoreP1Set3={scoreP1Set3}
-                    onScoreP1Set3Change={setScoreP1Set3}
-                    scoreP2Set3={scoreP2Set3}
-                    onScoreP2Set3Change={setScoreP2Set3}
-                    tbP1Set3={tbP1Set3}
-                    onTbP1Set3Change={setTbP1Set3}
-                    tbP2Set3={tbP2Set3}
-                    onTbP2Set3Change={setTbP2Set3}
-                    computedWinnerInfo={computedWinnerInfo}
-                    onResetScore={handleResetScore}
-                    onSaveScore={handleSaveScore}
-                    savingScore={savingScore}
-                />
-            )}
-
-            {/* DISPUTE MODAL */}
-            {disputeMatchId && (
-                <DisputeModal
-                    isOpen={!!disputeMatchId}
-                    onClose={() => setDisputeMatchId(null)}
-                    disputeReason={disputeReason}
-                    onDisputeReasonChange={setDisputeReason}
-                    onSubmit={handleDisputeScore}
-                    submitting={submittingDispute}
-                />
-            )}
-
-            {/* HEAD TO HEAD (H2H) MODAL */}
-            {h2hPlayers && (
-                <HeadToHeadModal
-                    player1Id={h2hPlayers.p1Id}
-                    player2Id={h2hPlayers.p2Id}
-                    onClose={() => setH2hPlayers(null)}
-                />
-            )}
-
-            {/* GENERATE FIXTURE MODAL */}
-            {showFixtureModal && tournament && (
-                <GenerateFixtureModal
-                    isOpen={showFixtureModal}
-                    onClose={() => setShowFixtureModal(false)}
-                    tournament={tournament}
-                    players={players}
-                    fixtureNumGroups={fixtureNumGroups}
-                    onNumGroupsChange={setFixtureNumGroups}
-                    onShufflePreview={handleShufflePreview}
-                    previewGroups={previewGroups}
-                    onConfirmFixture={handleConfirmCustomFixture}
-                    generatingFixture={generatingFixture}
-                />
-            )}
-
-            {/* REPLACE / SUBSTITUTE PLAYER MODAL */}
-            {playerToReplace && (
-                <ReplacePlayerModal
-                    isOpen={!!playerToReplace}
-                    onClose={() => setPlayerToReplace(null)}
-                    tournament={tournament}
-                    playerToReplace={playerToReplace}
-                    replaceMode={replaceMode}
-                    onReplaceModeChange={setReplaceMode}
-                    allProfiles={allProfiles}
-                    loadingProfiles={loadingProfiles}
-                    searchUserReplaceQuery={searchUserReplaceQuery}
-                    onSearchUserReplaceQueryChange={setSearchUserReplaceQuery}
-                    selectedUserForReplace={selectedUserForReplace}
-                    onSelectUserForReplace={setSelectedUserForReplace}
-                    replaceGuestName={replaceGuestName}
-                    onReplaceGuestNameChange={setReplaceGuestName}
-                    replacePartnerMode={replacePartnerMode}
-                    onReplacePartnerModeChange={setReplacePartnerMode}
-                    searchPartnerReplaceQuery={searchPartnerReplaceQuery}
-                    onSearchPartnerReplaceQueryChange={setSearchPartnerReplaceQuery}
-                    selectedPartnerForReplace={selectedPartnerForReplace}
-                    onSelectPartnerForReplace={setSelectedPartnerForReplace}
-                    replaceGuestPartnerName={replaceGuestPartnerName}
-                    onReplaceGuestPartnerNameChange={setReplaceGuestPartnerName}
-                    replaceCategory={replaceCategory}
-                    onReplaceCategoryChange={setReplaceCategory}
-                    filterByGender={filterByGender}
-                    onToggleFilterByGender={() => setFilterByGender(!filterByGender)}
-                    matchTournamentGender={matchTournamentGender}
-                    onSubmit={handleReplacePlayerSubmit}
-                    isSubmitting={isSubmittingReplace}
-                    players={players}
-                />
-            )}
-
-            {/* SCHEDULE MATCH MODAL (Organizador) */}
-            {selectedMatchForSchedule && (
-                <ScheduleMatchModal
-                    isOpen={!!selectedMatchForSchedule}
-                    onClose={() => setSelectedMatchForSchedule(null)}
-                    tournament={tournament}
-                    match={selectedMatchForSchedule}
-                    players={players}
-                    scheduleDate={scheduleDate}
-                    onScheduleDateChange={setScheduleDate}
-                    onOpenCalendarPicker={openCalendarPicker}
-                    quickDatePresets={getQuickDatePresets()}
-                    formatFullDateDisplay={formatFullDateDisplay}
-                    scheduleTime={scheduleTime}
-                    onScheduleTimeChange={setScheduleTime}
-                    isCustomCourt={isCustomCourt}
-                    onToggleCustomCourt={() => setIsCustomCourt(!isCustomCourt)}
-                    customCourtName={customCourtName}
-                    onCustomCourtNameChange={setCustomCourtName}
-                    scheduleCourt={scheduleCourt}
-                    onScheduleCourtChange={setScheduleCourt}
-                    courtOptions={courtOptions}
-                    conflictBooking={conflictBooking}
-                    availableCourtsAtThisTime={availableCourtsAtThisTime}
-                    overrideConflict={overrideConflict}
-                    onOverrideConflictChange={setOverrideConflict}
-                    loadingDayBookings={loadingDayBookings}
-                    currentTargetCourt={currentTargetCourt}
-                    scheduleOopTurn={scheduleOopTurn}
-                    onScheduleOopTurnChange={setScheduleOopTurn}
-                    scheduleOopNote={scheduleOopNote}
-                    onScheduleOopNoteChange={setScheduleOopNote}
-                    onClearSchedule={handleClearSchedule}
-                    onSaveSchedule={handleSaveSchedule}
-                    savingSchedule={savingSchedule}
-                />
-            )}
-
-            {/* RAIN / CLIMATE DELAY MODAL */}
-            {showRainDelayModal && (
-                <RainDelayModal
-                    isOpen={showRainDelayModal}
-                    onClose={() => setShowRainDelayModal(false)}
-                    selectedOopDate={selectedOopDate}
-                    formatFullDateDisplay={formatFullDateDisplay}
-                    unplayedMatchesCount={oopDateMatches.filter(m => !m.is_played).length}
-                    rainDelayMinutes={rainDelayMinutes}
-                    onSelectRainDelayMinutes={setRainDelayMinutes}
-                    onApplyRainDelay={handleApplyRainDelay}
-                    isApplyingRainDelay={isApplyingRainDelay}
-                />
-            )}
-
-            {/* INTERACTIVE CALENDAR DATE PICKER MODAL */}
-            {showCalendarModal && (
-                <CalendarPickerModal
-                    isOpen={showCalendarModal}
-                    onClose={() => setShowCalendarModal(false)}
-                    calendarViewMonth={calendarViewMonth}
-                    onPrevMonth={handlePrevMonth}
-                    onNextMonth={handleNextMonth}
-                    onGoToToday={() => {
-                        const today = new Date();
-                        setCalendarViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-                        handleSelectCalendarDate(today.toISOString().split('T')[0]);
-                    }}
-                    startDate={tournament?.start_date}
-                    onSelectTournamentStartDate={() => {
-                        if (!tournament?.start_date) return;
-                        const [y, m] = tournament.start_date.split('-').map(Number);
-                        setCalendarViewMonth(new Date(y, m - 1, 1));
-                        handleSelectCalendarDate(tournament.start_date);
-                    }}
-                    scheduleDate={scheduleDate}
-                    onSelectDate={handleSelectCalendarDate}
-                    calendarCells={renderCalendarGrid()}
-                    formatFullDateDisplay={formatFullDateDisplay}
-                />
-            )}
-
-            {/* DELETE TOURNAMENT CONFIRMATION MODAL */}
-            {showDeleteModal && tournament && (
-                <DeleteTournamentModal
-                    isOpen={showDeleteModal}
-                    onClose={() => setShowDeleteModal(false)}
-                    tournament={tournament}
-                    playersCount={players.length}
-                    matchesCount={matches.length}
-                    onConfirm={handleDeleteTournament}
-                    isDeleting={isDeletingTournament}
-                />
-            )}
-
-            {/* SOCIAL MEDIA GRAPHIC GENERATOR MODAL */}
-            {showGraphicModal && tournament && (
-                <ShareGraphicModal
-                    isOpen={showGraphicModal}
-                    onClose={() => setShowGraphicModal(false)}
-                    tournament={tournament}
-                    zones={zones}
-                    playoffRounds={playoffRounds}
-                    championName={tournament.champion_name}
-                    matches={matches}
-                    currentUser={user}
-                />
-            )}
-
-            {/* EDIT TOURNAMENT MODAL (Organizador & Superadmin) */}
-            {showEditTournamentModal && tournament && (
-                <EditTournamentModal
-                    isOpen={showEditTournamentModal}
-                    onClose={() => setShowEditTournamentModal(false)}
-                    tournament={tournament}
-                    formData={editTournamentForm}
-                    onFormChange={setEditTournamentForm}
-                    onSubmit={handleSaveEditTournament}
-                    isUpdating={isUpdatingTournament}
-                />
-            )}
-
-            {/* PLAYER ENROLLMENT CONFIRMATION & AVAILABILITY MODAL */}
-            {showPlayerEnrollModal && tournament && (
-                <PlayerEnrollModal
-                    isOpen={showPlayerEnrollModal}
-                    onClose={() => setShowPlayerEnrollModal(false)}
-                    tournament={tournament}
-                    user={user}
-                    effectivePrice={effectivePrice}
-                    hostInstitution={hostInstitution}
-                    copiedAlias={copiedAlias}
-                    onCopyAlias={() => {
-                        const val = hostInstitution?.alias_mp || hostInstitution?.cvu_mp || '';
-                        navigator.clipboard.writeText(val);
-                        setCopiedAlias(true);
-                        setTimeout(() => setCopiedAlias(false), 3000);
-                        addToast("¡Alias copiado al portapapeles!", 'success');
-                    }}
-                    enrollmentReceiptImage={enrollmentReceiptImage}
-                    onReceiptImageChange={handleEnrollmentReceiptChange}
-                    onRemoveReceiptImage={() => setEnrollmentReceiptImage(null)}
-                    onViewReceipt={url => setViewingReceiptModal(url)}
-                    playerAvailabilityNotes={playerAvailabilityNotes}
-                    onAvailabilityNotesChange={setPlayerAvailabilityNotes}
-                    onToggleAvailabilityChip={chip => {
-                        if (playerAvailabilityNotes.includes(chip)) {
-                            setPlayerAvailabilityNotes(prev => prev.replace(chip, '').replace(/^,\s*|,\s*$/g, '').trim());
-                        } else {
-                            setPlayerAvailabilityNotes(prev => prev ? `${prev}, ${chip}` : chip);
-                        }
-                    }}
-                    onConfirmEnroll={handleConfirmPlayerEnroll}
-                    isEnrolling={isEnrolling}
-                />
-            )}
-
-            {/* MODAL DE JUGADORES INSCRIPTOS */}
-            {showEnrolledModal && (
-                <EnrolledPlayersModal
-                    isOpen={showEnrolledModal}
-                    onClose={() => setShowEnrolledModal(false)}
-                    tournament={tournament}
-                    players={players}
-                    filteredPlayers={filteredEnrolledPlayers}
-                    searchQuery={enrolledSearchQuery}
-                    onSearchQueryChange={setEnrolledSearchQuery}
-                    currentUser={user}
-                    isClubAdmin={isClubAdmin}
-                    onExportCSV={() => {
-                        if (!tournament) return;
-                        const profileMap: Record<string, any> = {};
-                        allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
-                        exportTournamentPlayersToCSV(tournament, players, profileMap);
-                        soundEffects.playScoreBeep();
-                        addToast("¡Listado de inscriptos descargado en CSV!", "success");
-                    }}
-                    onOpenManualEnroll={() => {
-                        setShowEnrolledModal(false);
-                        openManualEnrollModal();
-                    }}
-                    onOpenReplaceModal={handleOpenReplaceModal}
-                    onUnenrollPlayer={handleUnenrollPlayer}
-                    onTogglePaymentStatus={handleTogglePaymentStatus}
-                    onViewReceipt={url => setViewingReceiptModal(url)}
-                    deletingPlayerId={deletingPlayerId}
-                />
-            )}
-
-            {/* MODAL PARA OFICIALIZAR Y CONFIRMAR LLAVES */}
-            {showOfficializeModal && (
-                <OfficializeModal
-                    isOpen={showOfficializeModal}
-                    onClose={() => setShowOfficializeModal(false)}
-                    unplayedGroupMatchesCount={unplayedGroupMatches.length}
-                    zones={zones}
-                    selectedOfficialFormat={selectedOfficialFormat}
-                    onSelectOfficialFormat={setSelectedOfficialFormat}
-                    allowByes={allowByes}
-                    players={players}
-                    onConfirm={handleConfirmOfficialPlayoffs}
-                    generatingPlayoffs={generatingPlayoffs}
-                />
-            )}
-
-            {/* MODAL EXPLICATIVO DE MÉTODOS DE PROYECCIÓN Y CRUCES */}
-            {showProjectionHelpModal && (
-                <ProjectionHelpModal
-                    isOpen={showProjectionHelpModal}
-                    onClose={() => setShowProjectionHelpModal(false)}
-                />
-            )}
-
-            {/* Quick-Scorer Modal Ergonómico */}
-            {selectedMatchForScore && showQuickScorer && (
-                <MatchQuickScorerModal
-                    isOpen={showQuickScorer}
-                    onClose={() => {
-                        setShowQuickScorer(false);
-                        setSelectedMatchForScore(null);
-                    }}
-                    player1Name={selectedMatchForScore.team1_name || selectedMatchForScore.player1_name || 'Jugador 1'}
-                    player2Name={selectedMatchForScore.team2_name || selectedMatchForScore.player2_name || 'Jugador 2'}
-                    p1Id={selectedMatchForScore.player1_id}
-                    p2Id={selectedMatchForScore.player2_id}
-                    currentScore={selectedMatchForScore.score && typeof selectedMatchForScore.score === 'object' 
-                        ? `${selectedMatchForScore.score.set1 || ''} ${selectedMatchForScore.score.set2 || ''} ${selectedMatchForScore.score.set3 || ''}`.trim()
-                        : (selectedMatchForScore.score || '')
-                    }
-                    onSaveScore={handleQuickSaveScore}
-                />
-            )}
+                        {/* ALL TOURNAMENT MODALS */}
+            <TournamentModalsContainer
+                showManualEnrollModal={showManualEnrollModal}
+                setShowManualEnrollModal={setShowManualEnrollModal}
+                tournament={tournament}
+                players={players}
+                allProfiles={allProfiles}
+                loadingProfiles={loadingProfiles}
+                enrollMode={enrollMode}
+                setEnrollMode={setEnrollMode}
+                searchUserQuery={searchUserQuery}
+                setSearchUserQuery={setSearchUserQuery}
+                filterByGender={filterByGender}
+                setFilterByGender={setFilterByGender}
+                selectedUserForEnroll={selectedUserForEnroll}
+                setSelectedUserForEnroll={setSelectedUserForEnroll}
+                guestName={guestName}
+                setGuestName={setGuestName}
+                guestPartnerName={guestPartnerName}
+                setGuestPartnerName={setGuestPartnerName}
+                guestCategory={guestCategory}
+                setGuestCategory={setGuestCategory}
+                manualFee={manualFee}
+                setManualFee={setManualFee}
+                manualPaymentStatus={manualPaymentStatus}
+                setManualPaymentStatus={setManualPaymentStatus}
+                manualAvailabilityNotes={manualAvailabilityNotes}
+                setManualAvailabilityNotes={setManualAvailabilityNotes}
+                handleManualEnrollSubmit={handleManualEnrollSubmit}
+                submittingEnroll={submittingEnroll}
+                matchTournamentGender={matchTournamentGender}
+                getUserMasterEligibility={getUserMasterEligibility}
+                allProfilesForMasters={allProfilesForMasters}
+                selectedMatchForScore={selectedMatchForScore}
+                setSelectedMatchForScore={setSelectedMatchForScore}
+                user={user}
+                scoreSet1={scoreSet1}
+                setScoreSet1={setScoreSet1}
+                scoreSet2={scoreSet2}
+                setScoreSet2={setScoreSet2}
+                scoreSet3={scoreSet3}
+                setScoreSet3={setScoreSet3}
+                isSuperTiebreak={isSuperTiebreak}
+                setIsSuperTiebreak={setIsSuperTiebreak}
+                scoreError={scoreError}
+                savingScore={savingScore}
+                handleResetScore={handleResetScore}
+                handleSaveScore={handleSaveScore}
+                handleDisputeScore={handleDisputeScore}
+                disputeMatchId={disputeMatchId}
+                setDisputeMatchId={setDisputeMatchId}
+                h2hPlayers={h2hPlayers}
+                setH2hPlayers={setH2hPlayers}
+                showFixtureModal={showFixtureModal}
+                setShowFixtureModal={setShowFixtureModal}
+                fixtureNumGroups={fixtureNumGroups}
+                setFixtureNumGroups={setFixtureNumGroups}
+                handleShufflePreview={handleShufflePreview}
+                previewZones={previewZones}
+                setPreviewZones={setPreviewZones}
+                handleConfirmCustomFixture={handleConfirmCustomFixture}
+                generatingFixture={generatingFixture}
+                showReplacePlayerModal={showReplacePlayerModal}
+                setShowReplacePlayerModal={setShowReplacePlayerModal}
+                playerToReplace={playerToReplace}
+                replaceMode={replaceMode}
+                setReplaceMode={setReplaceMode}
+                searchReplaceUserQuery={searchReplaceUserQuery}
+                setSearchReplaceUserQuery={setSearchReplaceUserQuery}
+                selectedUserForReplace={selectedUserForReplace}
+                setSelectedUserForReplace={setSelectedUserForReplace}
+                guestReplaceName={guestReplaceName}
+                setGuestReplaceName={setGuestReplaceName}
+                guestReplacePartnerName={guestReplacePartnerName}
+                setGuestReplacePartnerName={setGuestReplacePartnerName}
+                replaceCategory={replaceCategory}
+                setReplaceCategory={setReplaceCategory}
+                handleReplacePlayerSubmit={handleReplacePlayerSubmit}
+                isSubmittingReplace={isSubmittingReplace}
+                selectedMatchForSchedule={selectedMatchForSchedule}
+                setSelectedMatchForSchedule={setSelectedMatchForSchedule}
+                scheduleDate={scheduleDate}
+                setScheduleDate={setScheduleDate}
+                scheduleTime={scheduleTime}
+                setScheduleTime={setScheduleTime}
+                scheduleCourtName={scheduleCourtName}
+                setScheduleCourtName={setScheduleCourtName}
+                scheduleOrderTurn={scheduleOrderTurn}
+                setScheduleOrderTurn={setScheduleOrderTurn}
+                scheduleNotes={scheduleNotes}
+                setScheduleNotes={setScheduleNotes}
+                courtBookings={courtBookings}
+                conflictError={conflictError}
+                overrideConflict={overrideConflict}
+                setOverrideConflict={setOverrideConflict}
+                savingSchedule={savingSchedule}
+                clearingSchedule={clearingSchedule}
+                allCourts={allCourts}
+                getQuickDatePresets={getQuickDatePresets}
+                openCalendarPicker={openCalendarPicker}
+                handleSaveSchedule={handleSaveSchedule}
+                handleClearSchedule={handleClearSchedule}
+                showRainDelayModal={showRainDelayModal}
+                setShowRainDelayModal={setShowRainDelayModal}
+                rainDelayHours={rainDelayHours}
+                setRainDelayHours={setRainDelayHours}
+                rainDelayNote={rainDelayNote}
+                setRainDelayNote={setRainDelayNote}
+                handleApplyRainDelay={handleApplyRainDelay}
+                isApplyingDelay={isApplyingDelay}
+                formatFullDateDisplay={formatFullDateDisplay}
+                selectedOopDate={selectedOopDate}
+                showCalendarPicker={showCalendarPicker}
+                setShowCalendarPicker={setShowCalendarPicker}
+                calendarViewDate={calendarViewDate}
+                handlePrevMonth={handlePrevMonth}
+                handleNextMonth={handleNextMonth}
+                renderCalendarGrid={renderCalendarGrid}
+                showDeleteModal={showDeleteModal}
+                setShowDeleteModal={setShowDeleteModal}
+                handleDeleteTournament={handleDeleteTournament}
+                isDeletingTournament={isDeletingTournament}
+                showGraphicModal={showGraphicModal}
+                setShowGraphicModal={setShowGraphicModal}
+                matches={matches}
+                showEditTournamentModal={showEditTournamentModal}
+                setShowEditTournamentModal={setShowEditTournamentModal}
+                editTournamentStartDate={editTournamentStartDate}
+                setEditTournamentStartDate={setEditTournamentStartDate}
+                editTournamentEndDate={editTournamentEndDate}
+                setEditTournamentEndDate={setEditTournamentEndDate}
+                editTournamentCategory={editTournamentCategory}
+                setEditTournamentCategory={setEditTournamentCategory}
+                editTournamentGender={editTournamentGender}
+                setEditTournamentGender={setEditTournamentGender}
+                editTournamentEntryFee={editTournamentEntryFee}
+                setEditTournamentEntryFee={setEditTournamentEntryFee}
+                editTournamentEntryFeeMember={editTournamentEntryFeeMember}
+                setEditTournamentEntryFeeMember={setEditTournamentEntryFeeMember}
+                editTournamentCompetitionFormat={editTournamentCompetitionFormat}
+                setEditTournamentCompetitionFormat={setEditTournamentCompetitionFormat}
+                editTournamentMinMatches={editTournamentMinMatches}
+                setEditTournamentMinMatches={setEditTournamentMinMatches}
+                handleSaveEditTournament={handleSaveEditTournament}
+                isUpdatingTournament={isUpdatingTournament}
+                showEnrollModal={showEnrollModal}
+                setShowEnrollModal={setShowEnrollModal}
+                isDoubles={isDoubles}
+                userCategory={userCategory}
+                hasPartner={hasPartner}
+                setHasPartner={setHasPartner}
+                partnerMode={partnerMode}
+                setPartnerMode={setPartnerMode}
+                searchPartnerQuery={searchPartnerQuery}
+                setSearchPartnerQuery={setSearchPartnerQuery}
+                selectedPartnerUser={selectedPartnerUser}
+                setSelectedPartnerUser={setSelectedPartnerUser}
+                partnerGuestName={partnerGuestName}
+                setPartnerGuestName={setPartnerGuestName}
+                partnerCategory={partnerCategory}
+                setPartnerCategory={setPartnerCategory}
+                partnerPaymentMethod={partnerPaymentMethod}
+                setPartnerPaymentMethod={setPartnerPaymentMethod}
+                enrollmentReceiptFile={enrollmentReceiptFile}
+                receiptPreviewUrl={receiptPreviewUrl}
+                handleEnrollmentReceiptChange={handleEnrollmentReceiptChange}
+                availabilityNotes={availabilityNotes}
+                setAvailabilityNotes={setAvailabilityNotes}
+                handleConfirmPlayerEnroll={handleConfirmPlayerEnroll}
+                effectivePrice={effectivePrice}
+                isClubAdmin={isClubAdmin}
+                showEnrolledModal={showEnrolledModal}
+                setShowEnrolledModal={setShowEnrolledModal}
+                handleTogglePaymentStatus={handleTogglePaymentStatus}
+                handleUnenrollPlayer={handleUnenrollPlayer}
+                exportTournamentPlayersToCSV={exportTournamentPlayersToCSV}
+                addToast={addToast}
+                showOfficializeModal={showOfficializeModal}
+                setShowOfficializeModal={setShowOfficializeModal}
+                officializeOption={officializeOption}
+                setOfficializeOption={setOfficializeOption}
+                handleConfirmOfficialPlayoffs={handleConfirmOfficialPlayoffs}
+                unplayedGroupMatches={unplayedGroupMatches}
+                totalGroupMatchesCount={totalGroupMatchesCount}
+                showProjectionHelpModal={showProjectionHelpModal}
+                setShowProjectionHelpModal={setShowProjectionHelpModal}
+                quickScorerMatch={quickScorerMatch}
+                setQuickScorerMatch={setQuickScorerMatch}
+                handleQuickSaveScore={handleQuickSaveScore}
+                viewingReceiptModal={viewingReceiptModal}
+                setViewingReceiptModal={setViewingReceiptModal}
+            />
 
             {/* PRINTABLE CONTROL SHEETS (A4 - Only visible during print) */}
             <TournamentPrintSheets
@@ -2596,14 +2391,6 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 oopMatchesByCourt={oopMatchesByCourt}
                 getMatchTime={getMatchTime}
             />
-
-                        {/* Modal de Zoom / Previsualización de Comprobante de Pago */}
-            {viewingReceiptModal && (
-                <ReceiptViewerModal
-                    receiptUrl={viewingReceiptModal}
-                    onClose={() => setViewingReceiptModal(null)}
-                />
-            )}
         </div>
     );
 };

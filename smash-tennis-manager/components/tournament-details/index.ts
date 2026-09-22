@@ -21,3 +21,4 @@ export { TournamentAdminPanel } from './TournamentAdminPanel';
 export { TournamentHeader } from './TournamentHeader';
 export { TournamentBanners } from './TournamentBanners';
 export { TournamentPrintSheets } from './TournamentPrintSheets';
+export { TournamentModalsContainer } from './TournamentModalsContainer';
