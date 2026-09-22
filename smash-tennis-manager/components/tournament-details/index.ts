@@ -16,3 +16,4 @@ export * from './ScoreInputModal';
 export { TournamentGroupsTab } from './TournamentGroupsTab';
 export { TournamentPlayoffsTab } from './TournamentPlayoffsTab';
 export { TournamentOrderOfPlayTab } from './TournamentOrderOfPlayTab';
+export { TournamentRegistrationPlayersList } from './TournamentRegistrationPlayersList';
