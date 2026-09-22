@@ -9,3 +9,5 @@ export * from './RainDelayModal';
 export * from './CalendarPickerModal';
 export * from './DisputeModal';
 export * from './ReceiptViewerModal';
+export * from './PlayerEnrollModal';
+export * from './GenerateFixtureModal';

@@ -34,7 +34,9 @@ import {
     RainDelayModal,
     CalendarPickerModal,
     DisputeModal,
-    ReceiptViewerModal
+    ReceiptViewerModal,
+    PlayerEnrollModal,
+    GenerateFixtureModal
 } from '../components/tournament-details';
 
 
@@ -5018,234 +5020,18 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* GENERATE FIXTURE MODAL */}
             {showFixtureModal && tournament && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl relative flex flex-col max-h-[90vh] overflow-hidden">
-                        {/* Header */}
-                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <div>
-                                <h3 className="text-base font-bold text-white flex items-center gap-2">
-                                    <Settings2 size={18} className="text-primary" /> Configurar y Sortear Zonas del Torneo
-                                </h3>
-                                <p className="text-xs text-muted mt-0.5">
-                                    {tournament.name} • {players.length} Jugadores Inscriptos
-                                </p>
-                            </div>
-                            <button onClick={() => setShowFixtureModal(false)} className="text-muted hover:text-white transition-colors">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="p-6 overflow-y-auto space-y-5">
-                            {/* SEEDING DISCLAIMER NOTICE */}
-                            <div className="bg-amber-500/10 border border-amber-500/25 rounded-2xl p-4 flex items-start gap-3.5 shadow-sm">
-                                <div className="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 mt-0.5 border border-amber-500/30">
-                                    <Info size={18} />
-                                </div>
-                                <div className="space-y-1">
-                                    <h4 className="text-xs font-bold text-amber-300 uppercase tracking-wider flex items-center gap-1.5">
-                                        Asignación de Cabezas de Serie y Ranking
-                                    </h4>
-                                    <p className="text-xs text-amber-200/90 leading-relaxed">
-                                        Hasta no contar con un historial o ranking oficial consolidado en el sistema, el armado de las zonas se realiza mediante un <strong>sorteo 100% aleatorio y equitativo</strong> sin cabezas de serie automáticas.
-                                    </p>
-                                    <p className="text-[11px] text-amber-300/80 italic">
-                                        💡 Una vez generado el fixture, podrás reubicar o intercambiar a los jugadores destacados entre zonas usando el botón <strong>"Intercambiar Jugadores"</strong>.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* GROUP FORMAT SELECTOR */}
-                            <div className="space-y-2">
-                                <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
-                                    <span>Formato y Cantidad de Zonas</span>
-                                    <span className="text-primary font-normal lowercase text-[11px]">
-                                        ({players.length} inscriptos)
-                                    </span>
-                                </label>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                                    {/* Preset: 4 Groups if available or Math.floor(N/3) */}
-                                    {players.length >= 6 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const g = Math.max(1, Math.floor(players.length / 3));
-                                                setFixtureNumGroups(g);
-                                                handleShufflePreview(g);
-                                            }}
-                                            className={`p-3 rounded-xl border text-left transition-all ${
-                                                fixtureNumGroups === Math.max(1, Math.floor(players.length / 3))
-                                                    ? 'bg-primary/20 border-primary text-white shadow-sm ring-1 ring-primary/50'
-                                                    : 'bg-sidebar/50 border-white/5 text-muted hover:text-white hover:bg-white/5'
-                                            }`}
-                                        >
-                                            <div className="font-bold text-xs text-white">
-                                                {Math.max(1, Math.floor(players.length / 3))} Zonas (Estándar)
-                                            </div>
-                                            <div className="text-[11px] text-slate-400 mt-0.5">
-                                                ~{Math.ceil(players.length / Math.max(1, Math.floor(players.length / 3)))} jugadores por grupo
-                                            </div>
-                                        </button>
-                                    )}
-
-                                    {/* Preset: 3 Groups if available */}
-                                    {players.length >= 8 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                const g = Math.max(1, Math.floor(players.length / 4));
-                                                setFixtureNumGroups(g);
-                                                handleShufflePreview(g);
-                                            }}
-                                            className={`p-3 rounded-xl border text-left transition-all ${
-                                                fixtureNumGroups === Math.max(1, Math.floor(players.length / 4))
-                                                    ? 'bg-primary/20 border-primary text-white shadow-sm ring-1 ring-primary/50'
-                                                    : 'bg-sidebar/50 border-white/5 text-muted hover:text-white hover:bg-white/5'
-                                            }`}
-                                        >
-                                            <div className="font-bold text-xs text-white">
-                                                {Math.max(1, Math.floor(players.length / 4))} Zonas (Más Partidos)
-                                            </div>
-                                            <div className="text-[11px] text-slate-400 mt-0.5">
-                                                ~{Math.ceil(players.length / Math.max(1, Math.floor(players.length / 4)))} jugadores por grupo
-                                            </div>
-                                        </button>
-                                    )}
-
-                                    {/* Preset: 2 Groups (Liga / Big Groups) */}
-                                    {players.length >= 4 && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setFixtureNumGroups(2);
-                                                handleShufflePreview(2);
-                                            }}
-                                            className={`p-3 rounded-xl border text-left transition-all ${
-                                                fixtureNumGroups === 2
-                                                    ? 'bg-primary/20 border-primary text-white shadow-sm ring-1 ring-primary/50'
-                                                    : 'bg-sidebar/50 border-white/5 text-muted hover:text-white hover:bg-white/5'
-                                            }`}
-                                        >
-                                            <div className="font-bold text-xs text-white">
-                                                2 Zonas (Liga)
-                                            </div>
-                                            <div className="text-[11px] text-slate-400 mt-0.5">
-                                                {Math.ceil(players.length / 2)} por grupo
-                                            </div>
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* CUSTOM SLIDER / STEPPER */}
-                            <div className="bg-sidebar/40 border border-white/5 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
-                                <div>
-                                    <div className="text-xs font-bold text-white flex items-center gap-2">
-                                        <Grid size={14} className="text-primary" /> Cantidad personalizada de Zonas
-                                    </div>
-                                    <p className="text-[11px] text-muted mt-0.5">
-                                        Ajusta manualmente el número de zonas para el torneo
-                                    </p>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <button
-                                        type="button"
-                                        disabled={fixtureNumGroups <= 1}
-                                        onClick={() => {
-                                            const next = Math.max(1, fixtureNumGroups - 1);
-                                            setFixtureNumGroups(next);
-                                            handleShufflePreview(next);
-                                        }}
-                                        className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center transition-colors disabled:opacity-30"
-                                    >
-                                        -
-                                    </button>
-                                    <span className="font-bold text-sm text-primary w-20 text-center">
-                                        {fixtureNumGroups} {fixtureNumGroups === 1 ? 'Zona' : 'Zonas'}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        disabled={fixtureNumGroups >= Math.floor(players.length / 2)}
-                                        onClick={() => {
-                                            const next = Math.min(Math.floor(players.length / 2), fixtureNumGroups + 1);
-                                            setFixtureNumGroups(next);
-                                            handleShufflePreview(next);
-                                        }}
-                                        className="w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 text-white font-bold flex items-center justify-center transition-colors disabled:opacity-30"
-                                    >
-                                        +
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* PREVIEW OF DRAW */}
-                            <div className="space-y-3">
-                                <div className="flex items-center justify-between">
-                                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
-                                        <Layers size={14} className="text-primary" /> Previsualización del Sorteo ({previewGroups.length} Zonas)
-                                    </h4>
-                                    <button
-                                        type="button"
-                                        onClick={() => handleShufflePreview(fixtureNumGroups)}
-                                        className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold rounded-xl border border-white/10 transition-colors flex items-center gap-1.5"
-                                        title="Volver a mezclar aleatoriamente"
-                                    >
-                                        <Shuffle size={13} className="text-primary" /> Volver a Sortear
-                                    </button>
-                                </div>
-
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-1">
-                                    {previewGroups.map((grp, idx) => (
-                                        <div key={idx} className="bg-slate-900/90 border border-white/10 rounded-xl p-3 space-y-2">
-                                            <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                                                <span className="font-bold text-xs text-primary">{grp.name}</span>
-                                                <span className="text-[10px] text-muted bg-white/5 px-2 py-0.5 rounded-full">
-                                                    {grp.players.length} jugadores • {(grp.players.length * (grp.players.length - 1)) / 2} partidos
-                                                </span>
-                                            </div>
-                                            <ul className="space-y-1">
-                                                {grp.players.map((p, pIdx) => (
-                                                    <li key={p.id || pIdx} className="text-xs text-slate-300 flex items-center justify-between">
-                                                        <span className="truncate">{pIdx + 1}. {p.name || p.player_name}</span>
-                                                        <span className="text-[10px] text-muted font-mono">{p.category || tournament.category}</span>
-                                                    </li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="p-5 border-t border-white/10 bg-white/5 flex flex-col sm:flex-row justify-between items-center gap-3">
-                            <div className="text-xs text-muted">
-                                Total de partidos a disputar: <strong className="text-white">{previewGroups.reduce((acc, g) => acc + (g.players.length * (g.players.length - 1)) / 2, 0)} partidos</strong>
-                            </div>
-                            <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowFixtureModal(false)}
-                                    className="px-4 py-2 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleConfirmCustomFixture}
-                                    disabled={generatingFixture || previewGroups.length === 0}
-                                    className="px-6 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
-                                >
-                                    {generatingFixture ? (
-                                        <><Loader2 size={14} className="animate-spin" /> Generando...</>
-                                    ) : (
-                                        <><Check size={14} /> Confirmar y Activar Torneo</>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <GenerateFixtureModal
+                    isOpen={showFixtureModal}
+                    onClose={() => setShowFixtureModal(false)}
+                    tournament={tournament}
+                    players={players}
+                    fixtureNumGroups={fixtureNumGroups}
+                    onNumGroupsChange={setFixtureNumGroups}
+                    onShufflePreview={handleShufflePreview}
+                    previewGroups={previewGroups}
+                    onConfirmFixture={handleConfirmCustomFixture}
+                    generatingFixture={generatingFixture}
+                />
             )}
 
             {/* REPLACE / SUBSTITUTE PLAYER MODAL */}
@@ -5740,230 +5526,37 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* PLAYER ENROLLMENT CONFIRMATION & AVAILABILITY MODAL */}
             {showPlayerEnrollModal && tournament && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-card border border-white/10 rounded-3xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh]">
-                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-primary/20 text-primary">
-                                    <Trophy size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-bold text-white">Inscripción al Torneo</h3>
-                                    <p className="text-xs text-muted">{tournament.name}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setShowPlayerEnrollModal(false)} className="text-muted hover:text-white p-1">
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-4 overflow-y-auto custom-scrollbar flex-1">
-                            <div className="p-3.5 bg-slate-900/90 border border-white/10 rounded-2xl flex items-center justify-between">
-                                <div>
-                                    <span className="text-xs text-muted block">Arancel oficial de inscripción</span>
-                                    <span className="text-lg font-black text-white">${effectivePrice}</span>
-                                </div>
-                                <span className="text-xs px-2.5 py-1 rounded-lg bg-primary/20 text-primary font-bold border border-primary/30">
-                                    {user.category || tournament.category} • {tournament.gender || 'Caballeros'}
-                                </span>
-                            </div>
-
-                            {effectivePrice > 0 && (
-                                <div className="p-4 rounded-2xl bg-gradient-to-br from-sky-950/40 via-blue-900/20 to-slate-900 border border-sky-500/30 space-y-3 shadow-lg">
-                                    <div className="flex items-center justify-between">
-                                        <div className="flex items-center gap-2 text-sky-400 font-bold text-xs">
-                                            <CreditCard size={16} />
-                                            <span>Pago del Arancel (0% Comisión)</span>
-                                        </div>
-                                        <span className="text-[10px] uppercase tracking-wider font-bold bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded-full border border-emerald-500/30">
-                                            Directo al Club
-                                        </span>
-                                    </div>
-
-                                    {(hostInstitution?.alias_mp || hostInstitution?.cvu_mp) ? (
-                                        <div className="space-y-2.5">
-                                            <p className="text-xs text-slate-300">
-                                                Podés transferir el arancel (${effectivePrice}) por Mercado Pago o banco:
-                                            </p>
-                                            <div className="p-3 bg-black/40 rounded-xl border border-white/10 flex items-center justify-between gap-2">
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="text-[10px] text-muted uppercase font-bold">Alias de Mercado Pago</div>
-                                                    <div className="font-mono text-sm font-bold text-emerald-400 truncate">
-                                                        {hostInstitution.alias_mp || hostInstitution.cvu_mp}
-                                                    </div>
-                                                    {hostInstitution.titular_mp && (
-                                                        <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-                                                            Titular: {hostInstitution.titular_mp}
-                                                        </div>
-                                                    )}
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const val = hostInstitution.alias_mp || hostInstitution.cvu_mp || '';
-                                                        navigator.clipboard.writeText(val);
-                                                        setCopiedAlias(true);
-                                                        setTimeout(() => setCopiedAlias(false), 3000);
-                                                        addToast("¡Alias copiado al portapapeles!", 'success');
-                                                    }}
-                                                    className="px-3 py-2 bg-sky-500/20 hover:bg-sky-500/30 text-sky-300 border border-sky-500/40 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shrink-0"
-                                                >
-                                                    {copiedAlias ? <Check size={14} className="text-emerald-400" /> : <Copy size={14} />}
-                                                    <span>{copiedAlias ? 'Copiado' : 'Copiar'}</span>
-                                                </button>
-                                            </div>
-
-                                            <a
-                                                href="https://www.mercadopago.com.ar/transfer/account-finder?preference_id=transfer-mla-desktop&workflow_id=ars_transfer"
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                onClick={() => {
-                                                    const val = hostInstitution.alias_mp || hostInstitution.cvu_mp || '';
-                                                    if (val) navigator.clipboard.writeText(val);
-                                                }}
-                                                className="w-full py-2.5 bg-gradient-to-r from-sky-500 to-blue-600 hover:from-sky-400 hover:to-blue-500 text-white font-bold rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-sky-500/20 transition-all"
-                                            >
-                                                <ExternalLink size={14} />
-                                                <span>Copiar Alias y Abrir Mercado Pago</span>
-                                            </a>
-                                        </div>
-                                    ) : (
-                                        <p className="text-xs text-slate-400">
-                                            El club no ha configurado alias online. Podrás abonar tu arancel directamente en mesa de control el día del torneo.
-                                        </p>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Step: Adjuntar Comprobante de Transferencia (Obligatorio si arancel > $0) */}
-                            {effectivePrice > 0 && (
-                                <div className="space-y-2.5 p-4 rounded-2xl bg-white/5 border border-white/10">
-                                    <div className="flex items-center justify-between">
-                                        <label className="text-xs text-white font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                            <Receipt size={14} className="text-primary" /> Comprobante de Transferencia *
-                                        </label>
-                                        <span className="text-[10px] bg-amber-500/20 text-amber-300 font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
-                                            Reserva de plaza (15 min)
-                                        </span>
-                                    </div>
-                                    <p className="text-xs text-muted">
-                                        Adjuntá la foto o captura del comprobante bancario para asegurar tu lugar en el cuadro:
-                                    </p>
-
-                                    {enrollmentReceiptImage ? (
-                                        <div className="relative group rounded-xl overflow-hidden border border-emerald-500/50 bg-black/40 p-2 flex items-center gap-3">
-                                            <img 
-                                                src={enrollmentReceiptImage} 
-                                                alt="Comprobante" 
-                                                className="w-16 h-16 object-cover rounded-lg border border-white/10 cursor-pointer"
-                                                onClick={() => setViewingReceiptModal(enrollmentReceiptImage)}
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-xs font-bold text-emerald-400 flex items-center gap-1">
-                                                    <Check size={14} /> Comprobante adjuntado
-                                                </div>
-                                                <div className="text-[10px] text-muted">Haz clic en "Confirmar Inscripción" para finalizar.</div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setEnrollmentReceiptImage(null)}
-                                                className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-colors"
-                                                title="Quitar comprobante"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    ) : (
-                                        <label className="flex flex-col items-center justify-center p-4 border-2 border-dashed border-white/20 hover:border-primary/60 rounded-xl cursor-pointer bg-white/5 hover:bg-white/10 transition-all text-center">
-                                            <Upload size={22} className="text-primary mb-1" />
-                                            <span className="text-xs font-bold text-white">Subir captura o foto del comprobante</span>
-                                            <span className="text-[10px] text-muted mt-0.5">JPG o PNG hasta 10 MB (se comprime automáticamente)</span>
-                                            <input 
-                                                type="file" 
-                                                accept="image/*" 
-                                                className="hidden" 
-                                                onChange={handleEnrollmentReceiptChange}
-                                            />
-                                        </label>
-                                    )}
-                                </div>
-                            )}
-
-                            {/* Availability / Schedule Restrictions Section */}
-                            <div className="space-y-2">
-                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                    <Clock size={14} className="text-amber-400" /> Tu Disponibilidad Horaria (Opcional)
-                                </label>
-                                <p className="text-xs text-muted">
-                                    Selecciona o escribe tus preferencias de horario para que la organización las tenga en cuenta:
-                                </p>
-
-                                {/* Quick Selection Chips */}
-                                <div className="flex flex-wrap gap-1.5 pt-1">
-                                    {[
-                                        'Viernes desde 19hs',
-                                        'Sábado mañana',
-                                        'Sábado tarde',
-                                        'Domingo todo el día',
-                                        'Sin restricciones'
-                                    ].map(chip => (
-                                        <button
-                                            key={chip}
-                                            type="button"
-                                            onClick={() => {
-                                                if (playerAvailabilityNotes.includes(chip)) {
-                                                    setPlayerAvailabilityNotes(prev => prev.replace(chip, '').replace(/^,\s*|,\s*$/g, '').trim());
-                                                } else {
-                                                    setPlayerAvailabilityNotes(prev => prev ? `${prev}, ${chip}` : chip);
-                                                }
-                                            }}
-                                            className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-all ${
-                                                playerAvailabilityNotes.includes(chip)
-                                                    ? 'bg-amber-500/20 border-amber-400 text-amber-300 shadow-sm'
-                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
-                                            }`}
-                                        >
-                                            {chip}
-                                        </button>
-                                    ))}
-                                </div>
-
-                                {/* Custom Text Area / Input */}
-                                <textarea
-                                    rows={2}
-                                    value={playerAvailabilityNotes}
-                                    onChange={e => setPlayerAvailabilityNotes(e.target.value)}
-                                    placeholder="Ej: Sábado no puedo de 13 a 16 hs, resto del fin de semana disponible..."
-                                    className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white placeholder-slate-500 focus:border-primary outline-none resize-none"
-                                />
-                            </div>
-
-                            <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl flex items-start gap-2.5 text-xs text-blue-200">
-                                <Info size={16} className="text-blue-400 shrink-0 mt-0.5" />
-                                <span>Tu disponibilidad será visible para los organizadores en la mesa de control al programar tus partidos.</span>
-                            </div>
-                        </div>
-
-                        <div className="p-5 border-t border-white/10 bg-white/5 flex justify-end gap-3">
-                            <button
-                                type="button"
-                                onClick={() => setShowPlayerEnrollModal(false)}
-                                disabled={isEnrolling}
-                                className="px-4 py-2.5 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                onClick={handleConfirmPlayerEnroll}
-                                disabled={isEnrolling}
-                                className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
-                            >
-                                {isEnrolling ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Confirmar Inscripción
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <PlayerEnrollModal
+                    isOpen={showPlayerEnrollModal}
+                    onClose={() => setShowPlayerEnrollModal(false)}
+                    tournament={tournament}
+                    user={user}
+                    effectivePrice={effectivePrice}
+                    hostInstitution={hostInstitution}
+                    copiedAlias={copiedAlias}
+                    onCopyAlias={() => {
+                        const val = hostInstitution?.alias_mp || hostInstitution?.cvu_mp || '';
+                        navigator.clipboard.writeText(val);
+                        setCopiedAlias(true);
+                        setTimeout(() => setCopiedAlias(false), 3000);
+                        addToast("¡Alias copiado al portapapeles!", 'success');
+                    }}
+                    enrollmentReceiptImage={enrollmentReceiptImage}
+                    onReceiptImageChange={handleEnrollmentReceiptChange}
+                    onRemoveReceiptImage={() => setEnrollmentReceiptImage(null)}
+                    onViewReceipt={url => setViewingReceiptModal(url)}
+                    playerAvailabilityNotes={playerAvailabilityNotes}
+                    onAvailabilityNotesChange={setPlayerAvailabilityNotes}
+                    onToggleAvailabilityChip={chip => {
+                        if (playerAvailabilityNotes.includes(chip)) {
+                            setPlayerAvailabilityNotes(prev => prev.replace(chip, '').replace(/^,\s*|,\s*$/g, '').trim());
+                        } else {
+                            setPlayerAvailabilityNotes(prev => prev ? `${prev}, ${chip}` : chip);
+                        }
+                    }}
+                    onConfirmEnroll={handleConfirmPlayerEnroll}
+                    isEnrolling={isEnrolling}
+                />
             )}
 
             {/* MODAL DE JUGADORES INSCRIPTOS */}
