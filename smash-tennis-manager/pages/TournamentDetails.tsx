@@ -6149,419 +6149,50 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* MODAL DE JUGADORES INSCRIPTOS */}
             {showEnrolledModal && (
-                <div 
-                    className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn"
-                    onClick={() => setShowEnrolledModal(false)}
-                >
-                    <div 
-                        className="bg-slate-900 border border-white/10 rounded-2xl max-w-2xl w-full p-6 shadow-2xl flex flex-col max-h-[90vh] text-white"
-                        onClick={e => e.stopPropagation()}
-                    >
-                        {/* Header */}
-                        <div className="flex items-center justify-between border-b border-white/10 pb-4 mb-4">
-                            <div className="flex items-center gap-3">
-                                <div className="p-2.5 rounded-xl bg-primary/20 text-primary">
-                                    <Users size={22} />
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-black flex items-center gap-2">
-                                        Jugadores Inscriptos
-                                        <span className="text-xs bg-primary/20 text-primary px-2.5 py-0.5 rounded-full font-bold">
-                                            {players.length}
-                                        </span>
-                                    </h3>
-                                    <p className="text-xs text-slate-400">
-                                        {tournament?.name} • Categoría: {tournament?.category || 'Todas'}
-                                    </p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowEnrolledModal(false)}
-                                className="text-slate-400 hover:text-white p-2 rounded-xl hover:bg-white/10 transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        {/* Search and Action Bar */}
-                        <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                            <div className="relative flex-1 min-w-[200px]">
-                                <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar por jugador o categoría..."
-                                    value={enrolledSearchQuery}
-                                    onChange={e => setEnrolledSearchQuery(e.target.value)}
-                                    className="w-full bg-slate-950/60 border border-white/10 rounded-xl pl-10 pr-9 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-primary transition-all"
-                                />
-                                {enrolledSearchQuery && (
-                                    <button
-                                        onClick={() => setEnrolledSearchQuery('')}
-                                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1 rounded-md"
-                                    >
-                                        <X size={13} />
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="flex items-center gap-2">
-                                {isClubAdmin && (
-                                    <button
-                                        onClick={() => {
-                                            if (!tournament) return;
-                                            const profileMap: Record<string, any> = {};
-                                            allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
-                                            exportTournamentPlayersToCSV(tournament, players, profileMap);
-                                            soundEffects.playScoreBeep();
-                                            addToast("¡Listado de inscriptos descargado en CSV!", "success");
-                                        }}
-                                        className="p-2 px-3 bg-white/5 hover:bg-white/10 text-slate-200 border border-white/10 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                                        title="Descargar lista de inscriptos en Excel / CSV con datos de contacto y disponibilidad"
-                                    >
-                                        <Download size={14} className="text-emerald-400" /> Exportar CSV
-                                    </button>
-                                )}
-                                {isClubAdmin && (
-                                    <button
-                                        onClick={() => {
-                                            setShowEnrolledModal(false);
-                                            openManualEnrollModal();
-                                        }}
-                                        className="p-2 px-3 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm"
-                                        title="Inscribir jugador manualmente"
-                                    >
-                                        <UserPlus size={14} /> Inscribir
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* List */}
-                        <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 max-h-[55vh]">
-                            {filteredEnrolledPlayers.length === 0 ? (
-                                <div className="text-center py-12 text-slate-400 text-xs">
-                                    {enrolledSearchQuery ? 'No se encontraron jugadores que coincidan con la búsqueda.' : 'Aún no hay jugadores inscriptos en este torneo.'}
-                                </div>
-                            ) : (
-                                filteredEnrolledPlayers.map((p, i) => {
-                                    const pDisplayName = formatPlayerName(p.name || p.player_name);
-                                    const isPaid = p.payment_status === 'paid';
-                                    const isSelf = p.player_id === user.id || p.id === user.id;
-                                    const pAvailability = p.availability_notes || p.time_restrictions;
-
-                                    return (
-                                        <div 
-                                            key={p.id || i} 
-                                            className="flex items-center justify-between gap-3 p-3 bg-slate-950/40 border border-white/5 rounded-xl hover:border-white/20 transition-all"
-                                        >
-                                            <div className="flex items-center gap-3 min-w-0 flex-1">
-                                                <div className="w-9 h-9 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-xs font-bold text-primary shrink-0 shadow-inner">
-                                                    {pDisplayName.charAt(0).toUpperCase()}
-                                                </div>
-                                                <div className="min-w-0 flex-1">
-                                                    <div className="text-xs font-bold text-white truncate flex items-center gap-2">
-                                                        <span>{pDisplayName}</span>
-                                                        {isSelf && (
-                                                            <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">
-                                                                Tú
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                                                        <span className="text-[10px] text-slate-400 font-medium bg-white/5 px-2 py-0.5 rounded border border-white/5">
-                                                            {p.category ? `${p.category} Cat.` : 'Sin Cat.'}
-                                                        </span>
-                                                        {(isClubAdmin || isSelf) && p.fee_amount ? (
-                                                            <span className="text-[10px] text-emerald-400 font-mono font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                                                                ${p.fee_amount}
-                                                            </span>
-                                                        ) : null}
-                                                        {(isClubAdmin || isSelf) && pAvailability ? (
-                                                            <span 
-                                                                className="text-[10px] text-amber-300 font-medium bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded flex items-center gap-1 max-w-[200px]"
-                                                                title={`Disponibilidad: ${pAvailability}`}
-                                                            >
-                                                                <Clock size={10} className="text-amber-400 shrink-0" />
-                                                                <span className="truncate">{pAvailability}</span>
-                                                            </span>
-                                                        ) : null}
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-2 shrink-0">
-                                                {/* Comprobante de pago adjunto para Admin */}
-                                                {isClubAdmin && p.receipt_url && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setViewingReceiptModal(p.receipt_url || null)}
-                                                        className="text-[11px] px-2.5 py-1 rounded-lg font-bold bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/30 flex items-center gap-1 transition-all"
-                                                        title="Ver comprobante de pago subido por el jugador"
-                                                    >
-                                                        <Eye size={12} className="text-blue-400" />
-                                                        <span>Comprobante</span>
-                                                    </button>
-                                                )}
-
-                                                {/* Payment Status: Admin or Self only */}
-                                                {isClubAdmin ? (
-                                                    <button
-                                                        onClick={() => handleTogglePaymentStatus(p)}
-                                                        title="Click para cambiar estado de pago"
-                                                        className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border transition-all ${
-                                                            isPaid
-                                                                ? 'bg-green-500/20 text-green-300 border-green-500/30 hover:bg-green-500/30'
-                                                                : 'bg-amber-500/20 text-amber-300 border-amber-500/30 hover:bg-amber-500/30'
-                                                        }`}
-                                                    >
-                                                        {isPaid ? 'Pagado' : 'Pendiente'}
-                                                    </button>
-                                                ) : isSelf ? (
-                                                    <span className={`text-[11px] px-2.5 py-1 rounded-lg font-bold border ${
-                                                        isPaid ? 'bg-green-500/20 text-green-300 border-green-500/30' : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
-                                                    }`}>
-                                                        {isPaid ? 'Pagado' : 'Pendiente'}
-                                                    </span>
-                                                ) : null}
-
-                                                {/* Action Buttons for Admin */}
-                                                {isClubAdmin && (
-                                                    <div className="flex items-center gap-1.5 ml-1">
-                                                        <button
-                                                            onClick={() => {
-                                                                handleOpenReplaceModal(p);
-                                                            }}
-                                                            className="p-1.5 bg-primary/15 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
-                                                            title="Sustituir / Reemplazar jugador en el torneo"
-                                                        >
-                                                            <RefreshCw size={14} />
-                                                        </button>
-
-                                                        {matches.length === 0 && (
-                                                            <button
-                                                                onClick={() => handleUnenrollPlayer(p)}
-                                                                disabled={deletingPlayerId === p.id}
-                                                                className="p-1.5 bg-red-500/15 hover:bg-red-500/30 text-red-400 border border-red-500/30 rounded-lg transition-all flex items-center justify-center shadow-sm"
-                                                                title="Dar de baja / Quitar inscripto"
-                                                            >
-                                                                {deletingPlayerId === p.id ? (
-                                                                    <Loader2 size={14} className="animate-spin text-red-400" />
-                                                                ) : (
-                                                                    <Trash2 size={14} />
-                                                                )}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    );
-                                })
-                            )}
-                        </div>
-
-                        {/* Footer */}
-                        <div className="pt-4 border-t border-white/10 flex justify-between items-center text-xs text-slate-400 mt-4">
-                            <span>Mostrando {filteredEnrolledPlayers.length} de {players.length} jugadores</span>
-                            <button
-                                onClick={() => setShowEnrolledModal(false)}
-                                className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition-all text-xs"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <EnrolledPlayersModal
+                    isOpen={showEnrolledModal}
+                    onClose={() => setShowEnrolledModal(false)}
+                    tournament={tournament}
+                    players={players}
+                    filteredPlayers={filteredEnrolledPlayers}
+                    searchQuery={enrolledSearchQuery}
+                    onSearchQueryChange={setEnrolledSearchQuery}
+                    currentUser={user}
+                    isClubAdmin={isClubAdmin}
+                    onExportCSV={() => {
+                        if (!tournament) return;
+                        const profileMap: Record<string, any> = {};
+                        allProfiles.forEach(prof => { profileMap[prof.id] = prof; });
+                        exportTournamentPlayersToCSV(tournament, players, profileMap);
+                        soundEffects.playScoreBeep();
+                        addToast("¡Listado de inscriptos descargado en CSV!", "success");
+                    }}
+                    onOpenManualEnroll={() => {
+                        setShowEnrolledModal(false);
+                        openManualEnrollModal();
+                    }}
+                    onOpenReplaceModal={handleOpenReplaceModal}
+                    onUnenrollPlayer={handleUnenrollPlayer}
+                    onTogglePaymentStatus={handleTogglePaymentStatus}
+                    onViewReceipt={url => setViewingReceiptModal(url)}
+                    deletingPlayerId={deletingPlayerId}
+                />
             )}
 
             {/* MODAL PARA OFICIALIZAR Y CONFIRMAR LLAVES */}
             {showOfficializeModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-                    <div className="bg-slate-900 border border-white/10 rounded-2xl max-w-xl w-full p-6 shadow-2xl space-y-5 text-white max-h-[90vh] overflow-y-auto">
-                        <div className="flex items-center justify-between border-b border-white/10 pb-3">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-                                    <Trophy size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-black">Oficializar Cuadro de Llaves</h3>
-                                    <p className="text-xs text-slate-400">Elige el método reglamentario para generar los cruces definitivos</p>
-                                </div>
-                            </div>
-                            <button
-                                onClick={() => setShowOfficializeModal(false)}
-                                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-white/5"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-
-                        {/* Unplayed matches notice */}
-                        {unplayedGroupMatches.length > 0 && (
-                            <div className="p-3 bg-amber-500/15 border border-amber-500/30 rounded-xl text-xs text-amber-200 flex items-start gap-2">
-                                <AlertTriangle size={16} className="text-amber-400 shrink-0 mt-0.5" />
-                                <div>
-                                    <strong className="block text-amber-300 font-bold">Fase de Grupos en curso ({unplayedGroupMatches.length} partidos pendientes)</strong>
-                                    Al oficializar ahora, se cerrará la fase de zonas y se tomarán las posiciones actuales de la tabla para armar los playoffs.
-                                </div>
-                            </div>
-                        )}
-
-                        {/* Format selector */}
-                        <div className="space-y-3">
-                            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                                Selecciona el Esquema de Cruces:
-                            </label>
-
-                            {/* Cartel de Sugerencia Inteligente según Zonas */}
-                            {zones.length === 4 && (
-                                <div className="p-3 bg-primary/10 border border-primary/30 rounded-xl flex items-start gap-2.5 text-xs">
-                                    <Sparkles size={16} className="text-primary shrink-0 mt-0.5" />
-                                    <div>
-                                        <span className="font-bold text-white block">💡 Recomendación para 4 Zonas:</span>
-                                        <span className="text-slate-300">
-                                            Se sugiere <strong>Cruces Directos por Zonas</strong> (1°A vs 2°C, 1°B vs 2°D, 1°C vs 2°A, 1°D vs 2°B). Es el formato tradicional de tenis: cruza zonas alternadas y garantiza que los rivales de un mismo grupo solo puedan reencontrarse en la Final.
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {zones.length === 3 && (
-                                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs">
-                                    <Sparkles size={16} className="text-amber-400 shrink-0 mt-0.5" />
-                                    <div>
-                                        <span className="font-bold text-amber-300 block">💡 Torneo con 3 Zonas (6 clasificados):</span>
-                                        <span className="text-slate-300">
-                                            Al ser cantidad impar de zonas, se sugiere <strong>Cruces Directos por Zonas</strong>: los 2 mejores primeros obtienen <strong>BYE directo a Semifinales</strong> por mérito deportivo, y se juegan 2 Cuartos de Final (1°C vs 2°A y 2°B vs 2°C) sin repetición de grupo.
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            {zones.length >= 5 && (
-                                <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl flex items-start gap-2.5 text-xs">
-                                    <Sparkles size={16} className="text-amber-400 shrink-0 mt-0.5" />
-                                    <div>
-                                        <span className="font-bold text-amber-300 block">💡 Torneo con {zones.length} Zonas:</span>
-                                        <span className="text-slate-300">
-                                            Para estructuras con más de 4 zonas, se recomienda <strong>Tabla General Unificada + BYEs</strong> para rankear objetivamente a los clasificados por puntos, sets y games para balancear el cuadro.
-                                        </span>
-                                    </div>
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-1 gap-2.5">
-                                <label
-                                    onClick={() => setSelectedOfficialFormat('tabla_general_byes')}
-                                    className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                                        selectedOfficialFormat === 'tabla_general_byes'
-                                            ? 'bg-amber-500/15 border-amber-500/60 shadow-md ring-1 ring-amber-500/30'
-                                            : 'bg-white/5 border-white/10 hover:border-white/20'
-                                    }`}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="officialFormat"
-                                        checked={selectedOfficialFormat === 'tabla_general_byes'}
-                                        onChange={() => setSelectedOfficialFormat('tabla_general_byes')}
-                                        className="mt-1 accent-amber-500"
-                                    />
-                                    <div>
-                                        <div className="text-xs font-black text-white flex items-center gap-2">
-                                            🏆 Tabla General Unificada + BYEs
-                                            <span className="text-[10px] px-1.5 py-0.2 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded">Por Mérito</span>
-                                            {zones.length >= 5 && (
-                                                <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded font-bold">Recomendado</span>
-                                            )}
-                                        </div>
-                                        <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                                            Se ordena a todos los jugadores por puntos, sets y games. El 1° y 2° general pasan con BYE a Semis, y el 1° cruza con el último clasificado (1° vs 8°, 4° vs 5°, 3° vs 6°, 2° vs 7°).
-                                        </div>
-                                    </div>
-                                </label>
-
-                                <label
-                                    onClick={() => setSelectedOfficialFormat('zonas_playoffs')}
-                                    className={`p-3.5 rounded-xl border cursor-pointer transition-all flex items-start gap-3 ${
-                                        selectedOfficialFormat === 'zonas_playoffs'
-                                            ? 'bg-primary/15 border-primary/60 shadow-md ring-1 ring-primary/30'
-                                            : 'bg-white/5 border-white/10 hover:border-white/20'
-                                    }`}
-                                >
-                                    <input
-                                        type="radio"
-                                        name="officialFormat"
-                                        checked={selectedOfficialFormat === 'zonas_playoffs'}
-                                        onChange={() => setSelectedOfficialFormat('zonas_playoffs')}
-                                        className="mt-1 accent-primary"
-                                    />
-                                    <div>
-                                        <div className="text-xs font-black text-white flex items-center gap-2">
-                                            🎾 Cruces Directos por Zonas
-                                            <span className="text-[10px] px-1.5 py-0.2 bg-primary/20 text-primary border border-primary/30 rounded">Anti-Repetición</span>
-                                            {(zones.length === 3 || zones.length === 4) && (
-                                                <span className="text-[10px] px-1.5 py-0.2 bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded font-bold">Recomendado</span>
-                                            )}
-                                        </div>
-                                        <div className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                                            {zones.length === 3 
-                                                ? 'Formato especial para 3 zonas: Los 2 mejores primeros reciben BYE a Semis. Se arman Cuartos entre 1°C vs 2°A y 2°B vs 2°C garantizando que ningún rival de grupo se vuelva a cruzar en el debut.'
-                                                : zones.length === 4
-                                                ? 'Formato tradicional de 4 zonas alternadas: 1°A vs 2°C y 1°B vs 2°D (llave alta), 1°C vs 2°A y 1°D vs 2°B (llave baja). Evita choques tempranos entre zonas cercanas.'
-                                                : 'Cruces directos entre zonas garantizando que rivales de un mismo grupo no se crucen de entrada.'}
-                                        </div>
-                                    </div>
-                                </label>
-                            </div>
-                        </div>
-
-                        {/* Live preview previewing chosen method matches */}
-                        <div className="p-3.5 bg-black/40 border border-white/10 rounded-xl space-y-2">
-                            <div className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between">
-                                <span>Previa de Cruces Resultantes:</span>
-                                <span className="text-[10px] text-amber-400 font-mono">
-                                    {selectedOfficialFormat === 'tabla_general_byes' ? 'Tabla General' : 'Directo por Zonas'}
-                                </span>
-                            </div>
-                            <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                                {(() => {
-                                    const previewRounds = getProjectedPlayoffRounds(zones, selectedOfficialFormat, allowByes, players);
-                                    const firstRound = previewRounds[0];
-                                    if (!firstRound || firstRound.matches.length === 0) {
-                                        return <div className="text-xs text-slate-500 italic">No hay suficientes clasificados para armar la ronda.</div>;
-                                    }
-                                    return firstRound.matches.map((m, idx) => (
-                                        <div key={idx} className="flex items-center justify-between bg-white/5 px-2.5 py-1.5 rounded-lg text-xs">
-                                            <span className="font-bold text-slate-200">{m.p1Name || m.slotP1Label}</span>
-                                            <span className="text-[10px] text-amber-400 font-black px-1.5">vs</span>
-                                            <span className="font-bold text-slate-200">{m.p2Name || m.slotP2Label}</span>
-                                        </div>
-                                    ));
-                                })()}
-                            </div>
-                        </div>
-
-                        {/* Modal Footer */}
-                        <div className="flex items-center justify-end gap-3 pt-2 border-t border-white/10">
-                            <button
-                                type="button"
-                                onClick={() => setShowOfficializeModal(false)}
-                                className="px-4 py-2 text-xs font-semibold text-slate-300 hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-all"
-                            >
-                                Cancelar
-                            </button>
-                            <button
-                                type="button"
-                                disabled={generatingPlayoffs}
-                                onClick={() => handleConfirmOfficialPlayoffs(selectedOfficialFormat)}
-                                className="px-5 py-2.5 bg-gradient-to-r from-emerald-400 to-green-500 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-500/20 hover:brightness-110 transition-all flex items-center gap-2"
-                            >
-                                <Trophy size={14} className={generatingPlayoffs ? 'animate-spin' : ''} />
-                                {generatingPlayoffs ? 'Oficializando...' : 'Confirmar y Crear Llaves Oficiales'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <OfficializeModal
+                    isOpen={showOfficializeModal}
+                    onClose={() => setShowOfficializeModal(false)}
+                    unplayedGroupMatchesCount={unplayedGroupMatches.length}
+                    zones={zones}
+                    selectedOfficialFormat={selectedOfficialFormat}
+                    onSelectOfficialFormat={setSelectedOfficialFormat}
+                    allowByes={allowByes}
+                    players={players}
+                    onConfirm={handleConfirmOfficialPlayoffs}
+                    generatingPlayoffs={generatingPlayoffs}
+                />
             )}
 
             {/* MODAL EXPLICATIVO DE MÉTODOS DE PROYECCIÓN Y CRUCES */}
