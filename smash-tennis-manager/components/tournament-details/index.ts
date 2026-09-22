@@ -14,3 +14,4 @@ export * from './GenerateFixtureModal';
 export * from './ScheduleMatchModal';
 export * from './ScoreInputModal';
 export { TournamentGroupsTab } from './TournamentGroupsTab';
+export { TournamentPlayoffsTab } from './TournamentPlayoffsTab';
