@@ -701,6 +701,10 @@ export const api = {
                                                 year: new Date().getFullYear()
                                             });
                                         }
+
+                                        // Auto-advance winner in playoff bracket tree
+                                        const isDoubles = tournament?.type === 'doubles' || !!m.winner_partner_id || !!m.player1_partner_id;
+                                        await api.matches.advancePlayoffWinner(m.id, m.winner_id, isDoubles, m.winner_partner_id);
                                     } catch (e) {
                                         console.warn("Auto-confirm point award fallback:", e);
                                     }
@@ -724,6 +728,24 @@ export const api = {
                     player2_partner_name: m.player2_partner_name ? formatPlayerName(m.player2_partner_name) : undefined
                 };
             });
+
+            // Self-healing check: ensure confirmed playoff match winners are propagated to next rounds
+            const isDoublesTournament = tournament?.type === 'doubles';
+            for (const pm of (matches || [])) {
+                if (pm.is_played && pm.winner_id && (pm.score_status === 'confirmed' || pm.score_status === null || pm.score_status === undefined) && pm.round !== 'Fase de Grupos') {
+                    const pData = pm.proposal_data;
+                    if (pData?.next_round && pData?.next_match_index !== undefined && pData?.next_slot) {
+                        const nextRoundMatches = (matches || []).filter(m => m.round === pData.next_round);
+                        const target = nextRoundMatches.find(m => m.proposal_data?.bracket_match_index === pData.next_match_index) || nextRoundMatches[pData.next_match_index];
+                        if (target) {
+                            const isSlotEmpty = pData.next_slot === 'player1' ? !target.player1_id : !target.player2_id;
+                            if (isSlotEmpty) {
+                                api.matches.advancePlayoffWinner(pm.id, pm.winner_id, isDoublesTournament, pm.winner_partner_id).catch(e => console.warn("Bracket self-heal fallback:", e));
+                            }
+                        }
+                    }
+                }
+            }
 
             if (autoConfirmUpdates.length > 0) {
                 Promise.all(autoConfirmUpdates).catch(e => console.warn("Auto-confirm batch error:", e));
@@ -2238,6 +2260,10 @@ export const api = {
                                             year: new Date().getFullYear()
                                         });
                                     }
+
+                                    // Auto-advance winner in playoff bracket tree
+                                    const isDoubles = m.tournaments?.type === 'doubles' || !!m.winner_partner_id || !!m.player1_partner_id;
+                                    await api.matches.advancePlayoffWinner(m.id, m.winner_id, isDoubles, m.winner_partner_id);
                                 }
                             } catch (e) {
                                 console.warn("Auto-confirm point award fallback in getByUser:", e);
