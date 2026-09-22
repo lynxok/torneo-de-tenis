@@ -83,8 +83,12 @@ export const pushNotificationService = {
             }
 
             return subscription;
-        } catch (error) {
-            console.error('Error subscribing to push notifications:', error);
+        } catch (error: any) {
+            if (error?.name === 'AbortError' || error?.message?.includes('push service error')) {
+                console.warn('Push notification subscription not available in this environment:', error.message);
+            } else {
+                console.error('Error subscribing to push notifications:', error);
+            }
             return null;
         }
     },

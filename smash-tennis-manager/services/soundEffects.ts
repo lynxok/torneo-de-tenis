@@ -1,4 +1,4 @@
-﻿// Web Audio API & Haptics Engine for Smash Tennis Manager
+// Web Audio API & Haptics Engine for Smash Tennis Manager
 // Synthesized sounds without external audio files
 
 class SoundEngine {
@@ -23,7 +23,7 @@ class SoundEngine {
       }
     }
     if (this.ctx && this.ctx.state === 'suspended') {
-      this.ctx.resume();
+      this.ctx.resume().catch(() => {});
     }
   }
 
@@ -44,6 +44,45 @@ class SoundEngine {
         navigator.vibrate(pattern);
       }
     } catch {}
+  }
+
+  // Unified play method to safely handle named sound triggers
+  public play(type: 'click' | 'success' | 'beep' | 'hit' | 'victory' | 'pop' | string = 'click') {
+    if (!this.isEnabled) return;
+    try {
+      switch (type) {
+        case 'click':
+        case 'beep':
+          this.playScoreBeep();
+          break;
+        case 'success':
+          this.playBookingSuccess();
+          break;
+        case 'hit':
+          this.playTennisHit();
+          break;
+        case 'victory':
+        case 'fanfare':
+          this.playChampionVictory();
+          break;
+        case 'pop':
+          this.playNotificationPop();
+          break;
+        default:
+          this.playScoreBeep();
+          break;
+      }
+    } catch (e) {
+      console.debug('SoundEngine play error:', e);
+    }
+  }
+
+  public playVictoryFanfare() {
+    this.playChampionVictory();
+  }
+
+  public playSuccessSound() {
+    this.playBookingSuccess();
   }
 
   // 1. Tennis Hit (Impacto seco de raqueta con pelota de tenis)

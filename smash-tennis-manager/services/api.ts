@@ -4,7 +4,8 @@ import {
     Institution, Match, Tournament, UserProfile, Booking, CourtSlot, Message, 
     Transaction, SystemConfig, RankingPointRecord, UserClubMembership, Story, 
     StoryLayer, MatchmakingPost, MatchmakingJoinedPlayer, PromoCode, TournamentSaga,
-    ClubProduct, StoreOrder, StoreOrderItem, BookingParticipant, WaitlistEntry, PlayerStatsSummary 
+    ClubProduct, StoreOrder, StoreOrderItem, BookingParticipant, WaitlistEntry, PlayerStatsSummary,
+    ClubSponsor 
 } from '../types';
 import { formatPlayerName } from '../utils/formatters';
 
@@ -722,6 +723,11 @@ export const api = {
                     scheduled_at: scheduledAt,
                     court_name: courtName,
                     score_status: updatedScoreStatus,
+                    oop_date: m.proposal_data?.oop_date || (scheduledAt ? scheduledAt.split('T')[0] : undefined),
+                    oop_turn: m.proposal_data?.oop_turn,
+                    oop_note: m.proposal_data?.oop_note,
+                    oop_status: m.proposal_data?.oop_status || (m.is_played ? 'finished' : (scheduledAt ? 'scheduled' : undefined)),
+                    delay_minutes: m.proposal_data?.delay_minutes || 0,
                     player1_name: formatPlayerName(m.player1_name),
                     player2_name: formatPlayerName(m.player2_name),
                     player1_partner_name: m.player1_partner_name ? formatPlayerName(m.player1_partner_name) : undefined,
@@ -751,10 +757,18 @@ export const api = {
                 Promise.all(autoConfirmUpdates).catch(e => console.warn("Auto-confirm batch error:", e));
             }
 
+            let clubSponsors: any[] = [];
+            if (tournament?.institution_id) {
+                try {
+                    clubSponsors = await api.institutions.getSponsors(tournament.institution_id);
+                } catch (e) {}
+            }
+
             return {
                 ...tournament,
                 tournament_players: formattedPlayers,
-                matches: formattedMatches
+                matches: formattedMatches,
+                sponsors: clubSponsors
             };
         },
         async create(tournament: Partial<Tournament>) {
@@ -2042,13 +2056,23 @@ export const api = {
             player2_id?: string;
             duration_minutes?: number;
             override_conflict_booking_id?: string;
+            oop_date?: string | null;
+            oop_turn?: number | string | null;
+            oop_note?: string | null;
+            oop_status?: 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished' | null;
+            delay_minutes?: number;
         }) {
             const nowIso = new Date().toISOString();
-            const proposalDataPatch = {
+            const proposalDataPatch: any = {
                 scheduled_at: params.scheduled_at,
                 court_name: params.court_name,
                 updated_at: nowIso
             };
+            if (params.oop_date !== undefined) proposalDataPatch.oop_date = params.oop_date;
+            if (params.oop_turn !== undefined) proposalDataPatch.oop_turn = params.oop_turn;
+            if (params.oop_note !== undefined) proposalDataPatch.oop_note = params.oop_note;
+            if (params.oop_status !== undefined) proposalDataPatch.oop_status = params.oop_status;
+            if (params.delay_minutes !== undefined) proposalDataPatch.delay_minutes = params.delay_minutes;
 
             const fullPayload: any = {
                 scheduled_at: params.scheduled_at,
@@ -2181,31 +2205,85 @@ export const api = {
             return updatedMatch;
         },
 
+        async updateOopStatus(matchId: string, oopStatus: 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished', oopNote?: string) {
+            try {
+                const { data: currentMatch } = await supabase.from('matches').select('proposal_data').eq('id', matchId).single();
+                const pData = {
+                    ...(currentMatch?.proposal_data || {}),
+                    oop_status: oopStatus,
+                    ...(oopNote !== undefined ? { oop_note: oopNote } : {}),
+                    updated_at: new Date().toISOString()
+                };
+                const { error } = await supabase.from('matches').update({ proposal_data: pData }).eq('id', matchId);
+                if (error) throw error;
+                return true;
+            } catch (e) {
+                console.error("Error updating match OOP status:", e);
+                throw e;
+            }
+        },
+
+        async bulkDelaySchedule(tournamentId: string, dateStr: string, delayMinutes: number) {
+            try {
+                const { data: matches, error } = await supabase
+                    .from('matches')
+                    .select('id, scheduled_at, court_name, proposal_data')
+                    .eq('tournament_id', tournamentId)
+                    .eq('is_played', false);
+
+                if (error) throw error;
+                if (!matches || matches.length === 0) return 0;
+
+                let count = 0;
+                for (const m of matches) {
+                    const schedAt = m.scheduled_at || m.proposal_data?.scheduled_at;
+                    const oopDate = m.proposal_data?.oop_date || (schedAt ? schedAt.split('T')[0] : null);
+
+                    if (oopDate === dateStr || (schedAt && schedAt.startsWith(dateStr))) {
+                        let newSchedAt = schedAt;
+                        if (schedAt) {
+                            const d = new Date(schedAt);
+                            if (!isNaN(d.getTime())) {
+                                d.setMinutes(d.getMinutes() + delayMinutes);
+                                newSchedAt = d.toISOString();
+                            }
+                        }
+                        const pData = {
+                            ...(m.proposal_data || {}),
+                            scheduled_at: newSchedAt,
+                            delay_minutes: ((m.proposal_data?.delay_minutes || 0) + delayMinutes),
+                            oop_status: 'delayed',
+                            updated_at: new Date().toISOString()
+                        };
+                        await supabase.from('matches').update({
+                            scheduled_at: newSchedAt,
+                            proposal_data: pData
+                        }).eq('id', m.id);
+                        count++;
+                    }
+                }
+                return count;
+            } catch (err) {
+                console.error("Error bulk delaying schedule:", err);
+                throw err;
+            }
+        },
+
         async getByUser(userId: string) {
-            let data: any[] | null = null;
+            let data: any[] = [];
             let error: any = null;
 
-            // Intentar primero con soporte para dobles (si las columnas existen en la base de datos)
             try {
                 const res = await supabase
                     .from('matches')
                     .select('*, tournaments(name, institution_id, institutions(name))')
-                    .or(`player1_id.eq.${userId},player2_id.eq.${userId},player1_partner_id.eq.${userId},player2_partner_id.eq.${userId}`)
+                    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
                     .order('created_at', { ascending: false });
-                data = res.data;
+                data = res.data || [];
                 error = res.error;
             } catch (e) {
                 error = e;
-            }
-
-            // Fallback resiliente: si player1_partner_id no existe en la tabla matches (Error 400 / 42703), consultar solo singles
-            if (error || !data) {
-                const fallbackRes = await supabase
-                    .from('matches')
-                    .select('*, tournaments(name, institution_id, institutions(name))')
-                    .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-                    .order('created_at', { ascending: false });
-                data = fallbackRes.data || [];
+                data = [];
             }
 
             const now = Date.now();
@@ -3082,6 +3160,24 @@ export const api = {
                     });
                 }
             } catch (e) {}
+
+            // Merge sponsors from system_settings
+            try {
+                const { data: sponsorSettings } = await supabase.from('system_settings').select('key, value').like('key', 'inst_sponsors_%');
+                if (sponsorSettings && sponsorSettings.length > 0) {
+                    const spMap = new Map();
+                    sponsorSettings.forEach((s: any) => {
+                        const instId = s.key.replace('inst_sponsors_', '');
+                        spMap.set(instId, s.value);
+                    });
+                    list.forEach(inst => {
+                        if (!inst.sponsors && spMap.has(inst.id)) {
+                            inst.sponsors = spMap.get(inst.id);
+                        }
+                    });
+                }
+            } catch (e) {}
+
             return list;
         },
         async getById(id: string) {
@@ -3095,6 +3191,14 @@ export const api = {
                         inst.alias_mp = s.value.alias_mp;
                         inst.cvu_mp = s.value.cvu_mp;
                         inst.titular_mp = s.value.titular_mp;
+                    }
+                } catch (e) {}
+            }
+            if (!inst.sponsors) {
+                try {
+                    const { data: s } = await supabase.from('system_settings').select('value').eq('key', `inst_sponsors_${id}`).maybeSingle();
+                    if (s?.value && Array.isArray(s.value)) {
+                        inst.sponsors = s.value;
                     }
                 } catch (e) {}
             }
@@ -3158,6 +3262,33 @@ export const api = {
             const { error } = await supabase.from('institutions').delete().eq('id', id);
             if (error) throw error;
             return true;
+        },
+        async getSponsors(institutionId: string): Promise<ClubSponsor[]> {
+            if (!institutionId) return [];
+            try {
+                const { data } = await supabase.from('system_settings').select('value').eq('key', `inst_sponsors_${institutionId}`).maybeSingle();
+                if (data?.value && Array.isArray(data.value)) {
+                    return data.value as ClubSponsor[];
+                }
+            } catch (e) {
+                console.warn("Could not load club sponsors:", e);
+            }
+            return [];
+        },
+        async saveSponsors(institutionId: string, sponsors: ClubSponsor[]): Promise<boolean> {
+            if (!institutionId) return false;
+            try {
+                const { error } = await supabase.from('system_settings').upsert({
+                    key: `inst_sponsors_${institutionId}`,
+                    value: sponsors,
+                    updated_at: new Date().toISOString()
+                });
+                if (error) throw error;
+                return true;
+            } catch (e) {
+                console.error("Error saving club sponsors:", e);
+                throw e;
+            }
         },
         async getCourtSlots(instId: string, date: string) {
             const { data: inst, error: instError } = await supabase
@@ -4160,18 +4291,12 @@ export const api = {
                         .from('matches')
                         .select('*, tournaments(name)')
                         .eq('is_played', true)
-                        .or(`player1_id.eq.${userId},player2_id.eq.${userId},player1_partner_id.eq.${userId},player2_partner_id.eq.${userId}`)
+                        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
                         .order('created_at', { ascending: true });
                     if (res.error) throw res.error;
                     matchesData = res.data || [];
                 } catch (err) {
-                    const fallbackRes = await supabase
-                        .from('matches')
-                        .select('*, tournaments(name)')
-                        .eq('is_played', true)
-                        .or(`player1_id.eq.${userId},player2_id.eq.${userId}`)
-                        .order('created_at', { ascending: true });
-                    matchesData = fallbackRes.data || [];
+                    matchesData = [];
                 }
 
                 const [

@@ -90,11 +90,11 @@ body {
     visibility: hidden;
   }
 
-  #print-control-sheet, #print-control-sheet * {
+  #print-control-sheet, #print-control-sheet *, #print-oop-sheet, #print-oop-sheet * {
     visibility: visible;
   }
 
-  #print-control-sheet {
+  #print-control-sheet, #print-oop-sheet {
     position: absolute !important;
     top: 0 !important;
     left: 0 !important;
@@ -110,13 +110,13 @@ body {
     z-index: 999999 !important;
   }
 
-  #print-control-sheet table {
+  #print-control-sheet table, #print-oop-sheet table {
     width: 100% !important;
     table-layout: fixed !important;
     border-collapse: collapse !important;
   }
 
-  #print-control-sheet tr {
+  #print-control-sheet tr, #print-oop-sheet tr {
     page-break-inside: avoid !important;
   }
 }

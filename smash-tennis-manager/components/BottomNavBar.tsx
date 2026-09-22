@@ -56,7 +56,11 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
 
   const handleItemClick = (viewId: string) => {
     if (activeView !== viewId) {
-      soundEffects.play('click');
+      try {
+        soundEffects.play('click');
+      } catch (err) {
+        console.debug('BottomNavBar audio feedback skipped:', err);
+      }
       onNavigate(viewId);
     }
   };

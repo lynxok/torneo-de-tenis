@@ -219,6 +219,21 @@ export interface Institution {
   membership_expires_at?: string | null;
   free_tournaments_remaining?: number;
   free_tournaments_disputed?: number;
+
+  // Club Sponsors & Auspiciantes
+  sponsors?: ClubSponsor[];
+}
+
+export interface ClubSponsor {
+  id: string;
+  institution_id?: string;
+  name: string;
+  logo_url: string;
+  category?: 'main' | 'official' | 'partner'; // 'main' = Main Sponsor, 'official' = Oficial, 'partner' = Auspiciante
+  website_url?: string;
+  phone_whatsapp?: string;
+  is_active: boolean;
+  order?: number;
 }
 
 export type TournamentCompetitionFormat = 'tabla_general_byes' | 'zonas_playoffs' | 'eliminacion_directa';
@@ -297,6 +312,7 @@ export interface Tournament {
   commission_rate_applied?: number;
   is_trial_free?: boolean;
   is_disputed?: boolean;
+  sponsors?: ClubSponsor[];
 }
 
 export interface TournamentGroup {
@@ -368,6 +384,13 @@ export interface Match {
   score_submitted_at?: string;
   score_dispute_reason?: string;
   score_confirmed_at?: string;
+
+  // Order of Play (OOP)
+  oop_date?: string; // YYYY-MM-DD
+  oop_turn?: number | string; // Turno 1, 2, 3... o 'a_continuacion'
+  oop_note?: string; // e.g. "No antes de las 16:30 hs", "A continuación"
+  oop_status?: 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished';
+  delay_minutes?: number;
 
   // UI helpers
   p1?: TournamentPlayer;

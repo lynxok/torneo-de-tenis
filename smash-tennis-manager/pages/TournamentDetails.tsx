@@ -9,7 +9,7 @@ import {
     Search, DollarSign, UserCheck, Shuffle, Info, Settings2, Grid, Check, TrendingUp, Wallet, Gift, Shield,
     Swords, AlertTriangle, CheckSquare, Clock, AlertCircle, RefreshCw, RotateCcw,
     Printer, Image as ImageIcon, Download, Plus, CreditCard, Copy, ExternalLink, Eye, HelpCircle,
-    Receipt, Upload
+    Receipt, Upload, CloudRain, Zap, Sun, Flame, Tv
 } from 'lucide-react';
 import { getCategoriesForInstitution, isUserEligibleForCategories, NUMERIC_CATEGORIES } from '../utils/categories';
 import { computeRankings, normalizeCategoryKey } from '../utils/ranking';
@@ -36,7 +36,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [tournament, setTournament] = useState<Tournament | null>(null);
     const [loading, setLoading] = useState(true);
     const [isEnrolling, setIsEnrolling] = useState(false);
-    const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs'>('groups');
+    const [activeTab, setActiveTab] = useState<'all' | 'groups' | 'playoffs' | 'order_of_play'>('groups');
     const [standingsViewMode, setStandingsViewMode] = useState<'unified' | 'zones'>('unified');
     const { addToast } = useToast();
 
@@ -220,6 +220,18 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [dayBookingsForSchedule, setDayBookingsForSchedule] = useState<Booking[]>([]);
     const [loadingDayBookings, setLoadingDayBookings] = useState(false);
     const [overrideConflict, setOverrideConflict] = useState(false);
+
+    // Order of Play (OOP) State
+    const [selectedOopDate, setSelectedOopDate] = useState<string>(() => {
+        return new Date().toISOString().split('T')[0];
+    });
+    const [showRainDelayModal, setShowRainDelayModal] = useState(false);
+    const [rainDelayMinutes, setRainDelayMinutes] = useState<number>(30);
+    const [isApplyingRainDelay, setIsApplyingRainDelay] = useState(false);
+    const [updatingOopMatchId, setUpdatingOopMatchId] = useState<string | null>(null);
+    const [scheduleOopTurn, setScheduleOopTurn] = useState<string>('');
+    const [scheduleOopNote, setScheduleOopNote] = useState<string>('');
+    const [showUnscheduledDrawer, setShowUnscheduledDrawer] = useState(true);
 
     // Derived state
     const [players, setPlayers] = useState<TournamentPlayer[]>([]);
@@ -1017,7 +1029,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             try {
                 const d = new Date(scheduledAt);
                 if (!isNaN(d.getTime())) {
-                    initialDate = d.toISOString().split('T')[0];
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    initialDate = `${year}-${month}-${day}`;
                     const hours = String(d.getHours()).padStart(2, '0');
                     const mins = String(d.getMinutes()).padStart(2, '0');
                     initialTime = `${hours}:${mins}`;
@@ -1025,12 +1040,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
             } catch (e) {}
         }
 
-        if (!initialDate && tournament?.start_date) {
-            initialDate = tournament.start_date;
+        if (!initialDate) {
+            initialDate = m.oop_date || m.proposal_data?.oop_date || selectedOopDate || tournament?.start_date || new Date().toISOString().split('T')[0];
         }
 
-        setScheduleDate(initialDate || new Date().toISOString().split('T')[0]);
+        setScheduleDate(initialDate);
         setScheduleTime(initialTime || '16:00');
+        setScheduleOopTurn(m.oop_turn || m.proposal_data?.oop_turn || '');
+        setScheduleOopNote(m.oop_note || m.proposal_data?.oop_note || '');
 
         const currentCourt = m.court_name || m.proposal_data?.court_name || m.court_slot_id || 'Cancha 1';
         setScheduleCourt(currentCourt);
@@ -1114,7 +1131,11 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 player2_name: p2Display,
                 player1_id: selectedMatchForSchedule.player1_id,
                 player2_id: selectedMatchForSchedule.player2_id,
-                override_conflict_booking_id: (overrideConflict && conflictBooking) ? conflictBooking.id : undefined
+                override_conflict_booking_id: (overrideConflict && conflictBooking) ? conflictBooking.id : undefined,
+                oop_date: scheduleDate,
+                oop_turn: scheduleOopTurn.trim() || undefined,
+                oop_note: scheduleOopNote.trim() || undefined,
+                oop_status: selectedMatchForSchedule.oop_status || 'scheduled'
             });
 
             soundEffects.playScoreBeep();
@@ -1497,6 +1518,202 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const championName = tournament?.champion_name || (finalMatch?.winner_id ? (
         finalMatch.winner_id === finalMatch.player1_id ? finalMatch.player1_name : finalMatch.player2_name
     ) : null);
+
+    // --- ORDER OF PLAY (OOP) CALCULATIONS & HANDLERS ---
+    const getMatchDate = (m: Match): string | null => {
+        const raw = m.scheduled_at || m.proposal_data?.scheduled_at;
+        if (raw) {
+            try {
+                const d = new Date(raw);
+                if (!isNaN(d.getTime())) {
+                    const year = d.getFullYear();
+                    const month = String(d.getMonth() + 1).padStart(2, '0');
+                    const day = String(d.getDate()).padStart(2, '0');
+                    return `${year}-${month}-${day}`;
+                }
+            } catch (e) {}
+        }
+        return m.oop_date || m.proposal_data?.oop_date || null;
+    };
+
+    const getMatchTime = (m: Match): string => {
+        const raw = m.scheduled_at || m.proposal_data?.scheduled_at;
+        if (raw) {
+            try {
+                const d = new Date(raw);
+                if (!isNaN(d.getTime())) {
+                    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' hs';
+                }
+            } catch (e) {}
+        }
+        return m.oop_turn || m.proposal_data?.oop_turn || 'A confirmar';
+    };
+
+    const getMatchOopStatus = (m: Match): 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished' => {
+        if (m.is_played || m.winner_id || m.score_status === 'confirmed') return 'finished';
+        return m.oop_status || m.proposal_data?.oop_status || 'scheduled';
+    };
+
+    const oopDates = useMemo(() => {
+        const dateSet = new Set<string>();
+        if (tournament?.start_date) dateSet.add(tournament.start_date);
+        
+        const now = new Date();
+        const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        dateSet.add(todayStr);
+
+        matches.forEach(m => {
+            const d = getMatchDate(m);
+            if (d) dateSet.add(d);
+        });
+
+        return Array.from(dateSet).sort();
+    }, [tournament?.start_date, matches]);
+
+    useEffect(() => {
+        if (oopDates.length > 0 && !oopDates.includes(selectedOopDate)) {
+            const now = new Date();
+            const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+            if (oopDates.includes(todayStr)) {
+                setSelectedOopDate(todayStr);
+            } else {
+                setSelectedOopDate(oopDates[0]);
+            }
+        }
+    }, [oopDates, selectedOopDate]);
+
+    const oopDateMatches = useMemo(() => {
+        if (!selectedOopDate) return [];
+        return matches.filter(m => {
+            if (m.is_bye) return false;
+            const mDate = getMatchDate(m);
+            return mDate === selectedOopDate;
+        }).sort((a, b) => {
+            const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 9999999999999;
+            const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 9999999999999;
+            if (timeA !== timeB) return timeA - timeB;
+            const courtA = a.court_name || a.proposal_data?.court_name || '';
+            const courtB = b.court_name || b.proposal_data?.court_name || '';
+            return courtA.localeCompare(courtB);
+        });
+    }, [matches, selectedOopDate]);
+
+    const unscheduledMatches = useMemo(() => {
+        return matches.filter(m => {
+            if (m.is_bye || m.is_played) return false;
+            const hasSchedule = !!m.scheduled_at || !!m.proposal_data?.scheduled_at || !!m.proposal_data?.oop_date;
+            return !hasSchedule;
+        });
+    }, [matches]);
+
+    const oopMatchesByCourt = useMemo(() => {
+        const groups: { [court: string]: Match[] } = {};
+        courtOptions.forEach(c => {
+            groups[c] = [];
+        });
+
+        oopDateMatches.forEach(m => {
+            const court = m.court_name || m.proposal_data?.court_name || 'Cancha 1';
+            if (!groups[court]) groups[court] = [];
+            groups[court].push(m);
+        });
+
+        const entries = Object.entries(groups);
+        const filtered = entries.filter(([court, list], idx) => list.length > 0 || idx < 2);
+        return filtered.map(([court, courtMatches]) => ({
+            court,
+            matches: courtMatches
+        }));
+    }, [oopDateMatches, courtOptions]);
+
+    const handleQuickChangeOopStatus = async (matchId: string, newStatus: 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished') => {
+        setUpdatingOopMatchId(matchId);
+        try {
+            soundEffects.playScoreBeep();
+            await api.matches.updateOopStatus(matchId, newStatus);
+            setMatches(prev => prev.map(m => m.id === matchId ? { 
+                ...m, 
+                oop_status: newStatus,
+                proposal_data: { ...m.proposal_data, oop_status: newStatus } 
+            } : m));
+            const statusLabel = newStatus === 'in_progress' ? 'En Juego' : newStatus === 'warming_up' ? 'Calentando' : newStatus === 'delayed' ? 'Demorado' : newStatus === 'finished' ? 'Finalizado' : 'Programado';
+            addToast(`Estado del partido actualizado: ${statusLabel}`, 'success');
+        } catch (err: any) {
+            console.error("Error al actualizar estado OOP:", err);
+            addToast("Error al actualizar estado: " + err.message, "error");
+        } finally {
+            setUpdatingOopMatchId(null);
+        }
+    };
+
+    const handleApplyRainDelay = async () => {
+        if (!tournament?.id || !selectedOopDate) return;
+        setIsApplyingRainDelay(true);
+        try {
+            soundEffects.playTennisHit();
+            const res = await api.matches.bulkDelaySchedule(tournament.id, selectedOopDate, rainDelayMinutes);
+            addToast(`🌧️ Demora de ${rainDelayMinutes} min aplicada a ${res.delayedCount} partidos de la jornada`, 'success');
+            setShowRainDelayModal(false);
+            loadTournament();
+        } catch (err: any) {
+            console.error("Error al aplicar demora por clima:", err);
+            addToast("Error al aplicar demora: " + err.message, "error");
+        } finally {
+            setIsApplyingRainDelay(false);
+        }
+    };
+
+    const handleShareOopWhatsApp = () => {
+        soundEffects.playScoreBeep();
+        const dateParts = selectedOopDate.split('-').map(Number);
+        const dateObj = new Date(dateParts[0], dateParts[1] - 1, dateParts[2]);
+        const formattedDate = dateObj.toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' });
+        const clubName = tournament?.institutions?.name || 'Sede Central';
+
+        let text = `🎾 *ORDEN DE JUEGO OFICIAL - SMASH TENIS* 🎾\n`;
+        text += `🏆 *Torneo:* ${tournament?.name || 'Torneo'}\n`;
+        text += `📅 *Jornada:* ${formattedDate.charAt(0).toUpperCase() + formattedDate.slice(1)}\n`;
+        text += `📍 *Sede:* ${clubName}\n\n`;
+
+        if (oopDateMatches.length === 0) {
+            text += `_No hay partidos programados para este día._\n\n`;
+        } else {
+            oopMatchesByCourt.forEach(({ court, matches: cMatches }) => {
+                if (cMatches.length === 0) return;
+                text += `🏟️ *${court.toUpperCase()}*\n`;
+                cMatches.forEach((m, idx) => {
+                    const time = getMatchTime(m);
+                    const p1 = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
+                    const p2 = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                    const st = getMatchOopStatus(m);
+                    const statusTag = st === 'in_progress' ? '⚡ [En Juego]' : st === 'warming_up' ? '🎾 [Calentando]' : st === 'delayed' ? '🌧️ [Demorado]' : st === 'finished' ? '✓ [Finalizado]' : '';
+                    
+                    text += `  • *${time}*: ${p1} vs ${p2} ${statusTag}\n`;
+                    if (m.oop_note || m.proposal_data?.oop_note) {
+                        text += `    ↳ _Nota: ${m.oop_note || m.proposal_data?.oop_note}_\n`;
+                    }
+                });
+                text += `\n`;
+            });
+        }
+
+        const activeSponsors = (tournament?.sponsors || []).filter(s => s.is_active);
+        if (activeSponsors.length > 0) {
+            text += `🤝 *Auspiciantes Oficiales:*\n`;
+            text += activeSponsors.map(s => `• ${s.name} (${s.category === 'main' ? 'Sponsor Principal' : 'Auspiciante'})`).join('\n');
+            text += `\n\n`;
+        }
+
+        const tournamentUrl = `${window.location.origin}/?view=tournament-detail&tournament=${tournament?.id}`;
+        text += `📲 *Seguí el cuadro y resultados en vivo:*\n${tournamentUrl}`;
+
+        window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+    };
+
+    const handlePrintOop = () => {
+        soundEffects.playScoreBeep();
+        window.print();
+    };
 
     const handleConfirmAllGroupMatches = async () => {
         const pending = groupMatches.filter(m => (m.score || m.is_played) && m.score_status !== 'confirmed');
@@ -2295,6 +2512,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 ${activeTab === 'playoffs' ? 'bg-primary text-white shadow-md shadow-primary/20' : 'text-muted hover:text-white'}`}
                                 >
                                     <Trophy size={14} /> Cuadro de Llaves ({playoffMatches.length})
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('order_of_play')}
+                                    className={`px-3 py-1.5 rounded-xl font-bold transition-all flex items-center gap-1.5 ${activeTab === 'order_of_play' ? 'bg-primary text-white shadow-md shadow-primary/20' : 'text-muted hover:text-white'}`}
+                                >
+                                    <Clock size={14} /> Orden de Juego ({oopDateMatches.length})
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('all')}
@@ -3545,6 +3768,591 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         })}
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {/* TAB 4: ORDEN DE JUEGO DIARIO (OOP) */}
+                        {activeTab === 'order_of_play' && (
+                            <div className="space-y-6">
+                                {/* Top Controls Bar: Dates & Actions */}
+                                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-4 bg-slate-900/60 border border-white/10 rounded-2xl">
+                                    {/* Date Selector Pills */}
+                                    <div className="space-y-2 flex-1 min-w-0">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                                                <Calendar size={13} className="text-primary" /> Jornada Seleccionada
+                                            </span>
+                                            <span className="text-xs font-semibold text-primary">
+                                                {formatFullDateDisplay(selectedOopDate)}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 overflow-x-auto pb-1 custom-scrollbar">
+                                            {oopDates.map(dateStr => {
+                                                const [y, m, d] = dateStr.split('-').map(Number);
+                                                const dObj = new Date(y, m - 1, d);
+                                                const dayShort = dObj.toLocaleDateString('es-AR', { weekday: 'short' });
+                                                const dayNum = dObj.getDate();
+                                                const monthShort = dObj.toLocaleDateString('es-AR', { month: 'short' });
+                                                const countForDate = matches.filter(m => !m.is_bye && getMatchDate(m) === dateStr).length;
+                                                const isSelected = selectedOopDate === dateStr;
+
+                                                return (
+                                                    <button
+                                                        key={dateStr}
+                                                        onClick={() => {
+                                                            setSelectedOopDate(dateStr);
+                                                            soundEffects.playScoreBeep();
+                                                        }}
+                                                        className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 ${
+                                                            isSelected
+                                                                ? 'bg-primary text-white border-primary shadow-md shadow-primary/20 scale-[1.02]'
+                                                                : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                                                        }`}
+                                                    >
+                                                        <span>{dayShort.charAt(0).toUpperCase() + dayShort.slice(1)} {dayNum} {monthShort}</span>
+                                                        {countForDate > 0 && (
+                                                            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-black ${isSelected ? 'bg-white/25 text-white' : 'bg-primary/20 text-primary'}`}>
+                                                                {countForDate}
+                                                            </span>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+
+                                            {/* Custom Date Input Trigger */}
+                                            <label className="px-2.5 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-bold transition-all shrink-0 cursor-pointer flex items-center gap-1">
+                                                <Plus size={13} /> Otra Fecha
+                                                <input
+                                                    type="date"
+                                                    value={selectedOopDate}
+                                                    onChange={e => {
+                                                        if (e.target.value) {
+                                                            setSelectedOopDate(e.target.value);
+                                                            soundEffects.playScoreBeep();
+                                                        }
+                                                    }}
+                                                    className="sr-only"
+                                                />
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex flex-wrap items-center gap-2 pt-2 lg:pt-0 border-t lg:border-t-0 border-white/10 shrink-0">
+                                        {isClubAdmin && (
+                                            <button
+                                                onClick={() => setShowRainDelayModal(true)}
+                                                className="px-3 py-2 rounded-xl text-xs font-bold bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+                                                title="Ajustar demora por lluvia a todos los partidos de la jornada"
+                                            >
+                                                <CloudRain size={14} className="text-amber-400" />
+                                                <span>Demora Clima</span>
+                                            </button>
+                                        )}
+
+                                        <button
+                                            onClick={handleShareOopWhatsApp}
+                                            className="px-3 py-2 rounded-xl text-xs font-bold bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30 transition-all flex items-center gap-1.5 shadow-sm"
+                                            title="Compartir programación de hoy por WhatsApp"
+                                        >
+                                            <MessageCircle size={14} className="text-green-400" />
+                                            <span>WhatsApp</span>
+                                        </button>
+
+                                        <button
+                                            onClick={handlePrintOop}
+                                            className="px-3 py-2 rounded-xl text-xs font-bold bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 transition-all flex items-center gap-1.5"
+                                            title="Imprimir cartel A4 para el tablero del club"
+                                        >
+                                            <Printer size={14} />
+                                            <span>Imprimir A4</span>
+                                        </button>
+
+                                        <button
+                                            onClick={() => {
+                                                setShowGraphicModal(true);
+                                                soundEffects.playScoreBeep();
+                                            }}
+                                            className="px-3 py-2 rounded-xl text-xs font-bold bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 transition-all flex items-center gap-1.5 shadow-sm"
+                                            title="Generar gráfica para Instagram o WhatsApp Stories"
+                                        >
+                                            <ImageIcon size={14} />
+                                            <span>Gráfica Redes</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* Weather / Rain Delay Notice Banner */}
+                                {oopDateMatches.some(m => getMatchOopStatus(m) === 'delayed') && (
+                                    <div className="p-3.5 bg-amber-500/15 border border-amber-500/40 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-200 animate-in fade-in">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-1.5 bg-amber-500/20 rounded-lg text-amber-400 shrink-0">
+                                                <CloudRain size={18} />
+                                            </div>
+                                            <div className="text-xs">
+                                                <div className="font-bold text-amber-300">Jornada Afectada por Clima / Lluvia</div>
+                                                <p className="text-[11px] text-amber-200/90">Los horarios han sido demorados. Verifique los nuevos turnos y estados a continuación.</p>
+                                            </div>
+                                        </div>
+                                        {isClubAdmin && (
+                                            <button
+                                                onClick={() => setShowRainDelayModal(true)}
+                                                className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 border border-amber-500/30 text-xs font-bold transition-all self-end sm:self-auto shrink-0"
+                                            >
+                                                Modificar Demora
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* Main OOP Courts Board */}
+                                {oopDateMatches.length === 0 ? (
+                                    <div className="text-center py-14 bg-white/5 rounded-3xl border border-dashed border-white/10 space-y-3">
+                                        <Clock size={38} className="mx-auto text-primary opacity-60" />
+                                        <div className="space-y-1">
+                                            <h4 className="text-base font-bold text-white">No hay partidos programados para esta fecha</h4>
+                                            <p className="text-xs text-muted max-w-md mx-auto">
+                                                Seleccione otro día en la barra superior o asigne horarios a los partidos pendientes del torneo.
+                                            </p>
+                                        </div>
+                                        {isClubAdmin && unscheduledMatches.length > 0 && (
+                                            <button
+                                                onClick={() => {
+                                                    const first = unscheduledMatches[0];
+                                                    if (first) openScheduleModal(first);
+                                                }}
+                                                className="px-4 py-2 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-xl text-xs font-bold transition-all inline-flex items-center gap-2 shadow-sm"
+                                            >
+                                                <Calendar size={14} /> Programar un Partido para este Día
+                                            </button>
+                                        )}
+                                    </div>
+                                ) : (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                                        {oopMatchesByCourt.map(({ court, matches: cMatches }) => (
+                                            <div
+                                                key={court}
+                                                className="bg-slate-900/70 border border-white/10 rounded-2xl overflow-hidden flex flex-col shadow-lg"
+                                            >
+                                                {/* Court Header */}
+                                                <div className="p-3 bg-slate-950/80 border-b border-white/10 flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <MapPin size={15} className="text-green-400" />
+                                                        <span className="text-xs font-black text-white uppercase tracking-wider">{court}</span>
+                                                    </div>
+                                                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-300">
+                                                        {cMatches.length} {cMatches.length === 1 ? 'partido' : 'partidos'}
+                                                    </span>
+                                                </div>
+
+                                                {/* Court Matches Stack */}
+                                                <div className="p-3 space-y-3 flex-1">
+                                                    {cMatches.length === 0 ? (
+                                                        <div className="py-8 text-center text-slate-500 text-xs italic">
+                                                            Sin partidos en este turno
+                                                        </div>
+                                                    ) : (
+                                                        cMatches.map((m) => {
+                                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
+                                                            const isMatchFinishedAndConfirmed = !!(m.is_played && m.score_status === 'confirmed');
+                                                            const canEditScore = isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed);
+                                                            const p1Display = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
+                                                            const p2Display = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                                            const oopStatus = getMatchOopStatus(m);
+                                                            const matchTime = getMatchTime(m);
+                                                            const note = m.oop_note || m.proposal_data?.oop_note;
+                                                            const turn = m.oop_turn || m.proposal_data?.oop_turn;
+                                                            const formattedScore = formatMatchScore(m.score);
+
+                                                            return (
+                                                                <div
+                                                                    key={m.id}
+                                                                    className={`p-3.5 rounded-xl border space-y-2.5 transition-all ${
+                                                                        oopStatus === 'in_progress'
+                                                                            ? 'bg-emerald-950/30 border-emerald-500/50 shadow-md shadow-emerald-950/40 ring-1 ring-emerald-500/30'
+                                                                            : oopStatus === 'warming_up'
+                                                                            ? 'bg-amber-950/30 border-amber-500/40 shadow-md shadow-amber-950/30'
+                                                                            : oopStatus === 'delayed'
+                                                                            ? 'bg-red-950/30 border-red-500/40'
+                                                                            : isUserInMatch
+                                                                            ? 'bg-blue-950/30 border-blue-500/40 shadow-md shadow-blue-950/30'
+                                                                            : 'bg-white/5 hover:bg-white/[0.07] border-white/10'
+                                                                    }`}
+                                                                >
+                                                                    {/* Match Top Bar: Time / Turn & Status Badge */}
+                                                                    <div className="flex items-center justify-between gap-1.5 text-xs">
+                                                                        <div className="flex items-center gap-1.5 min-w-0">
+                                                                            <span className="font-mono font-bold text-white bg-slate-950 px-2 py-0.5 rounded border border-white/10 shrink-0">
+                                                                                {matchTime}
+                                                                            </span>
+                                                                            {turn && (
+                                                                                <span className="text-[10px] text-slate-400 truncate">
+                                                                                    {turn}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+
+                                                                        {/* Status Badge */}
+                                                                        {oopStatus === 'in_progress' && (
+                                                                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1 animate-pulse shrink-0">
+                                                                                <Zap size={11} className="fill-emerald-400 text-emerald-400" /> En Juego
+                                                                            </span>
+                                                                        )}
+                                                                        {oopStatus === 'warming_up' && (
+                                                                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 flex items-center gap-1 shrink-0">
+                                                                                <span>🎾</span> Calentando
+                                                                            </span>
+                                                                        )}
+                                                                        {oopStatus === 'delayed' && (
+                                                                            <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-red-500/20 text-red-300 border border-red-500/40 flex items-center gap-1 shrink-0">
+                                                                                <CloudRain size={11} /> Demorado
+                                                                            </span>
+                                                                        )}
+                                                                        {oopStatus === 'finished' && (
+                                                                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-slate-800 text-slate-400 border border-white/10 flex items-center gap-1 shrink-0">
+                                                                                <Check size={11} /> Finalizado
+                                                                            </span>
+                                                                        )}
+                                                                        {oopStatus === 'scheduled' && (
+                                                                            <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0">
+                                                                                Programado
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* Round / Group and Category */}
+                                                                    <div className="flex items-center justify-between text-[10px] text-slate-400 border-b border-white/5 pb-1">
+                                                                        <span className="uppercase font-semibold truncate">
+                                                                            {m.round} {m.group_number ? `• Grupo ${m.group_number}` : ''}
+                                                                        </span>
+                                                                        <span className="text-primary font-bold shrink-0">
+                                                                            {tournament.category} {tournament.gender ? `• ${tournament.gender}` : ''}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    {/* Players */}
+                                                                    <div className="space-y-1 py-0.5">
+                                                                        <div className={`text-xs font-bold flex items-center justify-between ${m.winner_id === m.player1_id ? 'text-green-400' : 'text-white'}`}>
+                                                                            <span className="truncate">{p1Display}</span>
+                                                                            {m.winner_id === m.player1_id && <span className="text-[10px] text-green-400 font-bold ml-1">✓</span>}
+                                                                        </div>
+                                                                        <div className={`text-xs font-bold flex items-center justify-between ${m.winner_id === m.player2_id ? 'text-green-400' : 'text-white'}`}>
+                                                                            <span className="truncate">{p2Display}</span>
+                                                                            {m.winner_id === m.player2_id && <span className="text-[10px] text-green-400 font-bold ml-1">✓</span>}
+                                                                        </div>
+                                                                    </div>
+
+                                                                    {/* Score if finished */}
+                                                                    {formattedScore && (
+                                                                        <div className="bg-black/40 border border-white/10 px-2 py-1 rounded-lg text-center font-mono text-xs font-bold text-primary">
+                                                                            {formattedScore}
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Note memo if provided */}
+                                                                    {note && (
+                                                                        <div className="text-[10px] text-amber-300/90 italic bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-lg flex items-center gap-1">
+                                                                            <Info size={11} className="shrink-0 text-amber-400" />
+                                                                            <span className="truncate">{note}</span>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Admin Real-time OOP Status Chips Bar */}
+                                                                    {isClubAdmin && !m.is_played && (
+                                                                        <div className="pt-1.5 border-t border-white/10 space-y-1">
+                                                                            <div className="text-[9px] uppercase tracking-wider font-bold text-slate-400 flex items-center justify-between">
+                                                                                <span>Cambiar Estado en Vivo:</span>
+                                                                                {updatingOopMatchId === m.id && <Loader2 size={10} className="animate-spin text-primary" />}
+                                                                            </div>
+                                                                            <div className="grid grid-cols-4 gap-1 text-[10px]">
+                                                                                <button
+                                                                                    type="button"
+                                                                                    disabled={updatingOopMatchId === m.id}
+                                                                                    onClick={() => handleQuickChangeOopStatus(m.id, 'warming_up')}
+                                                                                    className={`py-1 px-1 rounded-lg font-bold border text-center transition-all ${
+                                                                                        oopStatus === 'warming_up'
+                                                                                            ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                                                                                            : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                                                                                    }`}
+                                                                                    title="Marcar en calentamiento"
+                                                                                >
+                                                                                    🎾 Calent
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    disabled={updatingOopMatchId === m.id}
+                                                                                    onClick={() => handleQuickChangeOopStatus(m.id, 'in_progress')}
+                                                                                    className={`py-1 px-1 rounded-lg font-bold border text-center transition-all ${
+                                                                                        oopStatus === 'in_progress'
+                                                                                            ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-sm'
+                                                                                            : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                                                                                    }`}
+                                                                                    title="Marcar en juego"
+                                                                                >
+                                                                                    ⚡ Juego
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    disabled={updatingOopMatchId === m.id}
+                                                                                    onClick={() => handleQuickChangeOopStatus(m.id, 'delayed')}
+                                                                                    className={`py-1 px-1 rounded-lg font-bold border text-center transition-all ${
+                                                                                        oopStatus === 'delayed'
+                                                                                            ? 'bg-red-500 text-white border-red-400 shadow-sm'
+                                                                                            : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                                                                                    }`}
+                                                                                    title="Marcar demorado por lluvia o tiempo"
+                                                                                >
+                                                                                    🌧️ Demor
+                                                                                </button>
+                                                                                <button
+                                                                                    type="button"
+                                                                                    disabled={updatingOopMatchId === m.id}
+                                                                                    onClick={() => handleQuickChangeOopStatus(m.id, 'scheduled')}
+                                                                                    className={`py-1 px-1 rounded-lg font-bold border text-center transition-all ${
+                                                                                        oopStatus === 'scheduled'
+                                                                                            ? 'bg-blue-500 text-white border-blue-400 shadow-sm'
+                                                                                            : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                                                                                    }`}
+                                                                                    title="Restablecer a programado"
+                                                                                >
+                                                                                    🕒 Prog
+                                                                                </button>
+                                                                            </div>
+                                                                        </div>
+                                                                    )}
+
+                                                                    {/* Action Buttons: Schedule, Score, WhatsApp */}
+                                                                    <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-white/5 text-xs">
+                                                                        {(isClubAdmin || isUserInMatch) && !m.is_played && (
+                                                                            <button
+                                                                                onClick={() => openScheduleModal(m)}
+                                                                                className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-[11px] font-bold flex items-center gap-1 transition-all"
+                                                                                title="Cambiar horario o cancha"
+                                                                            >
+                                                                                <Calendar size={11} className="text-blue-400" />
+                                                                                <span>Horario</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {canEditScore && (
+                                                                            <button
+                                                                                onClick={() => openScoreModal(m)}
+                                                                                className="px-2 py-1 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 text-[11px] font-bold flex items-center gap-1 transition-all shadow-sm"
+                                                                                title={m.is_played ? "Editar marcador" : "Cargar resultado"}
+                                                                            >
+                                                                                <Edit3 size={11} />
+                                                                                <span>{m.is_played ? "Editar" : "Resultado"}</span>
+                                                                            </button>
+                                                                        )}
+
+                                                                        {isUserInMatch && !m.is_played && (
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    soundEffects.playScoreBeep();
+                                                                                    const opp = m.player1_id === user.id ? p2Display : p1Display;
+                                                                                    const msg = encodeURIComponent(`🎾 ¡Hola ${opp}! Te escribo para coordinar nuestro partido de "${tournament.name}" fijado para el ${formatFullDateDisplay(selectedOopDate)} a las ${matchTime} en ${court} (${tournament.institutions?.name || 'el club'}). ¿Confirmamos?`);
+                                                                                    window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
+                                                                                }}
+                                                                                className="px-2 py-1 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-300 border border-green-500/30 text-[11px] font-bold flex items-center gap-1 transition-all ml-auto"
+                                                                                title="Enviar WhatsApp al rival"
+                                                                            >
+                                                                                <MessageCircle size={11} />
+                                                                                <span>Rival</span>
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })
+                                                    )}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {/* Organizer Assistant: Unscheduled Matches Drawer */}
+                                {isClubAdmin && unscheduledMatches.length > 0 && (
+                                    <div className="bg-slate-900/80 border border-white/10 rounded-2xl overflow-hidden shadow-lg">
+                                        <div 
+                                            onClick={() => setShowUnscheduledDrawer(!showUnscheduledDrawer)}
+                                            className="p-4 bg-slate-950 cursor-pointer flex items-center justify-between hover:bg-white/5 transition-colors border-b border-white/10"
+                                        >
+                                            <div className="flex items-center gap-2.5">
+                                                <div className="p-1.5 bg-amber-500/20 rounded-lg text-amber-400">
+                                                    <Clock size={16} />
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                                                        Partidos Pendientes de Programación
+                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold">
+                                                            {unscheduledMatches.length} por jugar
+                                                        </span>
+                                                    </h4>
+                                                    <p className="text-[11px] text-slate-400">Encuentros que aún no tienen fecha ni horario asignado en el fixture</p>
+                                                </div>
+                                            </div>
+                                            <button className="text-xs text-primary font-bold hover:underline">
+                                                {showUnscheduledDrawer ? 'Ocultar' : 'Ver Lista'}
+                                            </button>
+                                        </div>
+
+                                        {showUnscheduledDrawer && (
+                                            <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-72 overflow-y-auto custom-scrollbar">
+                                                {unscheduledMatches.map(m => {
+                                                    const p1 = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
+                                                    const p2 = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                                    const p1Obj = players.find(p => p.player_id === m.player1_id || p.id === m.player1_id);
+                                                    const p2Obj = players.find(p => p.player_id === m.player2_id || p.id === m.player2_id);
+                                                    const availNote = p1Obj?.availability_notes || p2Obj?.availability_notes || p1Obj?.time_restrictions || p2Obj?.time_restrictions;
+
+                                                    return (
+                                                        <div key={m.id} className="p-3 bg-white/5 border border-white/10 rounded-xl space-y-2 flex flex-col justify-between">
+                                                            <div>
+                                                                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase">
+                                                                    <span>{m.round} {m.group_number ? `• G${m.group_number}` : ''}</span>
+                                                                    <span className="text-primary">{tournament.category}</span>
+                                                                </div>
+                                                                <div className="text-xs font-bold text-white pt-1">
+                                                                    <div className="truncate">{p1}</div>
+                                                                    <div className="text-[10px] text-slate-500">vs</div>
+                                                                    <div className="truncate">{p2}</div>
+                                                                </div>
+                                                                {availNote && (
+                                                                    <div className="text-[10px] text-amber-300 italic pt-1 truncate">
+                                                                        Disp: {availNote}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <button
+                                                                onClick={() => openScheduleModal(m)}
+                                                                className="w-full py-1.5 bg-primary/20 hover:bg-primary/30 text-primary border border-primary/30 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                                                            >
+                                                                <Calendar size={12} /> Asignar a {formatFullDateDisplay(selectedOopDate).split(',')[0]}
+                                                            </button>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+
+                                {/* OFFICIAL CLUB SPONSORS SECTION */}
+                                <div className="p-5 bg-gradient-to-br from-slate-900 via-slate-900/90 to-slate-950 border border-white/10 rounded-3xl space-y-4 shadow-xl">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-white/10 pb-3">
+                                        <div className="flex items-center gap-2.5">
+                                            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                                                <Award size={18} />
+                                            </div>
+                                            <div>
+                                                <h4 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
+                                                    Auspiciantes & Sponsors Oficiales
+                                                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold uppercase tracking-wider">
+                                                        {tournament.institutions?.name || 'Sede'}
+                                                    </span>
+                                                </h4>
+                                                <p className="text-xs text-slate-400">Marcas y empresas que respaldan el circuito y los torneos del club</p>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Sponsors Cards Grid */}
+                                    {((tournament?.sponsors || []).filter(s => s.is_active).length > 0) ? (
+                                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                                            {(tournament?.sponsors || []).filter(s => s.is_active).map(sponsor => (
+                                                <div
+                                                    key={sponsor.id}
+                                                    className="p-3.5 bg-white/5 hover:bg-white/[0.08] border border-white/10 rounded-2xl flex flex-col items-center text-center space-y-2.5 transition-all group"
+                                                >
+                                                    <div className="w-16 h-16 rounded-xl bg-black/40 border border-white/10 flex items-center justify-center p-2 overflow-hidden shrink-0 group-hover:scale-105 transition-transform">
+                                                        {sponsor.logo_url ? (
+                                                            <img
+                                                                src={sponsor.logo_url}
+                                                                alt={sponsor.name}
+                                                                className="w-full h-full object-contain"
+                                                            />
+                                                        ) : (
+                                                            <Award size={26} className="text-amber-400 opacity-60" />
+                                                        )}
+                                                    </div>
+                                                    <div className="space-y-1 w-full">
+                                                        <div className="text-xs font-bold text-white truncate">{sponsor.name}</div>
+                                                        <span className={`inline-block px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wider ${
+                                                            sponsor.category === 'main'
+                                                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                                                                : sponsor.category === 'official'
+                                                                ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40'
+                                                                : 'bg-purple-500/20 text-purple-300 border border-purple-500/40'
+                                                        }`}>
+                                                            {sponsor.category === 'main' ? 'Sponsor Principal' : sponsor.category === 'official' ? 'Auspiciante Oficial' : 'Aliado'}
+                                                        </span>
+                                                    </div>
+
+                                                    {/* External Links */}
+                                                    <div className="flex items-center gap-1.5 pt-1">
+                                                        {sponsor.website_url && (
+                                                            <a
+                                                                href={sponsor.website_url.startsWith('http') ? sponsor.website_url : `https://${sponsor.website_url}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="p-1 rounded-lg bg-white/5 hover:bg-white/15 text-slate-400 hover:text-white transition-colors"
+                                                                title="Visitar sitio web oficial"
+                                                            >
+                                                                <ExternalLink size={12} />
+                                                            </a>
+                                                        )}
+                                                        {sponsor.phone_whatsapp && (
+                                                            <a
+                                                                href={`https://api.whatsapp.com/send?phone=${sponsor.phone_whatsapp.replace(/\D/g, '')}`}
+                                                                target="_blank"
+                                                                rel="noopener noreferrer"
+                                                                className="p-1 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-400 transition-colors"
+                                                                title="Contactar por WhatsApp"
+                                                            >
+                                                                <MessageCircle size={12} />
+                                                            </a>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center space-y-1">
+                                            <p className="text-xs text-slate-300 font-semibold">
+                                                Aún no se han configurado sponsors para esta institución.
+                                            </p>
+                                            <p className="text-[11px] text-slate-500">
+                                                Los administradores del club pueden cargarlos desde el panel de Sedes e Instituciones para que aparezcan en todos sus torneos.
+                                            </p>
+                                        </div>
+                                    )}
+
+                                    {/* Future Monetization Teaser & Sponsor Acquisition Callout */}
+                                    <div className="p-3 bg-gradient-to-r from-amber-500/10 via-primary/10 to-transparent border border-amber-500/20 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                                        <div className="flex items-center gap-2">
+                                            <Sparkles size={16} className="text-amber-400 shrink-0" />
+                                            <span className="text-slate-300 text-[11px]">
+                                                ¿Te gustaría promocionar tu empresa en la Orden de Juego y en las pantallas de TV del club?
+                                            </span>
+                                        </div>
+                                        <button
+                                            onClick={() => {
+                                                soundEffects.playScoreBeep();
+                                                const orgPhone = (tournament?.institutions as any)?.phone || '';
+                                                const text = encodeURIComponent(`Hola! Quisiera información para auspiciar el torneo "${tournament.name}" en Smash Tenis.`);
+                                                if (orgPhone) {
+                                                    window.open(`https://api.whatsapp.com/send?phone=${orgPhone.replace(/\D/g, '')}&text=${text}`, '_blank');
+                                                } else {
+                                                    window.open(`https://api.whatsapp.com/send?text=${text}`, '_blank');
+                                                }
+                                            }}
+                                            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl font-bold text-[11px] transition-all shrink-0 self-end sm:self-auto"
+                                        >
+                                            Sumar mi Marca 🤝
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </Card>
@@ -5327,6 +6135,34 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </div>
                             )}
 
+                            {/* Order of Play - Turno y Notas */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-white/10">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                        <Clock size={13} className="text-primary" /> Turno / Renglón OOP
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: 1er Turno, A continuación, No antes 18 hs"
+                                        value={scheduleOopTurn}
+                                        onChange={e => setScheduleOopTurn(e.target.value)}
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-primary outline-none"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                        <Info size={13} className="text-amber-400" /> Nota u Observación
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: Traer pelotas nuevas, Postergado..."
+                                        value={scheduleOopNote}
+                                        onChange={e => setScheduleOopNote(e.target.value)}
+                                        className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-primary outline-none"
+                                    />
+                                </div>
+                            </div>
+
                             {/* Live Summary Banner */}
                             {scheduleDate && scheduleTime && (
                                 <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl text-xs text-blue-200 flex items-center gap-2">
@@ -5375,6 +6211,97 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 </div>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* RAIN / CLIMATE DELAY MODAL */}
+            {showRainDelayModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-3xl w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col">
+                        {/* Header */}
+                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-amber-500/10">
+                            <div className="flex items-center gap-2.5">
+                                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
+                                    <CloudRain size={22} />
+                                </div>
+                                <div>
+                                    <h3 className="text-base font-bold text-white">Demora General por Clima</h3>
+                                    <p className="text-xs text-amber-300/80">Postergar partidos de la jornada</p>
+                                </div>
+                            </div>
+                            <button 
+                                onClick={() => setShowRainDelayModal(false)} 
+                                className="text-muted hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="p-5 space-y-4">
+                            <div className="p-3 bg-white/5 border border-white/10 rounded-2xl text-xs space-y-1">
+                                <div className="text-slate-400 font-bold uppercase text-[10px]">Jornada Seleccionada:</div>
+                                <div className="text-sm font-bold text-white">{formatFullDateDisplay(selectedOopDate)}</div>
+                                <div className="text-[11px] text-slate-400">
+                                    {oopDateMatches.filter(m => !m.is_played).length} partidos pendientes a postergar en el club.
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
+                                    <Clock size={13} className="text-amber-400" /> Tiempo de Demora a Sumar
+                                </label>
+                                <div className="grid grid-cols-3 gap-2">
+                                    {[15, 30, 45, 60, 90, 120].map(mins => (
+                                        <button
+                                            key={mins}
+                                            type="button"
+                                            onClick={() => setRainDelayMinutes(mins)}
+                                            className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center ${
+                                                rainDelayMinutes === mins
+                                                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20 font-black'
+                                                    : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
+                                            }`}
+                                        >
+                                            +{mins} min
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-200/90 space-y-1">
+                                <div className="font-bold flex items-center gap-1 text-amber-300">
+                                    <Info size={13} /> ¿Qué pasará al aplicar?
+                                </div>
+                                <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
+                                    <li>Se sumarán <strong>{rainDelayMinutes} minutos</strong> al horario de inicio programado de todos los partidos pendientes de este día.</li>
+                                    <li>Se actualizará su estado a <strong>"Demorado"</strong> en la Orden de Juego y en las pantallas de TV.</li>
+                                    <li>Podrás restablecer los horarios o modificar la demora en cualquier momento.</li>
+                                </ul>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowRainDelayModal(false)}
+                                    className="px-4 py-2 rounded-xl text-xs text-white hover:bg-white/10 transition-colors font-medium"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={handleApplyRainDelay}
+                                    disabled={isApplyingRainDelay}
+                                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-slate-950 text-xs font-black rounded-xl shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                                >
+                                    {isApplyingRainDelay ? (
+                                        <><Loader2 size={14} className="animate-spin" /> Aplicando...</>
+                                    ) : (
+                                        <><CloudRain size={14} /> Postergar Jornada (+{rainDelayMinutes} min)</>
+                                    )}
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}
@@ -6615,6 +7542,96 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                         <span>Firma Director del Torneo</span>
                     </div>
                 </div>
+            </div>
+
+            {/* PRINTABLE DAILY ORDER OF PLAY (A4 - Only visible during print) */}
+            <div id="print-oop-sheet" className="hidden print:block bg-white text-black font-sans z-[99999]">
+                <div className="border-b-2 border-black pb-2 mb-3 flex justify-between items-start">
+                    <div className="space-y-0.5">
+                        <div className="text-[9px] font-black tracking-widest text-slate-700 uppercase">
+                            SMASH TENNIS MANAGER • PROGRAMACIÓN OFICIAL DEL DÍA
+                        </div>
+                        <h1 className="text-xl font-black text-black uppercase tracking-tight">{tournament.name}</h1>
+                        <p className="text-[11px] text-slate-800">
+                            <strong>Club / Sede:</strong> {tournament.institutions?.name || 'Club'} • <strong>Jornada:</strong> {formatFullDateDisplay(selectedOopDate)} • <strong>Categoría:</strong> {tournament.category} ({tournament.gender || 'Caballeros'})
+                        </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-0.5 shrink-0">
+                        <img
+                            src="/Smash.png"
+                            alt="Smash Tenis"
+                            className="h-8 w-auto object-contain"
+                            crossOrigin="anonymous"
+                        />
+                        <div className="text-right text-[9px] text-slate-700 font-semibold">
+                            <div><strong>Emisión:</strong> {new Date().toLocaleDateString('es-AR')}</div>
+                            <div><strong>Partidos en Jornada:</strong> {oopDateMatches.length}</div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Courts Grid for Print */}
+                <div className="space-y-4 mb-4">
+                    {oopMatchesByCourt.map(({ court, matches: cMatches }) => (
+                        <div key={court} className="border border-black rounded p-2">
+                            <div className="bg-slate-200 border-b border-black p-1 text-xs font-black uppercase flex justify-between">
+                                <span>{court}</span>
+                                <span>{cMatches.length} Turnos</span>
+                            </div>
+                            <table className="w-full text-xs border-collapse table-fixed mt-1">
+                                <thead>
+                                    <tr className="bg-slate-100 text-center font-bold h-6 border-b border-black">
+                                        <th className="border border-black p-1 w-[12%]">Horario / Turno</th>
+                                        <th className="border border-black p-1 w-[18%]">Fase</th>
+                                        <th className="border border-black p-1 text-left pl-2 w-[28%]">Jugador / Pareja 1</th>
+                                        <th className="border border-black p-1 text-left pl-2 w-[28%]">Jugador / Pareja 2</th>
+                                        <th className="border border-black p-1 w-[14%]">Resultado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {cMatches.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="text-center py-2 italic text-slate-500 border border-black">
+                                                Sin partidos programados en esta cancha
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        cMatches.map(m => {
+                                            const time = getMatchTime(m);
+                                            const p1 = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
+                                            const p2 = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                            const score = formatMatchScore(m.score);
+
+                                            return (
+                                                <tr key={m.id} className="text-center h-7 border-b border-black">
+                                                    <td className="border border-black p-1 font-bold">{time}</td>
+                                                    <td className="border border-black p-1">{m.round} {m.group_number ? `(G${m.group_number})` : ''}</td>
+                                                    <td className="border border-black p-1 text-left pl-2 font-bold">{p1}</td>
+                                                    <td className="border border-black p-1 text-left pl-2 font-bold">{p2}</td>
+                                                    <td className="border border-black p-1 font-mono">{score || '-'}</td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    ))}
+                </div>
+
+                {/* Print Sponsors Footer */}
+                {((tournament?.sponsors || []).filter(s => s.is_active).length > 0) && (
+                    <div className="pt-2 border-t-2 border-black flex items-center justify-between text-xs">
+                        <span className="font-black uppercase text-[10px]">Auspiciantes Oficiales del Club:</span>
+                        <div className="flex items-center gap-3">
+                            {(tournament?.sponsors || []).filter(s => s.is_active).map(s => (
+                                <span key={s.id} className="font-bold text-[10px] border border-black px-2 py-0.5 rounded">
+                                    {s.name} ({s.category === 'main' ? 'Sponsor Principal' : 'Auspiciante'})
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Modal de Zoom / Previsualización de Comprobante de Pago */}

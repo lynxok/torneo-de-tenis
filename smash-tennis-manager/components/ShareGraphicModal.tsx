@@ -446,32 +446,54 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
       const cardW = width - padX * 2;
       const maxMatches = isSquare ? 5 : 6;
-      const cardH = isSquare ? 54 : 66;
+      const cardH = isSquare ? 56 : 68;
       (matches || []).slice(0, maxMatches).forEach((m, idx) => {
         const mY = curY + idx * (cardH + (isSquare ? 10 : 14));
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-        ctx.lineWidth = 2;
+        const oopSt = m.oop_status || (m.proposal_data as any)?.oop_status;
+        const courtName = m.court_name || (m.proposal_data as any)?.court_name || m.court || '';
+        
+        ctx.fillStyle = oopSt === 'in_progress' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255, 255, 255, 0.05)';
+        ctx.strokeStyle = oopSt === 'in_progress' ? '#10b981' : 'rgba(255, 255, 255, 0.12)';
+        ctx.lineWidth = oopSt === 'in_progress' ? 2.5 : 2;
         ctx.beginPath();
         ctx.roundRect(padX, mY, cardW, cardH, 14);
         ctx.fill();
         ctx.stroke();
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = isSquare ? 'bold 19px sans-serif' : 'bold 22px sans-serif';
+        ctx.font = isSquare ? 'bold 18px sans-serif' : 'bold 21px sans-serif';
         ctx.textAlign = 'left';
-        ctx.fillText(`${m.player1_name || 'Jugador 1'}  vs  ${m.player2_name || 'Jugador 2'}`, padX + 20, mY + (isSquare ? 34 : 42));
+        const p1 = m.team1_name || m.player1_name || 'Jugador 1';
+        const p2 = m.team2_name || m.player2_name || 'Jugador 2';
+        ctx.fillText(`${p1}  vs  ${p2}`, padX + 18, mY + (isSquare ? 28 : 34));
 
-        ctx.fillStyle = '#38bdf8';
-        ctx.font = isSquare ? 'bold 17px sans-serif' : 'bold 20px sans-serif';
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = isSquare ? '600 13px sans-serif' : '600 15px sans-serif';
+        ctx.fillText(`${m.round || 'Partido'}  ${courtName ? `• ${courtName}` : ''}`, padX + 18, mY + (isSquare ? 46 : 54));
+
+        ctx.fillStyle = oopSt === 'in_progress' ? '#10b981' : '#38bdf8';
+        ctx.font = isSquare ? 'bold 16px sans-serif' : 'bold 19px sans-serif';
         ctx.textAlign = 'right';
-        const timeStr = m.scheduled_at ? `${m.scheduled_at.slice(11, 16)} hs` : 'A confirmar';
-        ctx.fillText(timeStr, padX + cardW - 20, mY + (isSquare ? 34 : 42));
+        const timeStr = m.scheduled_at 
+          ? `${m.scheduled_at.slice(11, 16)} hs` 
+          : (m.oop_turn || (m.proposal_data as any)?.oop_turn || 'A confirmar');
+        ctx.fillText(timeStr, padX + cardW - 18, mY + (isSquare ? 34 : 42));
       });
     }
 
-    // 5. Footer
-    const footY = height - (isSquare ? 55 : 70);
+    // 5. Sponsors Banner in Canvas Footer
+    const activeSponsors = (tournament?.sponsors || []).filter(s => s.is_active);
+    const hasSponsors = activeSponsors.length > 0;
+    const footY = height - (isSquare ? (hasSponsors ? 80 : 55) : (hasSponsors ? 100 : 70));
+
+    if (hasSponsors) {
+      ctx.fillStyle = '#fbbf24';
+      ctx.font = isSquare ? '900 13px sans-serif' : '900 15px sans-serif';
+      ctx.textAlign = 'center';
+      const spText = `🤝 AUSPICIANTES: ${activeSponsors.map(s => s.name.toUpperCase()).join('  •  ')}`;
+      ctx.fillText(spText, width / 2, footY - (isSquare ? 12 : 16));
+    }
+
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -1051,19 +1073,47 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                       <div className="text-center py-4 text-muted text-xs italic">Sin partidos programados hoy</div>
                     ) : (
                       <div className="space-y-1">
-                        {matches.slice(0, aspectRatio === 'square' ? 4 : 5).map((m, i) => (
-                          <div key={i} className="bg-white/5 border border-white/10 rounded-lg p-1 sm:p-1.5 flex justify-between items-center text-[8.5px]">
-                            <span className="font-bold text-white truncate max-w-[160px]">
-                              {m.player1_name || 'Jugador 1'} vs {m.player2_name || 'Jugador 2'}
-                            </span>
-                            <span className="text-primary font-bold shrink-0">{m.scheduled_at ? m.scheduled_at.slice(11, 16) : 'A conf.'}</span>
-                          </div>
-                        ))}
+                        {matches.slice(0, aspectRatio === 'square' ? 4 : 5).map((m, i) => {
+                          const oopSt = m.oop_status || (m.proposal_data as any)?.oop_status;
+                          const courtName = m.court_name || (m.proposal_data as any)?.court_name || m.court || '';
+                          const timeStr = m.scheduled_at 
+                            ? m.scheduled_at.slice(11, 16) 
+                            : (m.oop_turn || (m.proposal_data as any)?.oop_turn || 'A conf.');
+
+                          return (
+                            <div key={i} className={`border rounded-lg p-1 sm:p-1.5 flex justify-between items-center text-[8.5px] ${
+                              oopSt === 'in_progress' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-200' : 'bg-white/5 border-white/10'
+                            }`}>
+                              <div className="truncate max-w-[170px] space-y-0.5">
+                                <span className="font-bold text-white block truncate">
+                                  {m.team1_name || m.player1_name || 'Jugador 1'} vs {m.team2_name || m.player2_name || 'Jugador 2'}
+                                </span>
+                                {courtName && (
+                                  <span className="text-[7px] text-slate-400 block truncate font-semibold">
+                                    {courtName} {m.round ? `• ${m.round}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                              <span className={`font-bold shrink-0 ${oopSt === 'in_progress' ? 'text-emerald-400 font-black' : 'text-primary'}`}>
+                                {timeStr}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
                 )}
               </div>
+
+              {/* Sponsors Ribbon Preview */}
+              {((tournament?.sponsors || []).filter(s => s.is_active).length > 0) && (
+                <div className="pt-1 border-t border-white/10 text-center shrink-0">
+                  <span className="text-[7.5px] font-black uppercase tracking-wider text-amber-400 truncate block">
+                    🤝 Auspiciantes: {(tournament?.sponsors || []).filter(s => s.is_active).map(s => s.name).join(' • ')}
+                  </span>
+                </div>
+              )}
 
               {/* Graphic Footer */}
               <div className={`border-t border-white/10 ${aspectRatio === 'square' ? 'pt-1.5 text-[8px]' : 'pt-2 text-[9px]'} flex items-center justify-between text-muted shrink-0`}>

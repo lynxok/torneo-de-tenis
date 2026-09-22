@@ -11,7 +11,7 @@ import {
     Tv, Play, Pause, Maximize, Minimize, Volume2, VolumeX, ArrowLeft,
     Clock, Calendar, CloudSun, Trophy, Swords, Users, Sparkles,
     MapPin, Wind, Droplets, CheckCircle2, ShieldCheck, QrCode, Building, Layers, RotateCw,
-    Sliders, CheckSquare, Square, X, Check, Eye
+    Sliders, CheckSquare, Square, X, Check, Eye, Zap, CloudRain, Award
 } from 'lucide-react';
 
 interface BroadcastTVProps {
@@ -441,7 +441,24 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
     }, [matches]);
 
     const scheduledMatches = useMemo(() => {
-        return matches.filter(m => !m.is_played);
+        return matches.filter(m => !m.is_played && !m.is_bye).sort((a, b) => {
+            const stA = a.oop_status || (a.proposal_data as any)?.oop_status || 'scheduled';
+            const stB = b.oop_status || (b.proposal_data as any)?.oop_status || 'scheduled';
+            const priority: Record<string, number> = {
+                'in_progress': 1,
+                'warming_up': 2,
+                'delayed': 3,
+                'scheduled': 4,
+                'finished': 5
+            };
+            const pA = priority[stA] || 4;
+            const pB = priority[stB] || 4;
+            if (pA !== pB) return pA - pB;
+
+            const timeA = a.scheduled_at ? new Date(a.scheduled_at).getTime() : 9999999999999;
+            const timeB = b.scheduled_at ? new Date(b.scheduled_at).getTime() : 9999999999999;
+            return timeA - timeB;
+        });
     }, [matches]);
 
     const currentSlide = slides[currentSlideIndex].id;
@@ -849,33 +866,100 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                             </div>
                         ) : (
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {scheduledMatches.slice(0, 6).map((m, idx) => (
-                                    <div key={m.id || idx} className="bg-slate-900/80 border border-white/10 rounded-2xl p-5 space-y-3 hover:border-primary/40 transition-colors shadow-lg">
-                                        <div className="flex justify-between items-center text-xs">
-                                            <span className="px-2.5 py-1 bg-primary/20 text-primary font-bold rounded-lg border border-primary/30">
-                                                {m.scheduled_time ? `🕒 ${m.scheduled_time} hs` : `Turno ${idx + 1}`}
-                                            </span>
-                                            <span className="text-slate-400 font-bold">
-                                                Cancha {m.court || ((idx % 3) + 1)}
-                                            </span>
-                                        </div>
+                                {scheduledMatches.slice(0, 6).map((m, idx) => {
+                                    const oopSt = m.oop_status || (m.proposal_data as any)?.oop_status || 'scheduled';
+                                    const timeStr = m.scheduled_at 
+                                        ? new Date(m.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + ' hs' 
+                                        : (m.oop_turn || (m.proposal_data as any)?.oop_turn || `Turno ${idx + 1}`);
+                                    const courtStr = m.court_name || (m.proposal_data as any)?.court_name || m.court || `Cancha ${((idx % 3) + 1)}`;
+                                    const p1Name = m.team1_name || m.player1_name || 'A definir';
+                                    const p2Name = m.team2_name || m.player2_name || 'A definir';
+                                    const note = m.oop_note || (m.proposal_data as any)?.oop_note;
 
-                                        <div className="space-y-1.5 py-1">
-                                            <div className="text-base font-black text-white flex items-center justify-between">
-                                                <span className="truncate">{m.player1_name || 'TBD'}</span>
-                                                <span className="text-xs text-primary font-mono font-bold">VS</span>
+                                    return (
+                                        <div 
+                                            key={m.id || idx} 
+                                            className={`rounded-2xl p-5 space-y-3 transition-all shadow-lg border ${
+                                                oopSt === 'in_progress'
+                                                    ? 'bg-emerald-950/40 border-emerald-500/60 shadow-emerald-950/50 ring-1 ring-emerald-500/40'
+                                                    : oopSt === 'warming_up'
+                                                    ? 'bg-amber-950/40 border-amber-500/50'
+                                                    : oopSt === 'delayed'
+                                                    ? 'bg-red-950/40 border-red-500/50'
+                                                    : 'bg-slate-900/80 border-white/10 hover:border-primary/40'
+                                            }`}
+                                        >
+                                            <div className="flex justify-between items-center text-xs">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="px-2.5 py-1 bg-primary/20 text-primary font-mono font-bold rounded-lg border border-primary/30">
+                                                        🕒 {timeStr}
+                                                    </span>
+                                                    {oopSt === 'in_progress' && (
+                                                        <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1 animate-pulse">
+                                                            <Zap size={11} className="fill-emerald-400" /> En Juego
+                                                        </span>
+                                                    )}
+                                                    {oopSt === 'warming_up' && (
+                                                        <span className="px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 border border-amber-500/40 text-[10px] font-black uppercase tracking-wider">
+                                                            🎾 Calentando
+                                                        </span>
+                                                    )}
+                                                    {oopSt === 'delayed' && (
+                                                        <span className="px-2 py-0.5 rounded-md bg-red-500/20 text-red-300 border border-red-500/40 text-[10px] font-black uppercase tracking-wider flex items-center gap-1">
+                                                            <CloudRain size={11} /> Demorado
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                <span className="text-slate-300 font-bold flex items-center gap-1">
+                                                    <MapPin size={12} className="text-green-400" /> {courtStr}
+                                                </span>
                                             </div>
-                                            <div className="text-base font-black text-white truncate">
-                                                {m.player2_name || 'TBD'}
-                                            </div>
-                                        </div>
 
-                                        <div className="text-[11px] text-slate-400 border-t border-white/10 pt-2 flex justify-between">
-                                            <span>{m.round || 'Zona de Clasificación'}</span>
-                                            <span className="text-slate-300 font-semibold">{activeTournament?.category}</span>
+                                            <div className="space-y-1.5 py-1">
+                                                <div className="text-lg font-black text-white flex items-center justify-between">
+                                                    <span className="truncate">{p1Name}</span>
+                                                    <span className="text-xs text-primary font-mono font-bold mx-2">VS</span>
+                                                </div>
+                                                <div className="text-lg font-black text-white truncate">
+                                                    {p2Name}
+                                                </div>
+                                            </div>
+
+                                            {note && (
+                                                <div className="text-[11px] text-amber-300/90 italic bg-amber-500/10 px-2 py-1 rounded-lg">
+                                                    ↳ {note}
+                                                </div>
+                                            )}
+
+                                            <div className="text-[11px] text-slate-400 border-t border-white/10 pt-2 flex justify-between">
+                                                <span>{m.round || 'Zona de Clasificación'}</span>
+                                                <span className="text-slate-300 font-semibold">{activeTournament?.category}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
+                            </div>
+                        )}
+
+                        {/* Slide Sponsors Ribbon */}
+                        {((activeTournament?.sponsors || []).filter(s => s.is_active).length > 0) && (
+                            <div className="p-4 bg-slate-950/80 border border-white/10 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Award size={16} className="text-amber-400" />
+                                    <span className="text-xs font-black uppercase tracking-wider text-slate-300">
+                                        Auspiciantes Oficiales de {clubName}
+                                    </span>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-4">
+                                    {(activeTournament?.sponsors || []).filter(s => s.is_active).map(s => (
+                                        <div key={s.id} className="flex items-center gap-2 px-3 py-1 bg-white/5 rounded-xl border border-white/10">
+                                            {s.logo_url && (
+                                                <img src={s.logo_url} alt={s.name} className="h-6 w-auto max-w-[80px] object-contain" />
+                                            )}
+                                            <span className="text-xs font-bold text-white">{s.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         )}
                     </div>
@@ -1205,17 +1289,36 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
             </main>
 
             {/* BOTTOM TICKER FOOTER */}
-            <footer className="h-14 bg-slate-950 border-t border-white/10 px-8 flex items-center justify-between shrink-0 text-xs text-slate-400">
-                <div className="flex items-center gap-6">
+            <footer className="h-14 bg-slate-950 border-t border-white/10 px-8 flex items-center justify-between shrink-0 text-xs text-slate-400 gap-4 overflow-hidden">
+                <div className="flex items-center gap-6 shrink-0">
                     <span className="font-bold text-white flex items-center gap-2">
                         <Trophy size={14} className="text-yellow-400" /> Circuito Smash Tenis
                     </span>
                     <span className="hidden sm:inline">Pantalla Oficial • {clubName}</span>
                 </div>
-                <div className="flex items-center gap-3">
+
+                {/* Live Sponsors Ticker Ribbon */}
+                {((activeTournament?.sponsors || []).filter(s => s.is_active).length > 0) && (
+                    <div className="hidden md:flex items-center gap-4 overflow-hidden px-4 py-1 bg-white/5 rounded-full border border-white/10 shrink-0">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-amber-400 shrink-0">Auspiciantes:</span>
+                        <div className="flex items-center gap-3">
+                            {(activeTournament?.sponsors || []).filter(s => s.is_active).map(s => (
+                                <div key={s.id} className="flex items-center gap-1.5 shrink-0">
+                                    {s.logo_url ? (
+                                        <img src={s.logo_url} alt={s.name} className="h-5 w-auto max-w-[65px] object-contain rounded" />
+                                    ) : (
+                                        <span className="text-white font-bold text-[11px]">{s.name}</span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center gap-3 shrink-0">
                     <span className="text-[11px] font-bold text-primary">Rotación: {slideDuration}s</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                    <span className="text-slate-500 font-mono text-[11px]">v1.6.4</span>
+                    <span className="text-slate-500 font-mono text-[11px]">v1.7.5</span>
                 </div>
             </footer>
 
