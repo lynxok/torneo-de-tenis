@@ -18,3 +18,5 @@ export { TournamentPlayoffsTab } from './TournamentPlayoffsTab';
 export { TournamentOrderOfPlayTab } from './TournamentOrderOfPlayTab';
 export { TournamentRegistrationPlayersList } from './TournamentRegistrationPlayersList';
 export { TournamentAdminPanel } from './TournamentAdminPanel';
+export { TournamentHeader } from './TournamentHeader';
+export { TournamentBanners } from './TournamentBanners';
