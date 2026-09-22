@@ -20,3 +20,4 @@ export { TournamentRegistrationPlayersList } from './TournamentRegistrationPlaye
 export { TournamentAdminPanel } from './TournamentAdminPanel';
 export { TournamentHeader } from './TournamentHeader';
 export { TournamentBanners } from './TournamentBanners';
+export { TournamentPrintSheets } from './TournamentPrintSheets';
