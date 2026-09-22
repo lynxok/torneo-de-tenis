@@ -23,6 +23,20 @@ import { MatchQuickScorerModal } from '../components/MatchQuickScorerModal';
 import { soundEffects } from '../services/soundEffects';
 import { canEditTournament } from './Tournaments';
 import { checkPlayerGenderEligibility } from '../utils/demographics';
+import {
+    EditTournamentModal,
+    DeleteTournamentModal,
+    ProjectionHelpModal,
+    ManualEnrollModal,
+    ReplacePlayerModal,
+    EnrolledPlayersModal,
+    OfficializeModal,
+    RainDelayModal,
+    CalendarPickerModal,
+    DisputeModal,
+    ReceiptViewerModal
+} from '../components/tournament-details';
+
 
 interface TournamentDetailsProps {
     tournamentId: string;
@@ -4983,37 +4997,14 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* DISPUTE MODAL */}
             {disputeMatchId && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-6 space-y-4">
-                        <div className="flex justify-between items-center border-b border-white/10 pb-3">
-                            <h3 className="font-bold text-white text-base flex items-center gap-2">
-                                <AlertTriangle className="text-red-400" size={18} /> Reportar Discrepancia de Marcador
-                            </h3>
-                            <button onClick={() => setDisputeMatchId(null)} className="text-muted hover:text-white"><X size={18} /></button>
-                        </div>
-                        <form onSubmit={handleDisputeScore} className="space-y-3">
-                            <p className="text-xs text-slate-300">
-                                Indica cuál fue el resultado real o el motivo del desacuerdo. El organizador del torneo o SuperAdmin será notificado para arbitrar.
-                            </p>
-                            <textarea
-                                rows={3}
-                                required
-                                placeholder="Ej: El segundo set terminó 6-4 a mi favor, no 4-6..."
-                                className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-red-500"
-                                value={disputeReason}
-                                onChange={e => setDisputeReason(e.target.value)}
-                            />
-                            <div className="flex justify-end gap-2 pt-2">
-                                <button type="button" onClick={() => setDisputeMatchId(null)} className="px-4 py-2 bg-white/10 text-white rounded-xl text-xs font-bold">
-                                    Cancelar
-                                </button>
-                                <button type="submit" disabled={submittingDispute} className="px-5 py-2 bg-red-600 hover:bg-red-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5">
-                                    {submittingDispute ? <Loader2 size={14} className="animate-spin" /> : <AlertTriangle size={14} />} Enviar Disputa
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <DisputeModal
+                    isOpen={!!disputeMatchId}
+                    onClose={() => setDisputeMatchId(null)}
+                    disputeReason={disputeReason}
+                    onDisputeReasonChange={setDisputeReason}
+                    onSubmit={handleDisputeScore}
+                    submitting={submittingDispute}
+                />
             )}
 
             {/* HEAD TO HEAD (H2H) MODAL */}
@@ -5667,216 +5658,44 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* RAIN / CLIMATE DELAY MODAL */}
             {showRainDelayModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-card border border-white/10 rounded-3xl w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col">
-                        {/* Header */}
-                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-amber-500/10">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-amber-500/20 text-amber-400">
-                                    <CloudRain size={22} />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-bold text-white">Demora General por Clima</h3>
-                                    <p className="text-xs text-amber-300/80">Postergar partidos de la jornada</p>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => setShowRainDelayModal(false)} 
-                                className="text-muted hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <div className="p-5 space-y-4">
-                            <div className="p-3 bg-white/5 border border-white/10 rounded-2xl text-xs space-y-1">
-                                <div className="text-slate-400 font-bold uppercase text-[10px]">Jornada Seleccionada:</div>
-                                <div className="text-sm font-bold text-white">{formatFullDateDisplay(selectedOopDate)}</div>
-                                <div className="text-[11px] text-slate-400">
-                                    {oopDateMatches.filter(m => !m.is_played).length} partidos pendientes a postergar en el club.
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                    <Clock size={13} className="text-amber-400" /> Tiempo de Demora a Sumar
-                                </label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {[15, 30, 45, 60, 90, 120].map(mins => (
-                                        <button
-                                            key={mins}
-                                            type="button"
-                                            onClick={() => setRainDelayMinutes(mins)}
-                                            className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all text-center ${
-                                                rainDelayMinutes === mins
-                                                    ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-md shadow-amber-500/20 font-black'
-                                                    : 'bg-white/5 border-white/10 text-slate-300 hover:text-white hover:bg-white/10'
-                                            }`}
-                                        >
-                                            +{mins} min
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-[11px] text-amber-200/90 space-y-1">
-                                <div className="font-bold flex items-center gap-1 text-amber-300">
-                                    <Info size={13} /> ¿Qué pasará al aplicar?
-                                </div>
-                                <ul className="list-disc pl-4 space-y-0.5 text-[11px]">
-                                    <li>Se sumarán <strong>{rainDelayMinutes} minutos</strong> al horario de inicio programado de todos los partidos pendientes de este día.</li>
-                                    <li>Se actualizará su estado a <strong>"Demorado"</strong> en la Orden de Juego y en las pantallas de TV.</li>
-                                    <li>Podrás restablecer los horarios o modificar la demora en cualquier momento.</li>
-                                </ul>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-2 pt-3 border-t border-white/10">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowRainDelayModal(false)}
-                                    className="px-4 py-2 rounded-xl text-xs text-white hover:bg-white/10 transition-colors font-medium"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={handleApplyRainDelay}
-                                    disabled={isApplyingRainDelay}
-                                    className="px-5 py-2 bg-gradient-to-r from-amber-500 to-amber-600 hover:brightness-110 text-slate-950 text-xs font-black rounded-xl shadow-lg shadow-amber-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
-                                >
-                                    {isApplyingRainDelay ? (
-                                        <><Loader2 size={14} className="animate-spin" /> Aplicando...</>
-                                    ) : (
-                                        <><CloudRain size={14} /> Postergar Jornada (+{rainDelayMinutes} min)</>
-                                    )}
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <RainDelayModal
+                    isOpen={showRainDelayModal}
+                    onClose={() => setShowRainDelayModal(false)}
+                    selectedOopDate={selectedOopDate}
+                    formatFullDateDisplay={formatFullDateDisplay}
+                    unplayedMatchesCount={oopDateMatches.filter(m => !m.is_played).length}
+                    rainDelayMinutes={rainDelayMinutes}
+                    onSelectRainDelayMinutes={setRainDelayMinutes}
+                    onApplyRainDelay={handleApplyRainDelay}
+                    isApplyingRainDelay={isApplyingRainDelay}
+                />
             )}
 
             {/* INTERACTIVE CALENDAR DATE PICKER MODAL */}
             {showCalendarModal && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/85 backdrop-blur-md p-3 animate-in fade-in duration-200">
-                    <div className="bg-card border border-white/15 rounded-3xl w-full max-w-sm shadow-2xl relative overflow-hidden flex flex-col p-5 space-y-4">
-                        {/* Header: Month & Year Navigator */}
-                        <div className="flex items-center justify-between">
-                            <button
-                                type="button"
-                                onClick={handlePrevMonth}
-                                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
-                                title="Mes anterior"
-                            >
-                                <ChevronLeft size={18} />
-                            </button>
-
-                            <div className="text-center">
-                                <h4 className="text-base font-black text-white capitalize tracking-tight">
-                                    {calendarViewMonth.toLocaleDateString('es-AR', { month: 'long', year: 'numeric' })}
-                                </h4>
-                                <span className="text-[10px] text-muted uppercase font-bold">Seleccionar Día del Partido</span>
-                            </div>
-
-                            <button
-                                type="button"
-                                onClick={handleNextMonth}
-                                className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white transition-colors border border-white/5"
-                                title="Mes siguiente"
-                            >
-                                <ChevronRight size={18} />
-                            </button>
-                        </div>
-
-                        {/* Quick Jump Buttons */}
-                        <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    const today = new Date();
-                                    setCalendarViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
-                                    handleSelectCalendarDate(today.toISOString().split('T')[0]);
-                                }}
-                                className="px-2.5 py-1 bg-white/5 hover:bg-primary/20 text-muted hover:text-white border border-white/10 rounded-lg text-[10px] font-bold transition-all"
-                            >
-                                Ir a Hoy
-                            </button>
-
-                            {tournament?.start_date && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        const [y, m] = tournament.start_date.split('-').map(Number);
-                                        setCalendarViewMonth(new Date(y, m - 1, 1));
-                                        handleSelectCalendarDate(tournament.start_date);
-                                    }}
-                                    className="px-2.5 py-1 bg-amber-500/15 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-lg text-[10px] font-bold transition-all"
-                                >
-                                    🏆 Inicio Torneo ({tournament.start_date.split('-').slice(1).reverse().join('/')})
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Weekday Labels */}
-                        <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-black text-slate-400 border-b border-white/10 pb-2">
-                            <span>Lu</span>
-                            <span>Ma</span>
-                            <span>Mi</span>
-                            <span>Ju</span>
-                            <span>Vi</span>
-                            <span className="text-blue-400 font-bold">Sá</span>
-                            <span className="text-blue-400 font-bold">Do</span>
-                        </div>
-
-                        {/* Month Grid */}
-                        <div className="grid grid-cols-7 gap-1">
-                            {renderCalendarGrid().map((cell, idx) => {
-                                return (
-                                    <button
-                                        key={idx}
-                                        type="button"
-                                        onClick={() => handleSelectCalendarDate(cell.dateStr)}
-                                        className={`h-9 rounded-xl text-xs flex flex-col items-center justify-center relative transition-all ${
-                                            cell.isSelected
-                                                ? 'bg-gradient-to-br from-blue-600 to-primary text-white font-black ring-2 ring-primary shadow-lg scale-105 z-10'
-                                                : cell.isToday
-                                                ? 'bg-amber-500/20 text-amber-300 font-bold border border-amber-500/40 hover:bg-primary/20'
-                                                : cell.isCurrentMonth
-                                                ? cell.isWeekend
-                                                    ? 'bg-white/5 hover:bg-primary/20 text-slate-100 font-bold border border-white/5 hover:border-primary/40'
-                                                    : 'bg-black/30 hover:bg-primary/20 text-slate-300 font-medium hover:text-white'
-                                                : 'opacity-25 text-slate-500 hover:opacity-50 hover:bg-white/5'
-                                        }`}
-                                        title={cell.dateStr}
-                                    >
-                                        <span>{cell.dayNum}</span>
-                                        {cell.isTournamentDay && !cell.isSelected && (
-                                            <span className="w-1 h-1 rounded-full bg-primary absolute bottom-1"></span>
-                                        )}
-                                    </button>
-                                );
-                            })}
-                        </div>
-
-                        {/* Footer Info & Close */}
-                        <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
-                            <div className="text-[11px] text-slate-300 font-medium truncate">
-                                {scheduleDate ? (
-                                    <span>Elegido: <strong className="text-primary">{formatFullDateDisplay(scheduleDate)}</strong></span>
-                                ) : (
-                                    <span>Toca cualquier día para seleccionarlo</span>
-                                )}
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setShowCalendarModal(false)}
-                                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/15 text-white text-xs font-bold rounded-xl transition-colors shrink-0"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <CalendarPickerModal
+                    isOpen={showCalendarModal}
+                    onClose={() => setShowCalendarModal(false)}
+                    calendarViewMonth={calendarViewMonth}
+                    onPrevMonth={handlePrevMonth}
+                    onNextMonth={handleNextMonth}
+                    onGoToToday={() => {
+                        const today = new Date();
+                        setCalendarViewMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+                        handleSelectCalendarDate(today.toISOString().split('T')[0]);
+                    }}
+                    startDate={tournament?.start_date}
+                    onSelectTournamentStartDate={() => {
+                        if (!tournament?.start_date) return;
+                        const [y, m] = tournament.start_date.split('-').map(Number);
+                        setCalendarViewMonth(new Date(y, m - 1, 1));
+                        handleSelectCalendarDate(tournament.start_date);
+                    }}
+                    scheduleDate={scheduleDate}
+                    onSelectDate={handleSelectCalendarDate}
+                    calendarCells={renderCalendarGrid()}
+                    formatFullDateDisplay={formatFullDateDisplay}
+                />
             )}
 
             {/* DELETE TOURNAMENT CONFIRMATION MODAL */}
@@ -6419,43 +6238,10 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* Modal de Zoom / Previsualización de Comprobante de Pago */}
             {viewingReceiptModal && (
-                <div 
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in" 
-                    onClick={() => setViewingReceiptModal(null)}
-                >
-                    <div 
-                        className="bg-card border border-white/10 rounded-2xl p-5 max-w-lg w-full max-h-[90vh] flex flex-col relative shadow-2xl" 
-                        onClick={e => e.stopPropagation()}
-                    >
-                        <div className="flex justify-between items-center pb-3 border-b border-white/10 mb-3">
-                            <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                                <Receipt size={16} className="text-primary" /> Comprobante de Pago de Inscripción
-                            </h4>
-                            <button 
-                                onClick={() => setViewingReceiptModal(null)} 
-                                className="text-muted hover:text-white p-1 rounded-lg hover:bg-white/10 transition-colors"
-                            >
-                                <X size={18} />
-                            </button>
-                        </div>
-                        <div className="flex-1 overflow-auto flex items-center justify-center bg-black/50 rounded-xl p-2 border border-white/5">
-                            <img 
-                                src={viewingReceiptModal} 
-                                alt="Comprobante de Pago" 
-                                className="max-w-full max-h-[68vh] object-contain rounded-lg" 
-                            />
-                        </div>
-                        <div className="pt-3 border-t border-white/10 flex justify-between items-center text-xs text-muted mt-3">
-                            <span>Foto adjuntada por el jugador</span>
-                            <button 
-                                onClick={() => setViewingReceiptModal(null)}
-                                className="px-4 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg font-bold transition-all"
-                            >
-                                Cerrar
-                            </button>
-                        </div>
-                    </div>
-                </div>
+                <ReceiptViewerModal
+                    receiptUrl={viewingReceiptModal}
+                    onClose={() => setViewingReceiptModal(null)}
+                />
             )}
         </div>
     );
