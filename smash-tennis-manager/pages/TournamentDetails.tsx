@@ -36,7 +36,9 @@ import {
     DisputeModal,
     ReceiptViewerModal,
     PlayerEnrollModal,
-    GenerateFixtureModal
+    GenerateFixtureModal,
+    ScheduleMatchModal,
+    ScoreInputModal
 } from '../components/tournament-details';
 
 
@@ -4565,436 +4567,60 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* SCORE INPUT MODAL */}
             {selectedMatchForScore && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col">
-                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <h3 className="text-base font-bold text-white flex items-center gap-2">
-                                <Edit3 size={18} className="text-primary" /> Cargar Resultado del Partido
-                            </h3>
-                            <button onClick={() => setSelectedMatchForScore(null)} className="text-muted hover:text-white"><X size={20} /></button>
-                        </div>
-
-                        <form onSubmit={handleSaveScore} className="p-6 space-y-4">
-                            <div className="text-center pb-2 border-b border-white/10">
-                                <span className="text-xs text-muted font-bold uppercase">{selectedMatchForScore.round}</span>
-                                <div className="text-white font-bold text-sm mt-1">
-                                    {selectedMatchForScore.team1_name || selectedMatchForScore.player1_name} vs {selectedMatchForScore.team2_name || selectedMatchForScore.player2_name}
-                                </div>
-                                <div className="text-[11px] text-slate-400 mt-1">
-                                    {isClubAdmin ? (
-                                        <span className="text-green-400 font-bold">✓ Oficialización directa como Administrador</span>
-                                    ) : (
-                                        <span className="text-amber-300">⏳ Tu rival tendrá 24hs para confirmar o se autoconfirmará</span>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* MODE SELECTOR: REGULAR MATCH VS WALKOVER */}
-                            <div className="flex items-center justify-center p-1 bg-black/40 rounded-xl border border-white/10 gap-1">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsWalkover(false)}
-                                    className={`flex-1 py-1.5 text-xs rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
-                                        !isWalkover 
-                                            ? 'bg-primary text-white shadow-md' 
-                                            : 'text-slate-400 hover:text-white'
-                                    }`}
-                                >
-                                    🎾 Partido Jugado
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setIsWalkover(true);
-                                        if (!walkoverWinnerId && selectedMatchForScore) {
-                                            setWalkoverWinnerId(selectedMatchForScore.player1_id);
-                                        }
-                                    }}
-                                    className={`flex-1 py-1.5 text-xs rounded-lg font-bold transition-all flex items-center justify-center gap-1.5 ${
-                                        isWalkover 
-                                            ? 'bg-amber-500 text-slate-950 shadow-md font-black' 
-                                            : 'text-slate-400 hover:text-white'
-                                    }`}
-                                >
-                                    ⚡ Victoria por W.O.
-                                </button>
-                            </div>
-
-                            {isWalkover ? (
-                                <div className="space-y-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-2xl animate-fade-up">
-                                    <div className="flex items-start gap-2.5">
-                                        <AlertTriangle size={18} className="text-amber-400 shrink-0 mt-0.5" />
-                                        <div className="text-xs text-amber-200 leading-relaxed">
-                                            Se declarará ganador al jugador o equipo que se presentó. Por reglamento oficial, se computará un resultado de <strong>6-0 y 6-0</strong> para la tabla de posiciones.
-                                        </div>
-                                    </div>
-                                    <div className="space-y-1.5">
-                                        <label className="text-xs text-amber-300 uppercase font-bold">¿Quién gana por Walkover (W.O.)?</label>
-                                        <select
-                                            className="w-full bg-slate-900 border border-amber-500/40 rounded-xl p-3 text-white text-xs font-bold focus:border-amber-400 outline-none"
-                                            value={walkoverWinnerId}
-                                            onChange={e => setWalkoverWinnerId(e.target.value)}
-                                            required={isWalkover}
-                                        >
-                                            <option value={selectedMatchForScore.player1_id}>
-                                                🏆 {selectedMatchForScore.team1_name || selectedMatchForScore.player1_name} (Ganador por W.O.)
-                                            </option>
-                                            <option value={selectedMatchForScore.player2_id}>
-                                                🏆 {selectedMatchForScore.team2_name || selectedMatchForScore.player2_name} (Ganador por W.O.)
-                                            </option>
-                                        </select>
-                                    </div>
-                                </div>
-                            ) : (
-                                <>
-                                    {/* SETS INPUT */}
-                                    <div className="space-y-3">
-                                        {/* Set 1 */}
-                                        <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 space-y-2">
-                                            <div className="grid grid-cols-3 items-center gap-2">
-                                                <span className="text-xs font-bold text-white">Set 1</span>
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    max={7}
-                                                    placeholder="0"
-                                                    className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                                    value={scoreP1Set1}
-                                                    onChange={e => {
-                                                        const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
-                                                        setScoreP1Set1(val);
-                                                        if (val === 7 && scoreP2Set1 === 6) { setTbP1Set1(7); setTbP2Set1(5); }
-                                                        else if (val === 6 && scoreP2Set1 === 7) { setTbP1Set1(5); setTbP2Set1(7); }
-                                                    }}
-                                                    required={!isWalkover}
-                                                />
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    max={7}
-                                                    placeholder="0"
-                                                    className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                                    value={scoreP2Set1}
-                                                    onChange={e => {
-                                                        const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
-                                                        setScoreP2Set1(val);
-                                                        if (scoreP1Set1 === 7 && val === 6) { setTbP1Set1(7); setTbP2Set1(5); }
-                                                        else if (scoreP1Set1 === 6 && val === 7) { setTbP1Set1(5); setTbP2Set1(7); }
-                                                    }}
-                                                    required={!isWalkover}
-                                                />
-                                            </div>
-
-                                            {/* Set 1 Tiebreak sub-input */}
-                                            {((scoreP1Set1 === 7 && scoreP2Set1 === 6) || (scoreP1Set1 === 6 && scoreP2Set1 === 7)) && (
-                                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 rounded-lg animate-fade-up">
-                                                    <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                                                        <Trophy size={12} className="text-amber-400" /> Puntos Tie-Break:
-                                                    </span>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <input
-                                                            type="number"
-                                                            min={0}
-                                                            max={30}
-                                                            placeholder={scoreP1Set1 === 7 ? "7" : "5"}
-                                                            className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
-                                                            value={tbP1Set1}
-                                                            onChange={e => setTbP1Set1(e.target.value === '' ? '' : Number(e.target.value))}
-                                                        />
-                                                        <span className="text-muted text-xs font-bold">-</span>
-                                                        <input
-                                                            type="number"
-                                                            min={0}
-                                                            max={30}
-                                                            placeholder={scoreP2Set1 === 7 ? "7" : "5"}
-                                                            className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
-                                                            value={tbP2Set1}
-                                                            onChange={e => setTbP2Set1(e.target.value === '' ? '' : Number(e.target.value))}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Set 2 */}
-                                        <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 space-y-2">
-                                            <div className="grid grid-cols-3 items-center gap-2">
-                                                <span className="text-xs font-bold text-white">Set 2</span>
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    max={7}
-                                                    placeholder="0"
-                                                    className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                                    value={scoreP1Set2}
-                                                    onChange={e => {
-                                                        const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
-                                                        setScoreP1Set2(val);
-                                                        if (val === 7 && scoreP2Set2 === 6) { setTbP1Set2(7); setTbP2Set2(5); }
-                                                        else if (val === 6 && scoreP2Set2 === 7) { setTbP1Set2(5); setTbP2Set2(7); }
-                                                    }}
-                                                    required={!isWalkover}
-                                                />
-                                                <input
-                                                    type="number"
-                                                    min={0}
-                                                    max={7}
-                                                    placeholder="0"
-                                                    className="bg-sidebar border border-white/10 rounded-lg p-2 text-center text-white font-bold placeholder-slate-600 focus:border-primary outline-none"
-                                                    value={scoreP2Set2}
-                                                    onChange={e => {
-                                                        const val = e.target.value === '' ? '' : Math.min(7, Math.max(0, Number(e.target.value)));
-                                                        setScoreP2Set2(val);
-                                                        if (scoreP1Set2 === 7 && val === 6) { setTbP1Set2(7); setTbP2Set2(5); }
-                                                        else if (scoreP1Set2 === 6 && val === 7) { setTbP1Set2(5); setTbP2Set2(7); }
-                                                    }}
-                                                    required={!isWalkover}
-                                                />
-                                            </div>
-
-                                            {/* Set 2 Tiebreak sub-input */}
-                                            {((scoreP1Set2 === 7 && scoreP2Set2 === 6) || (scoreP1Set2 === 6 && scoreP2Set2 === 7)) && (
-                                                <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 rounded-lg animate-fade-up">
-                                                    <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                                                        <Trophy size={12} className="text-amber-400" /> Puntos Tie-Break:
-                                                    </span>
-                                                    <div className="flex items-center gap-1.5">
-                                                        <input
-                                                            type="number"
-                                                            min={0}
-                                                            max={30}
-                                                            placeholder={scoreP1Set2 === 7 ? "7" : "5"}
-                                                            className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
-                                                            value={tbP1Set2}
-                                                            onChange={e => setTbP1Set2(e.target.value === '' ? '' : Number(e.target.value))}
-                                                        />
-                                                        <span className="text-muted text-xs font-bold">-</span>
-                                                        <input
-                                                            type="number"
-                                                            min={0}
-                                                            max={30}
-                                                            placeholder={scoreP2Set2 === 7 ? "7" : "5"}
-                                                            className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
-                                                            value={tbP2Set2}
-                                                            onChange={e => setTbP2Set2(e.target.value === '' ? '' : Number(e.target.value))}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-
-                                        {/* Set 3 / Super Tiebreak */}
-                                        {hasSet3 ? (
-                                            <div className="bg-slate-900/60 p-3 rounded-xl border border-white/5 space-y-2.5 animate-fade-up">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-1.5">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setIsSet3SuperTiebreak(true)}
-                                                            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
-                                                                isSet3SuperTiebreak
-                                                                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm'
-                                                                    : 'bg-white/5 text-muted hover:text-white border border-transparent'
-                                                            }`}
-                                                        >
-                                                            ⚡ Súper Tie-Break (10 pts)
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => setIsSet3SuperTiebreak(false)}
-                                                            className={`px-2 py-1 rounded-md text-[10px] font-bold transition-all ${
-                                                                !isSet3SuperTiebreak
-                                                                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/40 shadow-sm'
-                                                                    : 'bg-white/5 text-muted hover:text-white border border-transparent'
-                                                            }`}
-                                                        >
-                                                            🎾 Set Regular
-                                                        </button>
-                                                    </div>
-                                                    <button 
-                                                        type="button" 
-                                                        onClick={() => { 
-                                                            setHasSet3(false); 
-                                                            setScoreP1Set3(''); 
-                                                            setScoreP2Set3(''); 
-                                                            setTbP1Set3(''); 
-                                                            setTbP2Set3(''); 
-                                                        }} 
-                                                        className="text-[10px] text-red-400 hover:text-red-300 font-bold"
-                                                    >
-                                                        Quitar
-                                                    </button>
-                                                </div>
-
-                                                <div className="grid grid-cols-3 items-center gap-2">
-                                                    <span className="text-xs font-bold text-white truncate">
-                                                        {isSet3SuperTiebreak ? "Puntos STB" : "Set 3 (Games)"}
-                                                    </span>
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        max={isSet3SuperTiebreak ? 40 : 7}
-                                                        placeholder={isSet3SuperTiebreak ? "10" : "0"}
-                                                        className={`bg-sidebar border rounded-lg p-2 text-center text-white font-bold font-mono outline-none ${
-                                                            isSet3SuperTiebreak ? "border-amber-500/40 focus:border-amber-400 text-amber-300" : "border-white/10 focus:border-primary"
-                                                        }`}
-                                                        value={scoreP1Set3}
-                                                        onChange={e => {
-                                                            const maxVal = isSet3SuperTiebreak ? 40 : 7;
-                                                            const val = e.target.value === '' ? '' : Math.min(maxVal, Math.max(0, Number(e.target.value)));
-                                                            setScoreP1Set3(val);
-                                                            if (!isSet3SuperTiebreak) {
-                                                                if (val === 7 && scoreP2Set3 === 6) { setTbP1Set3(7); setTbP2Set3(5); }
-                                                                else if (val === 6 && scoreP2Set3 === 7) { setTbP1Set3(5); setTbP2Set3(7); }
-                                                            }
-                                                        }}
-                                                        required={hasSet3}
-                                                    />
-                                                    <input
-                                                        type="number"
-                                                        min={0}
-                                                        max={isSet3SuperTiebreak ? 40 : 7}
-                                                        placeholder={isSet3SuperTiebreak ? "8" : "0"}
-                                                        className={`bg-sidebar border rounded-lg p-2 text-center text-white font-bold font-mono outline-none ${
-                                                            isSet3SuperTiebreak ? "border-amber-500/40 focus:border-amber-400 text-amber-300" : "border-white/10 focus:border-primary"
-                                                        }`}
-                                                        value={scoreP2Set3}
-                                                        onChange={e => {
-                                                            const maxVal = isSet3SuperTiebreak ? 40 : 7;
-                                                            const val = e.target.value === '' ? '' : Math.min(maxVal, Math.max(0, Number(e.target.value)));
-                                                            setScoreP2Set3(val);
-                                                            if (!isSet3SuperTiebreak) {
-                                                                if (scoreP1Set3 === 7 && val === 6) { setTbP1Set3(7); setTbP2Set3(5); }
-                                                                else if (scoreP1Set3 === 6 && val === 7) { setTbP1Set3(5); setTbP2Set3(7); }
-                                                            }
-                                                        }}
-                                                        required={hasSet3}
-                                                    />
-                                                </div>
-
-                                                {/* Notice about 7-6 computation for STB */}
-                                                {isSet3SuperTiebreak ? (
-                                                    <div className="text-[10px] text-amber-300/80 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded">
-                                                        ℹ️ El desempate se guardará oficialmente como <span className="font-mono font-bold text-amber-300">{Number(scoreP1Set3) > Number(scoreP2Set3) ? `7-6 (${scoreP1Set3 || 10}-${scoreP2Set3 || 8})` : `6-7 (${scoreP1Set3 || 8}-${scoreP2Set3 || 10})`}</span> sumando 7 y 6 games a la tabla.
-                                                    </div>
-                                                ) : (
-                                                    ((scoreP1Set3 === 7 && scoreP2Set3 === 6) || (scoreP1Set3 === 6 && scoreP2Set3 === 7)) && (
-                                                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-amber-500/20 bg-amber-500/5 px-2.5 py-1.5 rounded-lg animate-fade-up">
-                                                            <span className="text-[11px] text-amber-300 font-bold flex items-center gap-1">
-                                                                <Trophy size={12} className="text-amber-400" /> Puntos Tie-Break:
-                                                            </span>
-                                                            <div className="flex items-center gap-1.5">
-                                                                <input
-                                                                    type="number"
-                                                                    min={0}
-                                                                    max={30}
-                                                                    placeholder={scoreP1Set3 === 7 ? "7" : "5"}
-                                                                    className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
-                                                                    value={tbP1Set3}
-                                                                    onChange={e => setTbP1Set3(e.target.value === '' ? '' : Number(e.target.value))}
-                                                                />
-                                                                <span className="text-muted text-xs font-bold">-</span>
-                                                                <input
-                                                                    type="number"
-                                                                    min={0}
-                                                                    max={30}
-                                                                    placeholder={scoreP2Set3 === 7 ? "7" : "5"}
-                                                                    className="w-12 bg-sidebar border border-amber-500/30 rounded p-1 text-center text-xs text-white font-bold font-mono focus:border-amber-400 outline-none"
-                                                                    value={tbP2Set3}
-                                                                    onChange={e => setTbP2Set3(e.target.value === '' ? '' : Number(e.target.value))}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    )
-                                                )}
-                                            </div>
-                                        ) : (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    setHasSet3(true);
-                                                    setIsSet3SuperTiebreak(true);
-                                                    setScoreP1Set3('');
-                                                    setScoreP2Set3('');
-                                                }}
-                                                className="w-full py-2 border border-dashed border-white/20 text-xs text-muted hover:text-white rounded-xl hover:bg-white/5 transition-colors flex items-center justify-center gap-1.5"
-                                            >
-                                                <Plus size={13} /> Agregar 3er Set / Súper Tie-Break
-                                            </button>
-                                        )}
-                                    </div>
-
-                                    {/* DEDUCED WINNER BANNER (AUTOMATIC - NO MANUAL SELECT) */}
-                                    <div className="pt-2">
-                                        {computedWinnerInfo?.isComplete ? (
-                                            <div className="p-3 bg-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center justify-between gap-2 shadow-sm animate-fade-in">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="p-1.5 bg-emerald-500/20 text-emerald-400 rounded-lg">
-                                                        <Trophy size={16} />
-                                                    </div>
-                                                    <div>
-                                                        <div className="text-[10px] text-emerald-300 uppercase font-extrabold tracking-wider">
-                                                            Ganador Automático ({computedWinnerInfo.p1Sets} - {computedWinnerInfo.p2Sets} sets)
-                                                        </div>
-                                                        <div className="text-sm font-black text-white">
-                                                            {formatPlayerName(computedWinnerInfo.winnerName)}
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-2 py-0.5 rounded-full border border-emerald-500/30">
-                                                    ✓ Verificado por Sets
-                                                </span>
-                                            </div>
-                                        ) : computedWinnerInfo?.isTie && (scoreP1Set1 !== '' && scoreP2Set1 !== '') ? (
-                                            <div className="p-2.5 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center gap-2 text-amber-300 text-xs font-semibold animate-fade-in">
-                                                <AlertTriangle size={15} className="shrink-0" />
-                                                <span>Empate 1-1 en sets. Debes activar y completar el <strong>3er Set / Súper Tie-Break</strong> para definir al ganador.</span>
-                                            </div>
-                                        ) : (
-                                            <div className="p-2.5 bg-white/5 border border-white/10 rounded-xl text-center text-xs text-slate-400">
-                                                Ingresa los resultados de los sets para calcular al ganador automáticamente.
-                                            </div>
-                                        )}
-                                    </div>
-                                </>
-                            )}
-
-                            <div className="pt-4 flex items-center justify-between gap-2 border-t border-white/10">
-                                {isClubAdmin && selectedMatchForScore.is_played ? (
-                                    <button
-                                        type="button"
-                                        disabled={savingScore}
-                                        onClick={handleResetScore}
-                                        className="px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50"
-                                        title="Anular el resultado cargado y volver el partido al estado 'Por Jugar'"
-                                    >
-                                        <RotateCcw size={13} /> Volver a Por Jugar
-                                    </button>
-                                ) : (
-                                    <div />
-                                )}
-
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedMatchForScore(null)}
-                                        className="px-4 py-2 rounded-xl text-white text-xs font-medium hover:bg-white/10 transition-colors"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={savingScore}
-                                        className="px-5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-primary/20 disabled:opacity-50"
-                                    >
-                                        {savingScore ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />} 
-                                        {selectedMatchForScore.is_played ? 'Actualizar Marcador' : 'Guardar Marcador'}
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <ScoreInputModal
+                    isOpen={!!selectedMatchForScore}
+                    onClose={() => setSelectedMatchForScore(null)}
+                    match={selectedMatchForScore}
+                    isClubAdmin={isClubAdmin}
+                    isWalkover={isWalkover}
+                    onToggleWalkover={setIsWalkover}
+                    walkoverWinnerId={walkoverWinnerId}
+                    onWalkoverWinnerIdChange={setWalkoverWinnerId}
+                    scoreP1Set1={scoreP1Set1}
+                    onScoreP1Set1Change={setScoreP1Set1}
+                    scoreP2Set1={scoreP2Set1}
+                    onScoreP2Set1Change={setScoreP2Set1}
+                    tbP1Set1={tbP1Set1}
+                    onTbP1Set1Change={setTbP1Set1}
+                    tbP2Set1={tbP2Set1}
+                    onTbP2Set1Change={setTbP2Set1}
+                    scoreP1Set2={scoreP1Set2}
+                    onScoreP1Set2Change={setScoreP1Set2}
+                    scoreP2Set2={scoreP2Set2}
+                    onScoreP2Set2Change={setScoreP2Set2}
+                    tbP1Set2={tbP1Set2}
+                    onTbP1Set2Change={setTbP1Set2}
+                    tbP2Set2={tbP2Set2}
+                    onTbP2Set2Change={setTbP2Set2}
+                    hasSet3={hasSet3}
+                    onAddSet3={() => {
+                        setHasSet3(true);
+                        setIsSet3SuperTiebreak(true);
+                        setScoreP1Set3('');
+                        setScoreP2Set3('');
+                    }}
+                    onRemoveSet3={() => {
+                        setHasSet3(false);
+                        setScoreP1Set3('');
+                        setScoreP2Set3('');
+                        setTbP1Set3('');
+                        setTbP2Set3('');
+                    }}
+                    isSet3SuperTiebreak={isSet3SuperTiebreak}
+                    onSetIsSet3SuperTiebreak={setIsSet3SuperTiebreak}
+                    scoreP1Set3={scoreP1Set3}
+                    onScoreP1Set3Change={setScoreP1Set3}
+                    scoreP2Set3={scoreP2Set3}
+                    onScoreP2Set3Change={setScoreP2Set3}
+                    tbP1Set3={tbP1Set3}
+                    onTbP1Set3Change={setTbP1Set3}
+                    tbP2Set3={tbP2Set3}
+                    onTbP2Set3Change={setTbP2Set3}
+                    computedWinnerInfo={computedWinnerInfo}
+                    onResetScore={handleResetScore}
+                    onSaveScore={handleSaveScore}
+                    savingScore={savingScore}
+                />
             )}
 
             {/* DISPUTE MODAL */}
@@ -5072,374 +4698,40 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
             {/* SCHEDULE MATCH MODAL (Organizador) */}
             {selectedMatchForSchedule && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-                    <div className="bg-card border border-white/10 rounded-3xl w-full max-w-md shadow-2xl relative overflow-hidden flex flex-col max-h-[92vh]">
-                        {/* Modal Header */}
-                        <div className="p-5 border-b border-white/10 flex justify-between items-center bg-white/5">
-                            <div className="flex items-center gap-2.5">
-                                <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400">
-                                    <Calendar size={20} />
-                                </div>
-                                <div>
-                                    <h3 className="text-base font-bold text-white">Programar Partido</h3>
-                                    <p className="text-xs text-muted">Asignar fecha, horario y cancha oficial</p>
-                                </div>
-                            </div>
-                            <button 
-                                onClick={() => setSelectedMatchForSchedule(null)} 
-                                className="text-muted hover:text-white p-1.5 rounded-lg hover:bg-white/5 transition-colors"
-                            >
-                                <X size={20} />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleSaveSchedule} className="p-5 space-y-4 overflow-y-auto custom-scrollbar">
-                            {/* Match Summary Card */}
-                            <div className="p-3.5 bg-slate-900/90 border border-white/10 rounded-2xl space-y-2">
-                                <div className="flex items-center justify-between text-[10px] text-slate-400 font-bold uppercase">
-                                    <span>{selectedMatchForSchedule.round} {selectedMatchForSchedule.group_number ? `• Grupo ${selectedMatchForSchedule.group_number}` : ''}</span>
-                                    <span className="text-primary font-bold">{tournament.category} • {tournament.gender || 'Caballeros'}</span>
-                                </div>
-                                <div className="space-y-1">
-                                    <div className="text-xs font-bold text-white flex items-center justify-between">
-                                        <span className="truncate">{selectedMatchForSchedule.team1_name || formatPlayerName(selectedMatchForSchedule.player1_name) || 'Jugador 1'}</span>
-                                        <span className="text-[10px] text-muted">vs</span>
-                                    </div>
-                                    <div className="text-xs font-bold text-white flex items-center justify-between">
-                                        <span className="truncate">{selectedMatchForSchedule.team2_name || formatPlayerName(selectedMatchForSchedule.player2_name) || 'Jugador 2'}</span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Player Availability Restrictions Highlight Banner */}
-                            {(() => {
-                                const p1Obj = players.find(p => p.player_id === selectedMatchForSchedule.player1_id || p.id === selectedMatchForSchedule.player1_id || (p.name && selectedMatchForSchedule.player1_name && p.name.toLowerCase().includes(selectedMatchForSchedule.player1_name.toLowerCase())));
-                                const p2Obj = players.find(p => p.player_id === selectedMatchForSchedule.player2_id || p.id === selectedMatchForSchedule.player2_id || (p.name && selectedMatchForSchedule.player2_name && p.name.toLowerCase().includes(selectedMatchForSchedule.player2_name.toLowerCase())));
-                                const p1Avail = p1Obj?.availability_notes || p1Obj?.time_restrictions;
-                                const p2Avail = p2Obj?.availability_notes || p2Obj?.time_restrictions;
-                                const p1Name = selectedMatchForSchedule.team1_name || formatPlayerName(selectedMatchForSchedule.player1_name) || 'Jugador 1';
-                                const p2Name = selectedMatchForSchedule.team2_name || formatPlayerName(selectedMatchForSchedule.player2_name) || 'Jugador 2';
-
-                                return (
-                                    <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-3 space-y-2">
-                                        <div className="text-[11px] font-bold text-amber-300 flex items-center gap-1.5 uppercase tracking-wider">
-                                            <Clock size={13} className="text-amber-400" /> Disponibilidad de Horarios Declarada
-                                        </div>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                                            <div className="p-2 bg-black/40 rounded-xl border border-white/5 space-y-0.5">
-                                                <div className="text-[10px] text-muted font-bold truncate">{p1Name}:</div>
-                                                <div className="text-xs font-medium">
-                                                    {p1Avail ? (
-                                                        <span className="text-amber-200">{p1Avail}</span>
-                                                    ) : (
-                                                        <span className="text-slate-400 italic text-[11px]">✓ Sin restricciones</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                            <div className="p-2 bg-black/40 rounded-xl border border-white/5 space-y-0.5">
-                                                <div className="text-[10px] text-muted font-bold truncate">{p2Name}:</div>
-                                                <div className="text-xs font-medium">
-                                                    {p2Avail ? (
-                                                        <span className="text-amber-200">{p2Avail}</span>
-                                                    ) : (
-                                                        <span className="text-slate-400 italic text-[11px]">✓ Sin restricciones</span>
-                                                    )}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                );
-                            })()}
-
-                            {/* Date Field & Quick Buttons */}
-                            <div className="space-y-1.5">
-                                <div className="flex justify-between items-center">
-                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <Calendar size={13} className="text-primary" /> Fecha del Partido *
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => openCalendarPicker(scheduleDate)}
-                                        className="text-[10px] text-primary hover:underline font-bold flex items-center gap-1"
-                                    >
-                                        <Calendar size={12} /> Abrir Calendario
-                                    </button>
-                                </div>
-
-                                {/* Main Interactive Date Display & Picker Trigger */}
-                                <button
-                                    type="button"
-                                    onClick={() => openCalendarPicker(scheduleDate)}
-                                    className="w-full bg-sidebar hover:bg-slate-900/90 border border-white/10 hover:border-primary/50 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-white font-bold flex items-center justify-between transition-all group shadow-inner text-left"
-                                    title="Haz clic para abrir el selector de calendario"
-                                >
-                                    <div className="flex items-center gap-2 min-w-0">
-                                        <div className="p-1.5 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
-                                            <Calendar size={15} />
-                                        </div>
-                                        <span className="truncate">{scheduleDate ? formatFullDateDisplay(scheduleDate) : 'Seleccionar fecha en calendario...'}</span>
-                                    </div>
-                                    <span className="text-[11px] text-primary font-bold flex items-center gap-1 shrink-0 ml-2 group-hover:translate-x-0.5 transition-transform">
-                                        Elegir día <ChevronRight size={14} />
-                                    </span>
-                                </button>
-
-                                {/* Quick Date Presets */}
-                                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                                    {getQuickDatePresets().map((preset, idx) => (
-                                        <button
-                                            key={idx}
-                                            type="button"
-                                            onClick={() => setScheduleDate(preset.dateStr)}
-                                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
-                                                scheduleDate === preset.dateStr
-                                                    ? 'bg-primary/20 border-primary text-white shadow-sm'
-                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
-                                            }`}
-                                        >
-                                            {preset.label}
-                                        </button>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => openCalendarPicker(scheduleDate)}
-                                        className="px-2.5 py-1 rounded-lg text-[10px] font-bold border border-blue-500/30 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20 transition-all flex items-center gap-1 ml-auto"
-                                    >
-                                        <Calendar size={11} /> Ver Calendario Completo
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Time Field & Quick Slots */}
-                            <div className="space-y-1.5">
-                                <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                    <Clock size={13} className="text-blue-400" /> Horario de Inicio *
-                                </label>
-                                <input
-                                    type="time"
-                                    value={scheduleTime}
-                                    onChange={e => setScheduleTime(e.target.value)}
-                                    className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white font-medium focus:border-primary outline-none"
-                                    required
-                                />
-                                {/* Quick Time Chips */}
-                                <div className="flex flex-wrap gap-1.5 pt-1">
-                                    {['09:00', '10:30', '12:00', '14:00', '15:30', '17:00', '18:30', '20:00', '21:30'].map(t => (
-                                        <button
-                                            key={t}
-                                            type="button"
-                                            onClick={() => setScheduleTime(t)}
-                                            className={`px-2 py-1 rounded-lg text-[10px] font-bold font-mono border transition-all ${
-                                                scheduleTime === t
-                                                    ? 'bg-blue-500/20 border-blue-400 text-blue-300'
-                                                    : 'bg-white/5 border-white/10 text-muted hover:text-white'
-                                            }`}
-                                        >
-                                            {t} hs
-                                        </button>
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Court Selection */}
-                            <div className="space-y-1.5">
-                                <div className="flex justify-between items-center">
-                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <MapPin size={13} className="text-green-400" /> Cancha Asignada *
-                                    </label>
-                                    <button
-                                        type="button"
-                                        onClick={() => setIsCustomCourt(!isCustomCourt)}
-                                        className="text-[10px] text-primary hover:underline font-semibold"
-                                    >
-                                        {isCustomCourt ? 'Elegir de lista' : 'Ingresar otra'}
-                                    </button>
-                                </div>
-
-                                {isCustomCourt ? (
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: Cancha Central, Cancha 1 (Ladrillo)..."
-                                        value={customCourtName}
-                                        onChange={e => setCustomCourtName(e.target.value)}
-                                        className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2.5 text-sm text-white focus:border-primary outline-none"
-                                        required
-                                    />
-                                ) : (
-                                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {courtOptions.map(court => (
-                                            <button
-                                                key={court}
-                                                type="button"
-                                                onClick={() => setScheduleCourt(court)}
-                                                className={`py-2 px-3 rounded-xl text-xs font-bold border text-center transition-all ${
-                                                    scheduleCourt === court
-                                                        ? 'bg-green-500/20 border-green-400 text-green-300 shadow-sm'
-                                                        : 'bg-white/5 border-white/10 text-muted hover:text-white'
-                                                }`}
-                                            >
-                                                {court}
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-
-                            {/* Real-time Conflict Alert & Available Court Suggestions */}
-                            {conflictBooking && (
-                                <div className="p-3.5 bg-amber-500/15 border border-amber-500/40 rounded-2xl space-y-2.5 text-amber-200 animate-in fade-in">
-                                    <div className="flex items-start gap-2.5">
-                                        <div className="p-1.5 bg-amber-500/20 text-amber-400 rounded-lg shrink-0 mt-0.5">
-                                            <AlertTriangle size={16} />
-                                        </div>
-                                        <div className="text-xs space-y-0.5 flex-1 min-w-0">
-                                            <div className="font-bold text-amber-300 flex items-center justify-between gap-1">
-                                                <span>¡Cancha Ocupada en ese horario!</span>
-                                                <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/30 text-amber-200 font-mono font-bold">
-                                                    {conflictBooking.start_time} - {conflictBooking.end_time} hs
-                                                </span>
-                                            </div>
-                                            <p className="text-[11px] text-amber-200/90 leading-tight">
-                                                {conflictBooking.booking_type === 'tournament' ? (
-                                                    <>Ya hay otro partido de torneo: <strong>{conflictBooking.title}</strong></>
-                                                ) : conflictBooking.booking_type === 'class' ? (
-                                                    <>Hay una clase programada: <strong>{conflictBooking.title || 'Clase / Escuela'}</strong></>
-                                                ) : (
-                                                    <>Reserva previa de socio: <strong>{conflictBooking.title || conflictBooking.user_name || 'Reserva de Cancha'}</strong></>
-                                                )}
-                                            </p>
-                                        </div>
-                                    </div>
-
-                                    {/* Free court suggestions at the same hour */}
-                                    {availableCourtsAtThisTime.length > 0 && (
-                                        <div className="pt-1.5 border-t border-amber-500/20 flex flex-wrap items-center gap-1.5 text-[11px]">
-                                            <span className="text-amber-300 font-bold text-[10px] uppercase">Canchas libres:</span>
-                                            {availableCourtsAtThisTime.map(court => (
-                                                <button
-                                                    key={court}
-                                                    type="button"
-                                                    onClick={() => {
-                                                        setScheduleCourt(court);
-                                                        setIsCustomCourt(false);
-                                                    }}
-                                                    className="px-2 py-0.5 bg-green-500/20 hover:bg-green-500/30 text-green-300 border border-green-500/40 rounded-lg text-[10px] font-bold transition-all flex items-center gap-1"
-                                                    title={`Mover partido a ${court} que está libre`}
-                                                >
-                                                    <Check size={11} /> Elegir {court}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-
-                                    {/* Override option */}
-                                    <div className="pt-1 flex items-center justify-between gap-2 text-[11px]">
-                                        <label className="flex items-center gap-2 cursor-pointer text-amber-200 hover:text-white transition-colors select-none">
-                                            <input
-                                                type="checkbox"
-                                                checked={overrideConflict}
-                                                onChange={e => setOverrideConflict(e.target.checked)}
-                                                className="w-4 h-4 rounded bg-slate-900 border-amber-500/40 text-primary focus:ring-primary"
-                                            />
-                                            <span className="font-semibold text-xs">Priorizar torneo (reemplazar turno en el club)</span>
-                                        </label>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Court is free confirmation */}
-                            {!conflictBooking && !loadingDayBookings && scheduleTime && scheduleDate && (
-                                <div className="px-3 py-2 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-between text-xs text-green-300 font-semibold">
-                                    <span className="flex items-center gap-1.5">
-                                        <CheckCircle2 size={13} className="text-green-400" />
-                                        <span>{currentTargetCourt} disponible ({scheduleTime} a {(() => {
-                                            const [h, m] = scheduleTime.split(':').map(Number);
-                                            const endTot = (h || 0) * 60 + (m || 0) + 90;
-                                            return `${String(Math.floor(endTot / 60) % 24).padStart(2, '0')}:${String(endTot % 60).padStart(2, '0')}`;
-                                        })()} hs)</span>
-                                    </span>
-                                    <span className="text-[10px] text-green-400/80 font-bold uppercase tracking-wider">Se bloqueará en reservas</span>
-                                </div>
-                            )}
-
-                            {/* Order of Play - Turno y Notas */}
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 border-t border-white/10">
-                                <div className="space-y-1.5">
-                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <Clock size={13} className="text-primary" /> Turno / Renglón OOP
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: 1er Turno, A continuación, No antes 18 hs"
-                                        value={scheduleOopTurn}
-                                        onChange={e => setScheduleOopTurn(e.target.value)}
-                                        className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-primary outline-none"
-                                    />
-                                </div>
-                                <div className="space-y-1.5">
-                                    <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
-                                        <Info size={13} className="text-amber-400" /> Nota u Observación
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder="Ej: Traer pelotas nuevas, Postergado..."
-                                        value={scheduleOopNote}
-                                        onChange={e => setScheduleOopNote(e.target.value)}
-                                        className="w-full bg-sidebar border border-white/10 rounded-xl px-3.5 py-2 text-xs text-white focus:border-primary outline-none"
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Live Summary Banner */}
-                            {scheduleDate && scheduleTime && (
-                                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-2xl text-xs text-blue-200 flex items-center gap-2">
-                                    <CheckCircle2 size={16} className="text-blue-400 shrink-0" />
-                                    <span>
-                                        Programado para el <strong>{new Date(scheduleDate + 'T00:00:00').toLocaleDateString('es-AR', { weekday: 'long', day: 'numeric', month: 'long' })}</strong> a las <strong>{scheduleTime} hs</strong> en <strong>{isCustomCourt ? (customCourtName || 'Cancha') : scheduleCourt}</strong>.
-                                    </span>
-                                </div>
-                            )}
-
-                            {/* Modal Actions */}
-                            <div className="flex items-center justify-between gap-2 pt-3 border-t border-white/10">
-                                {(selectedMatchForSchedule.scheduled_at || selectedMatchForSchedule.court_name) ? (
-                                    <button
-                                        type="button"
-                                        onClick={handleClearSchedule}
-                                        disabled={savingSchedule}
-                                        className="px-3 py-2 rounded-xl text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 transition-all flex items-center gap-1.5"
-                                        title="Quitar fecha y horario asignado"
-                                    >
-                                        <Trash2 size={13} /> Desprogramar
-                                    </button>
-                                ) : (
-                                    <div></div>
-                                )}
-
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        type="button"
-                                        onClick={() => setSelectedMatchForSchedule(null)}
-                                        className="px-4 py-2 rounded-xl text-xs text-white hover:bg-white/10 transition-colors font-medium"
-                                    >
-                                        Cancelar
-                                    </button>
-                                    <button
-                                        type="submit"
-                                        disabled={savingSchedule}
-                                        className="px-5 py-2 bg-gradient-to-r from-blue-600 to-primary hover:brightness-110 text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
-                                    >
-                                        {savingSchedule ? (
-                                            <><Loader2 size={14} className="animate-spin" /> Guardando...</>
-                                        ) : (
-                                            <><Save size={14} /> Guardar Horario</>
-                                        )}
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
+                <ScheduleMatchModal
+                    isOpen={!!selectedMatchForSchedule}
+                    onClose={() => setSelectedMatchForSchedule(null)}
+                    tournament={tournament}
+                    match={selectedMatchForSchedule}
+                    players={players}
+                    scheduleDate={scheduleDate}
+                    onScheduleDateChange={setScheduleDate}
+                    onOpenCalendarPicker={openCalendarPicker}
+                    quickDatePresets={getQuickDatePresets()}
+                    formatFullDateDisplay={formatFullDateDisplay}
+                    scheduleTime={scheduleTime}
+                    onScheduleTimeChange={setScheduleTime}
+                    isCustomCourt={isCustomCourt}
+                    onToggleCustomCourt={() => setIsCustomCourt(!isCustomCourt)}
+                    customCourtName={customCourtName}
+                    onCustomCourtNameChange={setCustomCourtName}
+                    scheduleCourt={scheduleCourt}
+                    onScheduleCourtChange={setScheduleCourt}
+                    courtOptions={courtOptions}
+                    conflictBooking={conflictBooking}
+                    availableCourtsAtThisTime={availableCourtsAtThisTime}
+                    overrideConflict={overrideConflict}
+                    onOverrideConflictChange={setOverrideConflict}
+                    loadingDayBookings={loadingDayBookings}
+                    currentTargetCourt={currentTargetCourt}
+                    scheduleOopTurn={scheduleOopTurn}
+                    onScheduleOopTurnChange={setScheduleOopTurn}
+                    scheduleOopNote={scheduleOopNote}
+                    onScheduleOopNoteChange={setScheduleOopNote}
+                    onClearSchedule={handleClearSchedule}
+                    onSaveSchedule={handleSaveSchedule}
+                    savingSchedule={savingSchedule}
+                />
             )}
 
             {/* RAIN / CLIMATE DELAY MODAL */}

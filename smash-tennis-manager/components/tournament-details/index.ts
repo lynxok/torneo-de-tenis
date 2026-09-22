@@ -11,3 +11,5 @@ export * from './DisputeModal';
 export * from './ReceiptViewerModal';
 export * from './PlayerEnrollModal';
 export * from './GenerateFixtureModal';
+export * from './ScheduleMatchModal';
+export * from './ScoreInputModal';
