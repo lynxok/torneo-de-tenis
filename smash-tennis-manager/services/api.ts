@@ -1813,6 +1813,31 @@ export const api = {
                     } catch (e) {
                         console.warn("Champion ranking bonus fallback:", e);
                     }
+
+                    // Auto-publicación de Historia de Campeón en segundo plano
+                    try {
+                        const { data: tourInfo } = await supabase
+                            .from('tournaments')
+                            .select('id, name, category, gender, created_by, institutions(name)')
+                            .eq('id', tournamentId)
+                            .maybeSingle();
+
+                        if (tourInfo && championDisplay) {
+                            api.stories.publishChampionStory({
+                                tournamentId: tourInfo.id,
+                                tournamentName: tourInfo.name || 'Torneo Smash',
+                                category: tourInfo.category,
+                                gender: tourInfo.gender,
+                                clubName: (tourInfo.institutions as any)?.name || 'Club Sede',
+                                championName: championDisplay,
+                                pointsWon: 100,
+                                authorId: tourInfo.created_by
+                            }).catch(err => console.warn("Background auto champion story failed:", err));
+                        }
+                    } catch (storyErr) {
+                        console.warn("Auto champion story query error:", storyErr);
+                    }
+
                     return;
                 }
 
@@ -4280,6 +4305,293 @@ export const api = {
                 return [];
             }
             return data || [];
+        },
+        async recordView(storyId: string, userId: string) {
+            if (!storyId || !userId) return;
+            try {
+                // Upsert o insert seguro de vista
+                await supabase
+                    .from('story_views')
+                    .upsert({
+                        story_id: storyId,
+                        user_id: userId,
+                        viewed_at: new Date().toISOString()
+                    }, { onConflict: 'story_id,user_id' });
+            } catch (err) {
+                // Si la tabla no está creada aún o falla, silencioso para no romper UI
+                console.warn("Could not record story view:", err);
+            }
+        },
+        async toggleReaction(storyId: string, userId: string, reactionEmoji: string) {
+            if (!storyId || !userId) return null;
+            try {
+                // Verificar si ya tiene reacción
+                const { data: existing } = await supabase
+                    .from('story_reactions')
+                    .select('id, reaction')
+                    .eq('story_id', storyId)
+                    .eq('user_id', userId)
+                    .maybeSingle();
+
+                if (existing) {
+                    if (existing.reaction === reactionEmoji) {
+                        // Mismo emoji: remover reacción (toggle off)
+                        await supabase
+                            .from('story_reactions')
+                            .delete()
+                            .eq('id', existing.id);
+                        return null;
+                    } else {
+                        // Actualizar a nuevo emoji
+                        await supabase
+                            .from('story_reactions')
+                            .update({ reaction: reactionEmoji })
+                            .eq('id', existing.id);
+                        return reactionEmoji;
+                    }
+                } else {
+                    // Crear nueva reacción
+                    await supabase
+                        .from('story_reactions')
+                        .insert({
+                            story_id: storyId,
+                            user_id: userId,
+                            reaction: reactionEmoji
+                        });
+                    return reactionEmoji;
+                }
+            } catch (err) {
+                console.warn("Could not toggle reaction:", err);
+                return reactionEmoji;
+            }
+        },
+        async getStoryInteractions(storyId: string) {
+            try {
+                const [viewsRes, reactionsRes] = await Promise.all([
+                    supabase
+                        .from('story_views')
+                        .select(`
+                            id,
+                            story_id,
+                            user_id,
+                            viewed_at,
+                            user:profiles!story_views_user_id_fkey (
+                                name,
+                                lastname,
+                                profile_picture_url,
+                                role
+                            )
+                        `)
+                        .eq('story_id', storyId)
+                        .order('viewed_at', { ascending: false }),
+                    supabase
+                        .from('story_reactions')
+                        .select(`
+                            id,
+                            story_id,
+                            user_id,
+                            reaction,
+                            created_at,
+                            user:profiles!story_reactions_user_id_fkey (
+                                name,
+                                lastname,
+                                profile_picture_url,
+                                role
+                            )
+                        `)
+                        .eq('story_id', storyId)
+                ]);
+
+                const reactionsMap = new Map<string, string>();
+                const reactionsList = (reactionsRes.data || []) as any[];
+                reactionsList.forEach(r => {
+                    reactionsMap.set(r.user_id, r.reaction);
+                });
+
+                const viewsList = ((viewsRes.data || []) as any[]).map(v => ({
+                    ...v,
+                    reaction: reactionsMap.get(v.user_id)
+                }));
+
+                return {
+                    views: viewsList,
+                    reactions: reactionsList,
+                    totalViews: viewsList.length,
+                    totalReactions: reactionsList.length
+                };
+            } catch (err) {
+                console.warn("Error fetching story interactions:", err);
+                return { views: [], reactions: [], totalViews: 0, totalReactions: 0 };
+            }
+        },
+        async publishChampionStory(params: {
+            tournamentId: string;
+            tournamentName: string;
+            category?: string;
+            gender?: string;
+            clubName?: string;
+            championName: string;
+            pointsWon?: number;
+            authorId?: string;
+        }) {
+            try {
+                // 1. Crear canvas 1080x1920 (aspect ratio 9:16 clásico de historias)
+                const canvas = document.createElement('canvas');
+                canvas.width = 1080;
+                canvas.height = 1920;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) return;
+
+                // 2. Fondo Gradiente Épico (Smash Black & Gold / Emerald)
+                const bgGrad = ctx.createLinearGradient(0, 0, 1080, 1920);
+                bgGrad.addColorStop(0, '#020617');    // Slate 950
+                bgGrad.addColorStop(0.3, '#0f172a');  // Slate 900
+                bgGrad.addColorStop(0.7, '#1e1b4b');  // Deep Indigo
+                bgGrad.addColorStop(1, '#020617');    // Slate 950
+                ctx.fillStyle = bgGrad;
+                ctx.fillRect(0, 0, 1080, 1920);
+
+                // Destellos radiales de luz
+                const glowGrad = ctx.createRadialGradient(540, 750, 50, 540, 750, 600);
+                glowGrad.addColorStop(0, 'rgba(234, 179, 8, 0.28)'); // Amber glow
+                glowGrad.addColorStop(0.5, 'rgba(132, 204, 22, 0.12)'); // Lime glow
+                glowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
+                ctx.fillStyle = glowGrad;
+                ctx.fillRect(0, 0, 1080, 1920);
+
+                // Marco decorativo con esquinas elegantes
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(60, 60, 960, 1800);
+
+                ctx.strokeStyle = '#eab308';
+                ctx.lineWidth = 4;
+                // Esquinas doradas
+                const cLen = 40;
+                // Top-Left
+                ctx.beginPath(); ctx.moveTo(60, 60 + cLen); ctx.lineTo(60, 60); ctx.lineTo(60 + cLen, 60); ctx.stroke();
+                // Top-Right
+                ctx.beginPath(); ctx.moveTo(1020 - cLen, 60); ctx.lineTo(1020, 60); ctx.lineTo(1020, 60 + cLen); ctx.stroke();
+                // Bottom-Left
+                ctx.beginPath(); ctx.moveTo(60, 1860 - cLen); ctx.lineTo(60, 1860); ctx.lineTo(60 + cLen, 1860); ctx.stroke();
+                // Bottom-Right
+                ctx.beginPath(); ctx.moveTo(1020 - cLen, 1860); ctx.lineTo(1020, 1860); ctx.lineTo(1020, 1860 - cLen); ctx.stroke();
+
+                // Cabecera: Marca SMASH TENNIS
+                ctx.fillStyle = '#a3e635'; // Lime 400
+                ctx.font = '900 36px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.letterSpacing = '6px';
+                ctx.fillText('SMASH TENNIS CIRCUIT', 540, 180);
+
+                // Badge Institución / Club
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+                const clubBadge = params.clubName ? `📍 ${params.clubName.toUpperCase()}` : '📍 TORNEO OFICIAL';
+                ctx.font = '700 28px sans-serif';
+                ctx.fillText(clubBadge, 540, 240);
+
+                // Círculo del Trofeo Central
+                ctx.fillStyle = 'rgba(234, 179, 8, 0.12)';
+                ctx.beginPath();
+                ctx.arc(540, 560, 190, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.lineWidth = 8;
+                ctx.strokeStyle = '#eab308';
+                ctx.stroke();
+
+                // Emoji Trofeo Grande
+                ctx.font = '190px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('🏆', 540, 625);
+
+                // Cinta "NUEVO CAMPEÓN"
+                ctx.fillStyle = '#f59e0b';
+                ctx.font = '900 44px sans-serif';
+                ctx.letterSpacing = '4px';
+                ctx.fillText('¡NUEVO CAMPEÓN!', 540, 850);
+
+                // NOMBRE DEL CAMPEÓN (Enorme y Protagonista)
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '900 76px sans-serif';
+                const formattedName = params.championName.toUpperCase();
+                ctx.fillText(formattedName, 540, 970);
+
+                // Línea divisoria elegante
+                const lineGrad = ctx.createLinearGradient(200, 1040, 880, 1040);
+                lineGrad.addColorStop(0, 'rgba(234, 179, 8, 0)');
+                lineGrad.addColorStop(0.5, '#eab308');
+                lineGrad.addColorStop(1, 'rgba(234, 179, 8, 0)');
+                ctx.strokeStyle = lineGrad;
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.moveTo(200, 1040);
+                ctx.lineTo(880, 1040);
+                ctx.stroke();
+
+                // Nombre del Torneo
+                ctx.fillStyle = '#94a3b8';
+                ctx.font = '700 36px sans-serif';
+                ctx.fillText(params.tournamentName.toUpperCase(), 540, 1120);
+
+                // Categoría y Rama
+                const catText = `${params.category || 'Categoría Libre'} • ${params.gender || 'Caballeros'}`;
+                ctx.fillStyle = '#e2e8f0';
+                ctx.font = '800 42px sans-serif';
+                ctx.fillText(catText, 540, 1180);
+
+                // Tarjeta de Puntos de Ranking
+                if (params.pointsWon && params.pointsWon > 0) {
+                    ctx.fillStyle = 'rgba(163, 230, 53, 0.15)';
+                    ctx.fillRect(240, 1260, 600, 110);
+                    ctx.strokeStyle = 'rgba(163, 230, 53, 0.4)';
+                    ctx.lineWidth = 3;
+                    ctx.strokeRect(240, 1260, 600, 110);
+
+                    ctx.fillStyle = '#a3e635';
+                    ctx.font = '900 44px sans-serif';
+                    ctx.fillText(`+${params.pointsWon} PUNTOS RANKING`, 540, 1332);
+                }
+
+                // Pie de página motivador
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.font = '600 26px sans-serif';
+                ctx.fillText('¡Felicitaciones por la consagración y la gran final!', 540, 1680);
+                ctx.fillStyle = '#38bdf8';
+                ctx.font = '800 30px sans-serif';
+                ctx.fillText('smashtenis.lnx.com.ar', 540, 1740);
+
+                // 3. Convertir Canvas a Blob / File
+                const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.92));
+                if (!blob) return;
+
+                const fileName = `champion_${params.tournamentId}_${Date.now()}.jpg`;
+                const file = new File([blob], fileName, { type: 'image/jpeg' });
+
+                // 4. Obtener usuario autor (preferir superadmin o usuario logueado)
+                let creatorId = params.authorId;
+                if (!creatorId) {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    creatorId = user?.id;
+                }
+                if (!creatorId) return;
+
+                // 5. Capas interactivas opcionales para la historia
+                const layers: StoryLayer[] = [
+                    {
+                        id: 'sticker-champion',
+                        type: 'sticker',
+                        label: '🏆 CAMPEÓN',
+                        x: 50,
+                        y: 45
+                    }
+                ];
+
+                // 6. Publicar a través del método estándar de stories
+                await api.stories.createStory(file, layers, creatorId);
+                console.log(`🏆 Historia de campeón auto-publicada para ${params.championName}`);
+            } catch (err) {
+                console.error("Error auto-publishing champion story:", err);
+            }
         }
     },
     stats: {

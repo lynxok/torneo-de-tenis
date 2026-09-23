@@ -13,12 +13,14 @@ import {
     AlertTriangle,
     Swords,
     Edit3,
-    Shield
+    Shield,
+    Share2
 } from 'lucide-react';
 import { Tournament, Match, User } from '../../types';
 import { PlayoffRound, ProjectedRound } from '../../utils/bracketHelper';
 import { formatPlayerName, formatMatchScore } from '../../utils/formatters';
 import { soundEffects } from '../../services/soundEffects';
+import { api } from '../../services/api';
 
 interface TournamentPlayoffsTabProps {
     championName: string | null;
@@ -73,13 +75,41 @@ export const TournamentPlayoffsTab: React.FC<TournamentPlayoffsTabProps> = ({
         <div className="space-y-6">
             {/* Champion Banner */}
                                 {championName && (
-                                    <div className="p-6 bg-gradient-to-r from-amber-500/20 via-yellow-500/30 to-amber-500/20 border-2 border-yellow-500/50 rounded-3xl text-center space-y-2 shadow-2xl animate-fade-in">
+                                    <div className="p-6 bg-gradient-to-r from-amber-500/20 via-yellow-500/30 to-amber-500/20 border-2 border-yellow-500/50 rounded-3xl text-center space-y-3 shadow-2xl animate-fade-in relative overflow-hidden">
                                         <div className="inline-flex p-3 rounded-full bg-yellow-500/30 text-yellow-300 mb-1 ring-4 ring-yellow-400/20 animate-bounce">
                                             <Trophy size={36} />
                                         </div>
                                         <div className="text-xs uppercase tracking-widest font-black text-yellow-300">¡CAMPEÓN DEL TORNEO!</div>
                                         <div className="text-2xl sm:text-3xl font-black text-white tracking-tight">{formatPlayerName(championName)}</div>
                                         <div className="text-xs text-yellow-200/80">Felicitaciones al ganador del torneo {tournament.name}</div>
+                                        
+                                        <div className="pt-2 flex justify-center">
+                                            <button
+                                                type="button"
+                                                onClick={async () => {
+                                                    try {
+                                                        soundEffects.playTennisHit();
+                                                        await api.stories.publishChampionStory({
+                                                            tournamentId: tournament.id,
+                                                            tournamentName: tournament.name,
+                                                            category: tournament.category,
+                                                            gender: tournament.gender,
+                                                            clubName: (tournament.institutions as any)?.name || 'Club Sede',
+                                                            championName: championName,
+                                                            pointsWon: 100,
+                                                            authorId: user?.id
+                                                        });
+                                                        alert("✨ ¡Historia de campeón publicada exitosamente en la barra de historias!");
+                                                    } catch (e: any) {
+                                                        alert("No se pudo publicar la historia: " + (e.message || 'Error'));
+                                                    }
+                                                }}
+                                                className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-amber-400 hover:bg-amber-300 active:scale-95 text-slate-950 text-xs font-black tracking-wide shadow-lg shadow-amber-500/20 transition cursor-pointer"
+                                            >
+                                                <Share2 size={14} className="stroke-[3]" />
+                                                <span>PUBLICAR EN HISTORIAS DE SMASH</span>
+                                            </button>
+                                        </div>
                                     </div>
                                 )}
 

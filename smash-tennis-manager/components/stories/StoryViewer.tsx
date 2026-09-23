@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ChevronLeft, ChevronRight, MapPin, Trash2, ShieldAlert } from 'lucide-react';
-import { Story, UserProfile } from '../../types';
+import { X, ChevronLeft, ChevronRight, MapPin, Trash2, ShieldAlert, Heart, Eye, Sparkles, Flame, Trophy, Smile } from 'lucide-react';
+import { Story, UserProfile, StoryViewItem } from '../../types';
 import { api } from '../../services/api';
+import { StoryViewsModal } from './StoryViewsModal';
 
 interface StoryViewerProps {
     isOpen: boolean;
@@ -15,6 +16,7 @@ interface StoryViewerProps {
 }
 
 const STORY_DURATION_MS = 5000; // 5 segundos por historia
+const QUICK_EMOJIS = ['❤️', '🎾', '🔥', '👏', '😂', '🏆'];
 
 export const StoryViewer: React.FC<StoryViewerProps> = ({
     isOpen,
@@ -29,6 +31,15 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
     const [progress, setProgress] = useState(0);
     const [isPaused, setIsPaused] = useState(false);
     const [isDeleting, setIsDeleting] = useState(false);
+
+    // Estado de Interacciones
+    const [userReaction, setUserReaction] = useState<string | null>(null);
+    const [reactionsCount, setReactionsCount] = useState(0);
+    const [viewsCount, setViewsCount] = useState(0);
+    const [isViewsModalOpen, setIsViewsModalOpen] = useState(false);
+    const [viewsList, setViewsList] = useState<StoryViewItem[]>([]);
+    const [isLoadingViews, setIsLoadingViews] = useState(false);
+    const [floatingParticles, setFloatingParticles] = useState<{ id: number; emoji: string; x: number }[]>([]);
 
     const animationFrameRef = useRef<number | null>(null);
     const startTimeRef = useRef<number | null>(null);
@@ -50,6 +61,77 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
 
     const activeStory = stories[currentIndex];
     const isSuperAdmin = currentUser?.role === 'superadmin';
+    const isAuthor = currentUser?.id === activeStory?.user_id;
+
+    // Registrar vista y cargar interacciones cuando cambia de historia
+    useEffect(() => {
+        if (!isOpen || !activeStory) return;
+
+        setUserReaction(null);
+        setViewsCount(0);
+        setReactionsCount(0);
+
+        // 1. Registrar vista si el usuario está logueado
+        if (currentUser?.id) {
+            api.stories.recordView(activeStory.id, currentUser.id);
+        }
+
+        // 2. Cargar vistas y reacciones de esta historia
+        api.stories.getStoryInteractions(activeStory.id).then(res => {
+            setViewsList(res.views);
+            setViewsCount(res.totalViews);
+            setReactionsCount(res.totalReactions);
+            if (currentUser?.id) {
+                const myReaction = res.reactions.find(r => r.user_id === currentUser.id);
+                if (myReaction) setUserReaction(myReaction.reaction);
+            }
+        }).catch(console.error);
+    }, [isOpen, currentIndex, activeStory?.id, currentUser?.id]);
+
+    // Reaccionar con emoji
+    const handleReact = async (emoji: string) => {
+        if (!activeStory || !currentUser?.id) return;
+
+        // Disparar animación de partícula flotante
+        const newParticle = {
+            id: Date.now() + Math.random(),
+            emoji,
+            x: 60 + Math.random() * 30 // Rango derecho inferior
+        };
+        setFloatingParticles(prev => [...prev, newParticle]);
+        setTimeout(() => {
+            setFloatingParticles(prev => prev.filter(p => p.id !== newParticle.id));
+        }, 1200);
+
+        const prevReaction = userReaction;
+        const newReaction = prevReaction === emoji ? null : emoji;
+        setUserReaction(newReaction);
+        setReactionsCount(prev => (newReaction ? (prevReaction ? prev : prev + 1) : Math.max(0, prev - 1)));
+
+        try {
+            await api.stories.toggleReaction(activeStory.id, currentUser.id, emoji);
+        } catch (err) {
+            console.error("Error toggling reaction:", err);
+        }
+    };
+
+    // Abrir modal de detalles de vistas para el autor
+    const handleOpenViewsModal = async () => {
+        if (!activeStory) return;
+        setIsPaused(true);
+        setIsLoadingViews(true);
+        setIsViewsModalOpen(true);
+        try {
+            const res = await api.stories.getStoryInteractions(activeStory.id);
+            setViewsList(res.views);
+            setViewsCount(res.totalViews);
+            setReactionsCount(res.totalReactions);
+        } catch (e) {
+            console.error(e);
+        } finally {
+            setIsLoadingViews(false);
+        }
+    };
 
     // Temporizador de barra de progreso con requestAnimationFrame
     useEffect(() => {
@@ -360,15 +442,110 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                     className="absolute inset-0 z-20 cursor-pointer"
                 />
 
-                {/* FOOTER: INDICADOR DE PAUSA */}
-                <div className="relative z-30 p-4 pb-8 text-center pointer-events-none">
+                {/* PARTÍCULAS FLOTANTES DE REACCIÓN */}
+                {floatingParticles.map(p => (
+                    <div
+                        key={p.id}
+                        style={{ left: `${p.x}%` }}
+                        className="absolute bottom-24 text-4xl pointer-events-none z-40 animate-bounce select-none transition-all duration-1000 transform -translate-y-36 opacity-0"
+                    >
+                        {p.emoji}
+                    </div>
+                ))}
+
+                {/* FOOTER: BARRA DE INTERACCIÓN (REACCIONES / VISTO POR) */}
+                <div className="relative z-30 p-3 sm:p-4 pb-5 flex flex-col gap-2 pointer-events-auto bg-gradient-to-t from-black/85 via-black/40 to-transparent">
+                    {/* Indicador de Pausa */}
                     {isPaused && (
-                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/60 backdrop-blur-md text-white/80 text-xs font-semibold">
+                        <div className="self-center inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-black/70 backdrop-blur-md text-white/80 text-[11px] font-semibold">
                             Pausado
                         </div>
                     )}
+
+                    <div className="flex items-center justify-between gap-2">
+                        {/* CASO 1: Si es el AUTOR de la historia -> Botón de visualizaciones */}
+                        {isAuthor ? (
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleOpenViewsModal();
+                                }}
+                                className="flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/10 hover:bg-white/20 active:scale-95 text-white backdrop-blur-md border border-white/15 transition text-xs font-bold"
+                            >
+                                <Eye className="w-4 h-4 text-lime-400" />
+                                <span>{viewsCount} {viewsCount === 1 ? 'vista' : 'vistas'}</span>
+                                {reactionsCount > 0 && (
+                                    <>
+                                        <span className="text-white/40">•</span>
+                                        <span className="text-pink-400 font-extrabold flex items-center gap-1">
+                                            ❤️ {reactionsCount}
+                                        </span>
+                                    </>
+                                )}
+                            </button>
+                        ) : (
+                            /* CASO 2: Si es un ESPECTADOR -> Emojis rápidos de Tenis + Like directo */
+                            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-between">
+                                {/* Selector rápido de Emojis */}
+                                <div className="flex items-center gap-1 bg-black/50 backdrop-blur-md px-2 py-1 rounded-full border border-white/10">
+                                    {QUICK_EMOJIS.map((emoji) => {
+                                        const isSelected = userReaction === emoji;
+                                        return (
+                                            <button
+                                                key={emoji}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleReact(emoji);
+                                                }}
+                                                className={`text-lg sm:text-xl p-1 sm:p-1.5 rounded-full transition-transform hover:scale-130 active:scale-90 ${
+                                                    isSelected ? 'bg-white/25 scale-120 shadow-sm' : 'opacity-85 hover:opacity-100'
+                                                }`}
+                                                title={`Reaccionar con ${emoji}`}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+
+                                {/* Botón de Corazón Grande Me Gusta */}
+                                <button
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleReact('❤️');
+                                    }}
+                                    className={`p-2.5 rounded-full backdrop-blur-md border transition-all active:scale-75 ${
+                                        userReaction === '❤️'
+                                            ? 'bg-pink-600/30 border-pink-500 text-pink-400 scale-110 shadow-lg shadow-pink-500/20'
+                                            : 'bg-white/10 border-white/15 text-white hover:bg-white/20'
+                                    }`}
+                                    title="Me Gusta"
+                                >
+                                    <Heart 
+                                        className={`w-5 h-5 ${userReaction === '❤️' ? 'fill-pink-500 text-pink-500' : ''}`} 
+                                    />
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
+
+            {/* MODAL DE QUIÉN VIO LA HISTORIA (Solo para el Autor) */}
+            <StoryViewsModal 
+                isOpen={isViewsModalOpen}
+                onClose={() => {
+                    setIsViewsModalOpen(false);
+                    setIsPaused(false);
+                }}
+                views={viewsList}
+                isLoading={isLoadingViews}
+                onSelectUser={(userId) => {
+                    setIsViewsModalOpen(false);
+                    onClose();
+                    if (onSelectUser) onSelectUser(userId);
+                }}
+            />
         </div>,
         document.body
     );

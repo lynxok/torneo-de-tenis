@@ -714,6 +714,33 @@ export interface StoryLocationLayer extends StoryLayerBase {
 
 export type StoryLayer = StoryTextLayer | StoryEmojiLayer | StoryStickerLayer | StoryMentionLayer | StoryLocationLayer;
 
+export interface StoryReaction {
+    id: string;
+    story_id: string;
+    user_id: string;
+    reaction: string;
+    created_at: string;
+    user?: {
+        name: string;
+        lastname?: string;
+        profile_picture_url?: string;
+    };
+}
+
+export interface StoryViewItem {
+    id: string;
+    story_id: string;
+    user_id: string;
+    viewed_at: string;
+    reaction?: string;
+    user?: {
+        name: string;
+        lastname?: string;
+        profile_picture_url?: string;
+        role?: UserRole;
+    };
+}
+
 export interface Story {
     id: string;
     user_id: string;
@@ -728,6 +755,9 @@ export interface Story {
         profile_picture_url?: string;
         role: UserRole;
     };
+    views_count?: number;
+    reactions_count?: number;
+    user_reaction?: string | null;
 }
 
 // REPORTS & HEATMAP TYPES
