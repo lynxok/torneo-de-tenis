@@ -16,7 +16,7 @@ import {
     Shield,
     Share2
 } from 'lucide-react';
-import { Tournament, Match, User } from '../../types';
+import { Tournament, Match, UserProfile } from '../../types';
 import { PlayoffRound, ProjectedRound } from '../../utils/bracketHelper';
 import { formatPlayerName, formatMatchScore } from '../../utils/formatters';
 import { soundEffects } from '../../services/soundEffects';
@@ -24,6 +24,7 @@ import { api } from '../../services/api';
 
 interface TournamentPlayoffsTabProps {
     championName: string | null;
+    playoffMatches: Match[];
     playoffRounds: PlayoffRound[];
     projectedPlayoffRounds: ProjectedRound[];
     isGroupStageComplete: boolean;
@@ -34,7 +35,9 @@ interface TournamentPlayoffsTabProps {
     generatingPlayoffs: boolean;
     unplayedGroupMatches: Match[];
     tournament: Tournament;
-    user: User;
+    user: UserProfile;
+    activeCompetitionFormat: string;
+    setPreviewFormat: (format: string) => void;
     openScheduleModal: (m: Match) => void;
     openQuickScorerModal: (m: Match) => void;
     openScoreModal: (m: Match) => void;
@@ -52,6 +55,7 @@ interface TournamentPlayoffsTabProps {
 
 export const TournamentPlayoffsTab: React.FC<TournamentPlayoffsTabProps> = ({
     championName,
+    playoffMatches,
     playoffRounds,
     projectedPlayoffRounds,
     isGroupStageComplete,
@@ -63,6 +67,8 @@ export const TournamentPlayoffsTab: React.FC<TournamentPlayoffsTabProps> = ({
     unplayedGroupMatches,
     tournament,
     user,
+    activeCompetitionFormat,
+    setPreviewFormat,
     openScheduleModal,
     openQuickScorerModal,
     openScoreModal,
@@ -569,242 +575,6 @@ export const TournamentPlayoffsTab: React.FC<TournamentPlayoffsTabProps> = ({
                                                 </div>
                                             ))}
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        {/* TAB 3: TODOS LOS PARTIDOS (LISTA COMPACTA) */}
-                        {activeTab === 'all' && (
-                            <div>
-                                {displayedMatches.length === 0 ? (
-                                    <div className="text-center py-12 text-muted bg-white/5 rounded-2xl border border-dashed border-white/10">
-                                        <Trophy size={32} className="mx-auto mb-2 opacity-40" />
-                                        <p className="text-sm">No hay partidos disponibles en esta sección.</p>
-                                    </div>
-                                ) : (
-                                    <div className="grid grid-cols-1 gap-3">
-                                        {displayedMatches.map(m => {
-                                            const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
-                                            const isMatchFinishedAndConfirmed = !!(m.is_played && m.score_status === 'confirmed');
-                                            const canEditScore = isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed);
-                                            const formattedScore = formatMatchScore(m.score);
-                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
-                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
-                                            
-                                            // Accurate team separation for Singles and Doubles
-                                            const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
-                                            const isSubmitterTeam2 = m.score_submitted_by === m.player2_id || (!!m.player2_partner_id && m.score_submitted_by === m.player2_partner_id);
-                                            const isUserInTeam1 = user.id === m.player1_id || (!!m.player1_partner_id && user.id === m.player1_partner_id);
-                                            const isUserInTeam2 = user.id === m.player2_id || (!!m.player2_partner_id && user.id === m.player2_partner_id);
-
-                                            const isOpponent = (isSubmitterTeam1 && isUserInTeam2) || (isSubmitterTeam2 && isUserInTeam1) || (!isSubmitterTeam1 && !isSubmitterTeam2 && isUserInMatch && user.id !== m.score_submitted_by);
-                                            const isOpponentPending = isOpponent && m.score_status === 'pending_confirmation';
-                                            const isSubmitterPending = (isUserInTeam1 && isSubmitterTeam1 || isUserInTeam2 && isSubmitterTeam2 || user.id === m.score_submitted_by) && m.score_status === 'pending_confirmation';
-                                            
-                                            let hoursRemaining = 24;
-                                            if (m.score_submitted_at) {
-                                                const elapsed = Date.now() - new Date(m.score_submitted_at).getTime();
-                                                const remMs = 24 * 60 * 60 * 1000 - elapsed;
-                                                hoursRemaining = remMs > 0 ? Math.ceil(remMs / (60 * 60 * 1000)) : 0;
-                                            }
-
-                                            const scheduledInfo = formatScheduledInfo(m.scheduled_at, m.court_name);
-
-                                            return (
-                                                <div 
-                                                    key={m.id} 
-                                                    className={`p-4 rounded-2xl border flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-all ${
-                                                        isUserInMatch && scheduledInfo && !m.is_played
-                                                            ? 'bg-slate-900/90 border-blue-500/40 shadow-lg shadow-blue-950/30'
-                                                            : 'bg-slate-900/60 hover:bg-slate-900 border-white/10'
-                                                    }`}
-                                                >
-                                                    <div className="space-y-2 flex-1 min-w-0 w-full sm:w-auto">
-                                                        <div className="flex flex-wrap items-center gap-2">
-                                                            <span className="text-[10px] font-bold uppercase tracking-wider text-muted bg-white/5 px-2 py-0.5 rounded">
-                                                                {m.round} {m.group_number ? `(Grupo ${m.group_number})` : ''}
-                                                            </span>
-                                                            {isUserInMatch && (
-                                                                <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded font-bold">
-                                                                    Tu Partido
-                                                                </span>
-                                                            )}
-                                                            {scheduledInfo && !m.is_played && !m.winner_id && (
-                                                                <span className="text-[10px] font-semibold text-blue-300 bg-blue-500/15 border border-blue-500/30 px-2 py-0.5 rounded-md flex items-center gap-1.5">
-                                                                    <Calendar size={11} className="text-blue-400" />
-                                                                    <span>{scheduledInfo.dateStr}</span>
-                                                                    <span className="text-blue-400/60">•</span>
-                                                                    <Clock size={11} className="text-blue-400" />
-                                                                    <span>{scheduledInfo.timeStr}</span>
-                                                                    <span className="text-blue-400/60">•</span>
-                                                                    <MapPin size={11} className="text-green-400" />
-                                                                    <span className="text-white font-bold">{scheduledInfo.courtStr}</span>
-                                                                </span>
-                                                            )}
-                                                            {m.score_status === 'pending_confirmation' && (
-                                                                <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5" title={`Auto-confirmación en ${hoursRemaining} hs`}>
-                                                                    <Clock size={10} /> Pendiente ({hoursRemaining}h)
-                                                                </span>
-                                                            )}
-                                                            {m.score_status === 'disputed' && (
-                                                                <span className="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
-                                                                    <AlertTriangle size={10} /> En Disputa
-                                                                </span>
-                                                            )}
-                                                            {m.score_status === 'confirmed' && (
-                                                                <span className="text-[10px] bg-green-500/20 text-green-300 border border-green-500/30 px-1.5 py-0.5 rounded font-bold flex items-center gap-0.5">
-                                                                    <CheckCircle2 size={10} /> Verificado
-                                                                </span>
-                                                            )}
-                                                        </div>
-
-                                                        <div className="space-y-1 pt-1">
-                                                            <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                                <span>{p1DisplayName}</span>
-                                                                {m.winner_id === m.player1_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
-                                                            </div>
-                                                            <div className={`text-sm font-semibold flex items-center justify-between ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-white'}`}>
-                                                                <span>{p2DisplayName}</span>
-                                                                {m.winner_id === m.player2_id && <span className="text-xs text-green-400 font-bold">Ganador ✓</span>}
-                                                            </div>
-                                                        </div>
-
-                                                        {/* Player Highlight & WhatsApp Coordination Banner */}
-                                                        {isUserInMatch && scheduledInfo && !m.is_played && !m.winner_id && (
-                                                            <div className="p-2 bg-gradient-to-r from-blue-500/20 via-primary/10 to-transparent border border-blue-500/30 rounded-xl flex items-center justify-between gap-2 mt-1">
-                                                                <div className="flex items-center gap-1.5 text-xs text-blue-200 truncate">
-                                                                    <Clock size={12} className="text-blue-400 shrink-0" />
-                                                                    <span className="truncate"><strong>Tu partido:</strong> {scheduledInfo.fullLabel}</span>
-                                                                </div>
-                                                                <button
-                                                                    onClick={() => {
-                                                                        soundEffects.playScoreBeep();
-                                                                        const opponentName = m.player1_id === user.id ? p2DisplayName : p1DisplayName;
-                                                                        const msg = encodeURIComponent(`🎾 ¡Hola ${opponentName}! Nuestro partido de "${tournament.name}" está programado para el ${scheduledInfo.dateStr} a las ${scheduledInfo.timeStr} en ${scheduledInfo.courtStr} (${tournament.institutions?.name || 'el club'}). ¿Confirmás?`);
-                                                                        window.open(`https://api.whatsapp.com/send?text=${msg}`, '_blank');
-                                                                    }}
-                                                                    className="px-2 py-1 bg-green-600/30 hover:bg-green-600/50 text-green-300 border border-green-500/30 rounded-lg text-[10px] font-bold flex items-center gap-1 shrink-0 transition-all shadow-sm"
-                                                                    title="Coordinar por WhatsApp"
-                                                                >
-                                                                    <MessageCircle size={11} /> Coordinar
-                                                                </button>
-                                                            </div>
-                                                        )}
-
-                                                        {m.is_played && (m.score_submitted_by_name || m.score?.submitted_by_name || m.played_at) && (
-                                                            <div className="text-[10px] text-slate-400 pt-1 flex items-center gap-1">
-                                                                <span>Cargado por: <strong className="text-slate-300">{m.score_submitted_by_name || m.score?.submitted_by_name || 'Participante'}</strong></span>
-                                                                {(m.score_submitted_at || m.score?.submitted_at || m.played_at) && (
-                                                                    <span className="text-slate-500">
-                                                                        • {new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} hs ({new Date(m.score_submitted_at || m.score?.submitted_at || m.played_at).toLocaleDateString([], { day: '2-digit', month: '2-digit' })})
-                                                                    </span>
-                                                                )}
-                                                            </div>
-                                                        )}
-
-                                                        {/* Submitter Pending Feedback Banner */}
-                                                        {isSubmitterPending && (
-                                                            <div className="mt-1 px-2.5 py-1.5 bg-blue-500/10 border border-blue-500/20 rounded-lg text-[10px] text-blue-300 flex items-center gap-1.5">
-                                                                <Clock size={11} className="text-blue-400 shrink-0" />
-                                                                <span>Esperando confirmación de rivales (se auto-valida en <strong>{hoursRemaining} hs</strong>).</span>
-                                                            </div>
-                                                        )}
-
-                                                        {/* Dispute Reason Banner */}
-                                                        {m.score_status === 'disputed' && (m.score_dispute_reason || m.proposal_data?.dispute_reason) && (
-                                                            <div className="mt-1 px-2.5 py-1.5 bg-red-500/15 border border-red-500/30 rounded-lg text-[10px] text-red-200">
-                                                                <span className="font-bold text-red-300">Motivo del rechazo: </span>
-                                                                <span className="italic">"{m.score_dispute_reason || m.proposal_data?.dispute_reason}"</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-
-                                                    <div className="flex items-center gap-2.5 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-white/5 shrink-0">
-                                                        {m.player1_id && m.player2_id && (
-                                                            <button
-                                                                onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
-                                                                className="px-2 py-1.5 rounded-xl bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-all border border-white/10 text-xs font-bold flex items-center gap-1"
-                                                                title="Ver Historial Cara a Cara"
-                                                            >
-                                                                <Swords size={14} /> H2H
-                                                            </button>
-                                                        )}
-
-                                                        {/* Schedule Button for Admin or Assigned Players (Solo si el partido NO fue jugado aún) */}
-                                                        {(isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
-                                                            <button
-                                                                onClick={() => openScheduleModal(m)}
-                                                                className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 ${
-                                                                    scheduledInfo
-                                                                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
-                                                                        : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
-                                                                }`}
-                                                                title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
-                                                            >
-                                                                <Calendar size={14} className={scheduledInfo ? "text-blue-400" : ""} />
-                                                                <span>{scheduledInfo ? "Horario" : "Programar"}</span>
-                                                            </button>
-                                                        )}
-
-                                                        {formattedScore ? (
-                                                            <div className="bg-black/40 border border-white/10 px-3 py-1.5 rounded-xl text-center">
-                                                                <div className="text-[10px] text-muted uppercase font-bold">Resultado</div>
-                                                                <div className="text-sm font-mono font-bold text-primary">{formattedScore}</div>
-                                                            </div>
-                                                        ) : (
-                                                            <span className="text-xs bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 px-2.5 py-1 rounded-lg font-semibold">
-                                                                Por Jugar
-                                                            </span>
-                                                        )}
-
-                                                        {canEditScore && !isSwapMode && (
-                                                            <button
-                                                                onClick={() => openScoreModal(m)}
-                                                                className={`px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold flex items-center gap-1.5 ${
-                                                                    !m.is_played
-                                                                        ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
-                                                                        : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
-                                                                }`}
-                                                                title={m.is_played ? "Modificar resultado" : "Cargar resultado del partido"}
-                                                            >
-                                                                <Edit3 size={14} className={!m.is_played ? "text-primary" : ""} />
-                                                                <span>{m.is_played ? "Editar" : "Resultado"}</span>
-                                                            </button>
-                                                        )}
-
-                                                        {isOpponentPending && (
-                                                            <div className="flex items-center gap-1">
-                                                                <button
-                                                                    onClick={() => handleConfirmScore(m.id)}
-                                                                    className="px-2.5 py-1.5 bg-green-600 hover:bg-green-500 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-md"
-                                                                    title="Confirmar marcador"
-                                                                >
-                                                                    <Check size={13} /> Confirmar
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => setDisputeMatchId(m.id)}
-                                                                    className="px-2.5 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-300 border border-red-500/30 text-xs font-bold rounded-xl flex items-center gap-1"
-                                                                    title="Disputar marcador"
-                                                                >
-                                                                    <AlertTriangle size={13} /> Disputar
-                                                                </button>
-                                                            </div>
-                                                        )}
-
-                                                        {isClubAdmin && (m.score_status === 'pending_confirmation' || m.score_status === 'disputed') && (
-                                                            <button
-                                                                onClick={() => handleConfirmScore(m.id)}
-                                                                className="px-2.5 py-1.5 bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-md transition-all"
-                                                                title="Validar y confirmar oficialmente como Administrador"
-                                                            >
-                                                                <Check size={13} /> Validar (Admin)
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
                                     </div>
                                 )}
                             </div>
