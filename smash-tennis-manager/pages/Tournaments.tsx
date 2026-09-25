@@ -221,13 +221,14 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             };
 
             await api.tournaments.create({ 
-                ...newTournament, 
                 name: (newTournament.name || '').trim(),
+                type: newTournament.type || 'singles',
+                gender: newTournament.gender || 'Caballeros',
+                category: newTournament.category || '4ta',
+                start_date: newTournament.start_date,
+                registration_price: Number(newTournament.registration_price) || 0,
+                status: 'draft',
                 rules: formatRules,
-                competition_format: formatRules.competition_format,
-                min_guaranteed_matches: formatRules.min_guaranteed_matches,
-                allow_byes: formatRules.allow_byes,
-                qualifiers_mode: formatRules.qualifiers_mode,
                 institution_id: targetInstitutionId,
                 created_by: user.id,
                 saga_id: selectedSagaId || null,
@@ -327,10 +328,6 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                 registration_price: Number(editFormData.registration_price) || 0,
                 registration_closed: editFormData.registration_closed,
                 status: editFormData.status,
-                competition_format: editFormData.competition_format || 'tabla_general_byes',
-                min_guaranteed_matches: Number(editFormData.min_guaranteed_matches) || 3,
-                allow_byes: editFormData.allow_byes !== false,
-                qualifiers_mode: editFormData.qualifiers_mode || 'all',
                 rules: updatedRules
             };
 

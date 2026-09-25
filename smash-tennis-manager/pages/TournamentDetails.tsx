@@ -1923,15 +1923,18 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 registration_price: Number(editTournamentForm.registration_price) || 0,
                 registration_closed: editTournamentForm.registration_closed,
                 status: editTournamentForm.status,
-                competition_format: editTournamentForm.competition_format || 'tabla_general_byes',
-                min_guaranteed_matches: Number(editTournamentForm.min_guaranteed_matches) || 3,
-                allow_byes: editTournamentForm.allow_byes !== false,
-                qualifiers_mode: editTournamentForm.qualifiers_mode || 'all',
                 rules: updatedRules
             };
 
             await api.tournaments.update(tournament.id, updates);
-            setTournament(prev => prev ? ({ ...prev, ...updates }) : null);
+            setTournament(prev => prev ? ({ 
+                ...prev, 
+                ...updates,
+                competition_format: updatedRules.competition_format,
+                min_guaranteed_matches: updatedRules.min_guaranteed_matches,
+                allow_byes: updatedRules.allow_byes,
+                qualifiers_mode: updatedRules.qualifiers_mode
+            }) : null);
             addToast("¡Torneo y configuración actualizados exitosamente!", 'success');
             setShowEditTournamentModal(false);
         } catch (err: any) {

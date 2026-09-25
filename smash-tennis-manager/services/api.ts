@@ -9,6 +9,51 @@ import {
 } from '../types';
 import { formatPlayerName } from '../utils/formatters';
 
+function cleanTournamentPayload(payload: any) {
+    if (!payload) return payload;
+    const {
+        allow_byes,
+        competition_format,
+        min_guaranteed_matches,
+        qualifiers_mode,
+        institutions,
+        tournament_players,
+        matches,
+        sponsors,
+        ...rest
+    } = payload;
+
+    let rules = rest.rules;
+    if (allow_byes !== undefined || competition_format !== undefined || min_guaranteed_matches !== undefined || qualifiers_mode !== undefined) {
+        const existingRules = (typeof rules === 'object' && rules !== null) ? rules : {};
+        rules = {
+            ...existingRules,
+            ...(competition_format !== undefined ? { competition_format } : {}),
+            ...(min_guaranteed_matches !== undefined ? { min_guaranteed_matches: Number(min_guaranteed_matches) } : {}),
+            ...(allow_byes !== undefined ? { allow_byes } : {}),
+            ...(qualifiers_mode !== undefined ? { qualifiers_mode } : {})
+        };
+    }
+
+    const cleanPayload: any = { ...rest };
+    if (rules !== undefined) {
+        cleanPayload.rules = rules;
+    }
+    return cleanPayload;
+}
+
+function hydrateTournamentRules(t: any): Tournament {
+    if (!t) return t;
+    const rules = (typeof t.rules === 'object' && t.rules !== null) ? t.rules : {};
+    return {
+        ...t,
+        competition_format: t.competition_format || rules.competition_format || 'tabla_general_byes',
+        min_guaranteed_matches: t.min_guaranteed_matches ?? rules.min_guaranteed_matches ?? 3,
+        allow_byes: t.allow_byes ?? rules.allow_byes ?? true,
+        qualifiers_mode: t.qualifiers_mode || rules.qualifiers_mode || 'all'
+    };
+}
+
 export const api = {
     settings: {
         async getConfig() {
@@ -574,12 +619,12 @@ export const api = {
         async getActive() {
             const { data, error } = await supabase
                 .from('tournaments')
-                .select('id, name, type, gender, category, competitions, start_date, duration, status, institution_id, registration_price, image_url, registration_closed, registration_deadline, institutions(name, city)')
+                .select('id, name, type, gender, category, competitions, start_date, duration, status, institution_id, registration_price, image_url, registration_closed, registration_deadline, rules, institutions(name, city)')
                 .eq('status', 'active')
                 .order('start_date');
 
             if (error) throw error;
-            return data as Tournament[];
+            return (data || []).map(hydrateTournamentRules) as Tournament[];
         },
         async getAll(page = 1, pageSize = 50) {
             const { data, error } = await supabase
@@ -589,7 +634,7 @@ export const api = {
                 .range((page - 1) * pageSize, page * pageSize - 1);
 
             if (error) throw error;
-            return data as Tournament[];
+            return (data || []).map(hydrateTournamentRules) as Tournament[];
         },
         async getById(id: string) {
             // OPTIMIZED: Fetch tournament, players, and matches concurrently with Promise.all
@@ -647,23 +692,16 @@ export const api = {
             // 24H AUTO-CONFIRMATION CHECK: Check if any match is pending confirmation for > 24 hours
             const now = Date.now();
             const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-            const autoConfirmUpdates: PromiseLike<any>[] = [];
+            const autoConfirmUpdates: Promise<any>[] = [];
 
-            const formattedMatches = (matches || []).map(m => {
-                let updatedScoreStatus = m.score_status;
-
-                // Unplayed matches with no score must not inherit 'confirmed' status from DB column default
-                if (!m.is_played && !m.winner_id && !m.score) {
-                    updatedScoreStatus = null;
-                }
-
+            for (const m of (matches || [])) {
                 // Auto-confirm if pending confirmation for > 24 hours
                 const submittedIso = m.score_submitted_at || m.score?.submitted_at || m.played_at || m.updated_at || m.created_at;
                 if (m.score_status === 'pending_confirmation' && submittedIso) {
                     const submittedTime = new Date(submittedIso).getTime();
                     if (!isNaN(submittedTime) && now - submittedTime >= TWENTY_FOUR_HOURS) {
-                        updatedScoreStatus = 'confirmed';
-                        // Trigger async confirmation update in background
+                        m.score_status = 'confirmed';
+                        m.is_played = true;
                         autoConfirmUpdates.push(
                             (async () => {
                                 try {
@@ -714,6 +752,53 @@ export const api = {
                         );
                     }
                 }
+            }
+
+            if (autoConfirmUpdates.length > 0) {
+                await Promise.all(autoConfirmUpdates).catch(e => console.warn("Auto-confirm batch error:", e));
+            }
+
+            // Self-healing check: ensure confirmed playoff match winners are propagated to next rounds
+            const isDoublesTournament = tournament?.type === 'doubles';
+            const healPromises: Promise<any>[] = [];
+            for (const pm of (matches || [])) {
+                if (pm.is_played && pm.winner_id && (pm.score_status === 'confirmed' || pm.score_status === null || pm.score_status === undefined) && pm.round !== 'Fase de Grupos') {
+                    const pData = pm.proposal_data;
+                    if (pData?.next_round && pData?.next_match_index !== undefined && pData?.next_slot) {
+                        const nextRoundMatches = (matches || []).filter(m => m.round === pData.next_round);
+                        const target = nextRoundMatches.find(m => m.proposal_data?.bracket_match_index === pData.next_match_index) || nextRoundMatches[pData.next_match_index];
+                        if (target) {
+                            const isSlotEmpty = pData.next_slot === 'player1' ? !target.player1_id : !target.player2_id;
+                            if (isSlotEmpty) {
+                                healPromises.push(api.matches.advancePlayoffWinner(pm.id, pm.winner_id, isDoublesTournament, pm.winner_partner_id));
+                                const pWinnerName = pm.winner_id === pm.player1_id ? pm.player1_name : pm.player2_name;
+                                if (pData.next_slot === 'player1') {
+                                    target.player1_id = pm.winner_id;
+                                    target.player1_name = pWinnerName;
+                                } else {
+                                    target.player2_id = pm.winner_id;
+                                    target.player2_name = pWinnerName;
+                                }
+                                if (target.player1_id && target.player2_id) {
+                                    target.scheduling_status = 'confirmed';
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (healPromises.length > 0) {
+                await Promise.all(healPromises).catch(e => console.warn("Bracket self-heal batch error:", e));
+            }
+
+            const formattedMatches = (matches || []).map(m => {
+                let updatedScoreStatus = m.score_status;
+
+                // Unplayed matches with no score must not inherit 'confirmed' status from DB column default
+                if (!m.is_played && !m.winner_id && !m.score) {
+                    updatedScoreStatus = null;
+                }
 
                 const scheduledAt = m.scheduled_at || m.proposal_data?.scheduled_at || null;
                 const courtName = m.court_name || m.proposal_data?.court_name || m.court_slot_id || null;
@@ -735,28 +820,6 @@ export const api = {
                 };
             });
 
-            // Self-healing check: ensure confirmed playoff match winners are propagated to next rounds
-            const isDoublesTournament = tournament?.type === 'doubles';
-            for (const pm of (matches || [])) {
-                if (pm.is_played && pm.winner_id && (pm.score_status === 'confirmed' || pm.score_status === null || pm.score_status === undefined) && pm.round !== 'Fase de Grupos') {
-                    const pData = pm.proposal_data;
-                    if (pData?.next_round && pData?.next_match_index !== undefined && pData?.next_slot) {
-                        const nextRoundMatches = (matches || []).filter(m => m.round === pData.next_round);
-                        const target = nextRoundMatches.find(m => m.proposal_data?.bracket_match_index === pData.next_match_index) || nextRoundMatches[pData.next_match_index];
-                        if (target) {
-                            const isSlotEmpty = pData.next_slot === 'player1' ? !target.player1_id : !target.player2_id;
-                            if (isSlotEmpty) {
-                                api.matches.advancePlayoffWinner(pm.id, pm.winner_id, isDoublesTournament, pm.winner_partner_id).catch(e => console.warn("Bracket self-heal fallback:", e));
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (autoConfirmUpdates.length > 0) {
-                Promise.all(autoConfirmUpdates).catch(e => console.warn("Auto-confirm batch error:", e));
-            }
-
             let clubSponsors: any[] = [];
             if (tournament?.institution_id) {
                 try {
@@ -764,22 +827,24 @@ export const api = {
                 } catch (e) {}
             }
 
-            return {
+            return hydrateTournamentRules({
                 ...tournament,
                 tournament_players: formattedPlayers,
                 matches: formattedMatches,
                 sponsors: clubSponsors
-            };
+            });
         },
         async create(tournament: Partial<Tournament>) {
-            const { data, error } = await supabase.from('tournaments').insert(tournament).select().single();
+            const payload = cleanTournamentPayload(tournament);
+            const { data, error } = await supabase.from('tournaments').insert(payload).select().single();
             if (error) throw error;
-            return data;
+            return hydrateTournamentRules(data);
         },
         async update(id: string, updates: Partial<Tournament>) {
-            const { data, error } = await supabase.from('tournaments').update(updates).eq('id', id).select().single();
+            const payload = cleanTournamentPayload(updates);
+            const { data, error } = await supabase.from('tournaments').update(payload).eq('id', id).select().single();
             if (error) throw error;
-            return data;
+            return hydrateTournamentRules(data);
         },
         async checkAndMarkDisputed(tournamentId: string) {
             try {
@@ -939,12 +1004,14 @@ export const api = {
                 status: 'draft',
                 registration_closed: false,
                 start_date: newStartDate.toISOString().split('T')[0],
-                previous_edition_id: oldTournament.id
+                previous_edition_id: oldTournament.id,
+                rules: oldTournament.rules || {}
             };
 
-            const { data, error } = await supabase.from('tournaments').insert(newTournamentData).select().single();
+            const payload = cleanTournamentPayload(newTournamentData);
+            const { data, error } = await supabase.from('tournaments').insert(payload).select().single();
             if (error) throw error;
-            return data;
+            return hydrateTournamentRules(data);
         },
         async getPointsDefense(previousTournamentId: string) {
             return []; // Needs historical data
