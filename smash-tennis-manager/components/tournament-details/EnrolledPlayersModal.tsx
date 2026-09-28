@@ -1,6 +1,6 @@
 import React from 'react';
 import { Tournament, UserProfile, TournamentPlayer } from '../../types';
-import { Users, Search, Download, UserPlus, Eye, RefreshCw, Trash2, Clock, Loader2, X } from 'lucide-react';
+import { Users, Search, Download, UserPlus, Eye, RefreshCw, Trash2, Clock, Loader2, X, Edit2, Check } from 'lucide-react';
 import { formatPlayerName } from '../../utils/formatters';
 
 export interface EnrolledPlayersModalProps {
@@ -19,6 +19,7 @@ export interface EnrolledPlayersModalProps {
   onUnenrollPlayer: (player: TournamentPlayer) => void;
   onTogglePaymentStatus: (player: TournamentPlayer) => void;
   onViewReceipt: (receiptUrl: string) => void;
+  onUpdateDni?: (player: TournamentPlayer, dni: string) => Promise<void>;
   deletingPlayerId: string | null;
 }
 
@@ -38,8 +39,13 @@ export const EnrolledPlayersModal: React.FC<EnrolledPlayersModalProps> = ({
   onUnenrollPlayer,
   onTogglePaymentStatus,
   onViewReceipt,
+  onUpdateDni,
   deletingPlayerId
 }) => {
+  const [editingDniId, setEditingDniId] = React.useState<string | null>(null);
+  const [tempDniValue, setTempDniValue] = React.useState<string>('');
+  const [savingDni, setSavingDni] = React.useState<boolean>(false);
+
   if (!isOpen) return null;
 
   return (
@@ -151,7 +157,107 @@ export const EnrolledPlayersModal: React.FC<EnrolledPlayersModalProps> = ({
                             Tú
                           </span>
                         )}
+                        {!p.player_id && (
+                          <span className="text-[9px] bg-amber-500/15 text-amber-300 border border-amber-500/25 px-1.5 py-0.2 rounded font-medium">
+                            Invitado (Sin cuenta)
+                          </span>
+                        )}
                       </div>
+
+                      {/* Fila de DNI / Edición de DNI para Admin */}
+                      {isClubAdmin && editingDniId === p.id ? (
+                        <div className="flex items-center gap-1.5 mt-1.5" onClick={e => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            placeholder="Ingresar DNI..."
+                            value={tempDniValue}
+                            onChange={e => setTempDniValue(e.target.value)}
+                            className="bg-slate-900 border border-primary/40 rounded-lg px-2 py-0.5 text-[11px] text-white outline-none w-28 font-mono"
+                            autoFocus
+                            onKeyDown={async e => {
+                              if (e.key === 'Enter' && onUpdateDni) {
+                                setSavingDni(true);
+                                try {
+                                  await onUpdateDni(p, tempDniValue);
+                                  setEditingDniId(null);
+                                } finally {
+                                  setSavingDni(false);
+                                }
+                              } else if (e.key === 'Escape') {
+                                setEditingDniId(null);
+                              }
+                            }}
+                          />
+                          <button
+                            type="button"
+                            disabled={savingDni}
+                            onClick={async () => {
+                              if (onUpdateDni) {
+                                setSavingDni(true);
+                                try {
+                                  await onUpdateDni(p, tempDniValue);
+                                  setEditingDniId(null);
+                                } finally {
+                                  setSavingDni(false);
+                                }
+                              }
+                            }}
+                            className="p-1 bg-primary text-white rounded-lg hover:bg-primary/80 transition-all text-xs"
+                            title="Guardar DNI"
+                          >
+                            {savingDni ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingDniId(null)}
+                            className="p-1 bg-white/10 text-slate-300 rounded-lg hover:bg-white/20 transition-all text-xs"
+                            title="Cancelar"
+                          >
+                            <X size={12} />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 mt-0.5">
+                          {p.dni ? (
+                            <span 
+                              className={`text-[10px] font-mono px-1.5 py-0.2 rounded border flex items-center gap-1 ${
+                                p.player_id 
+                                  ? 'bg-blue-500/10 text-blue-300 border-blue-500/20' 
+                                  : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20'
+                              }`}
+                              title={p.player_id ? "DNI Vinculado con cuenta registrada" : "DNI listo para vincular cuando se registre"}
+                            >
+                              DNI: {p.dni}
+                              {isClubAdmin && onUpdateDni && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingDniId(p.id);
+                                    setTempDniValue(p.dni || '');
+                                  }}
+                                  className="text-slate-400 hover:text-white ml-0.5"
+                                  title="Editar DNI"
+                                >
+                                  <Edit2 size={10} />
+                                </button>
+                              )}
+                            </span>
+                          ) : isClubAdmin && !p.player_id && onUpdateDni ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditingDniId(p.id);
+                                setTempDniValue('');
+                              }}
+                              className="text-[10px] text-primary hover:underline flex items-center gap-1 font-semibold bg-primary/10 px-1.5 py-0.2 rounded border border-primary/20"
+                              title="Cargar DNI para vincular su cuenta"
+                            >
+                              <Edit2 size={9} /> + Cargar DNI
+                            </button>
+                          ) : null}
+                        </div>
+                      )}
+
                       <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                         <span className="text-[10px] text-slate-400 font-medium bg-white/5 px-2 py-0.5 rounded border border-white/5">
                           {p.category ? `${p.category} Cat.` : 'Sin Cat.'}

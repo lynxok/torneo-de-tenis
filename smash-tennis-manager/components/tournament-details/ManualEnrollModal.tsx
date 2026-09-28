@@ -21,6 +21,8 @@ export interface ManualEnrollModalProps {
   onSelectUserForEnroll: (user: UserProfile) => void;
   guestName: string;
   onGuestNameChange: (name: string) => void;
+  guestDni?: string;
+  onGuestDniChange?: (dni: string) => void;
   guestPartnerName: string;
   onGuestPartnerNameChange: (name: string) => void;
   guestCategory: string;
@@ -55,6 +57,8 @@ export const ManualEnrollModal: React.FC<ManualEnrollModalProps> = ({
   onSelectUserForEnroll,
   guestName,
   onGuestNameChange,
+  guestDni = '',
+  onGuestDniChange,
   guestPartnerName,
   onGuestPartnerNameChange,
   guestCategory,
@@ -215,6 +219,20 @@ export const ManualEnrollModal: React.FC<ManualEnrollModalProps> = ({
             </div>
           ) : (
             <div className="space-y-3">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs text-primary font-bold uppercase block">DNI del Jugador (Recomendado)</label>
+                  <span className="text-[10px] text-muted">Para vincular su perfil automáticamente</span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Ej: 32669131 (sin puntos)"
+                  value={guestDni}
+                  onChange={e => onGuestDniChange && onGuestDniChange(e.target.value)}
+                  className="w-full bg-sidebar border border-white/10 rounded-xl p-3 text-xs text-white focus:border-primary outline-none font-mono"
+                />
+              </div>
+
               <div>
                 <label className="text-xs text-muted font-bold uppercase block mb-1.5">Nombre y Apellido *</label>
                 <input

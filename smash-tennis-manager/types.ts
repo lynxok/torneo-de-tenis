@@ -348,6 +348,7 @@ export interface TournamentPlayer {
   receipt_url?: string; // Comprobante de pago subido por el jugador
   is_confirmed?: boolean;
   expires_at?: string; // Expiración de reserva de cupo virtual (15 min)
+  dni?: string; // DNI del jugador para vinculación automática
 }
 
 export interface Match {

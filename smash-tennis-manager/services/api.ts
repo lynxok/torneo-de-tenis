@@ -1338,15 +1338,27 @@ export const api = {
             partnerId?: string;
             partnerName?: string;
             availabilityNotes?: string;
+            dni?: string;
         }) {
             let finalName = formatPlayerName(params.playerName);
             let finalCat = params.category;
             let finalPartnerName = params.partnerName ? formatPlayerName(params.partnerName) : undefined;
+            const cleanDni = params.dni ? params.dni.replace(/\D/g, '').trim() : undefined;
 
             if (params.playerId) {
                 try {
-                    const { data: prof } = await supabase.from('profiles').select('name, lastname, category').eq('id', params.playerId).single();
+                    const { data: prof } = await supabase.from('profiles').select('name, lastname, category, dni').eq('id', params.playerId).single();
                     if (prof) {
+                        finalName = formatPlayerName(prof.name, prof.lastname);
+                        finalCat = prof.category || finalCat;
+                    }
+                } catch (e) {}
+            } else if (cleanDni) {
+                // Chequear si existe un usuario con ese DNI para vincularlo automáticamente
+                try {
+                    const { data: prof } = await supabase.from('profiles').select('id, name, lastname, category').eq('dni', cleanDni).maybeSingle();
+                    if (prof) {
+                        params.playerId = prof.id;
                         finalName = formatPlayerName(prof.name, prof.lastname);
                         finalCat = prof.category || finalCat;
                     }
@@ -1376,6 +1388,9 @@ export const api = {
             if (params.playerId) {
                 insertData.player_id = params.playerId;
             }
+            if (cleanDni) {
+                insertData.dni = cleanDni;
+            }
             if (params.availabilityNotes) {
                 insertData.availability_notes = params.availabilityNotes;
             }
@@ -1389,8 +1404,17 @@ export const api = {
                 if (error) throw error;
                 return data;
             } catch (err: any) {
+                // Fallback por si la columna dni o availability_notes aún no existen en DB
+                let retried = false;
+                if (err.message && err.message.includes('dni')) {
+                    delete insertData.dni;
+                    retried = true;
+                }
                 if (err.message && err.message.includes('availability_notes')) {
                     delete insertData.availability_notes;
+                    retried = true;
+                }
+                if (retried) {
                     const { data, error: retryError } = await supabase
                         .from('tournament_players')
                         .insert(insertData)
@@ -1401,6 +1425,46 @@ export const api = {
                 }
                 throw err;
             }
+        },
+        async updateDni(enrollmentId: string, dni: string) {
+            const cleanDni = dni.replace(/\D/g, '').trim();
+            // 1. Chequear si el DNI ya pertenece a un perfil registrado
+            let matchedPlayerId: string | null = null;
+            let matchedName: string | null = null;
+            if (cleanDni) {
+                try {
+                    const { data: prof } = await supabase
+                        .from('profiles')
+                        .select('id, name, lastname')
+                        .eq('dni', cleanDni)
+                        .maybeSingle();
+                    if (prof) {
+                        matchedPlayerId = prof.id;
+                        matchedName = formatPlayerName(prof.name, prof.lastname);
+                    }
+                } catch (e) {
+                    console.warn("Error buscando perfil por DNI:", e);
+                }
+            }
+
+            const updatePayload: any = { dni: cleanDni || null };
+            if (matchedPlayerId) {
+                updatePayload.player_id = matchedPlayerId;
+                if (matchedName) {
+                    updatePayload.player_name = matchedName;
+                    updatePayload.name = matchedName;
+                }
+            }
+
+            const { data, error } = await supabase
+                .from('tournament_players')
+                .update(updatePayload)
+                .eq('id', enrollmentId)
+                .select()
+                .single();
+
+            if (error) throw error;
+            return { data, matchedProfile: matchedPlayerId ? { id: matchedPlayerId, name: matchedName } : null };
         },
         async unenroll(enrollmentId: string) {
             const { error } = await supabase

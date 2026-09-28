@@ -119,6 +119,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [searchUserQuery, setSearchUserQuery] = useState('');
     const [selectedUserForEnroll, setSelectedUserForEnroll] = useState<UserProfile | null>(null);
     const [guestName, setGuestName] = useState('');
+    const [guestDni, setGuestDni] = useState('');
     const [guestCategory, setGuestCategory] = useState('');
     const [partnerUserForEnroll, setPartnerUserForEnroll] = useState<UserProfile | null>(null);
     const [guestPartnerName, setGuestPartnerName] = useState('');
@@ -1306,6 +1307,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         setGuestPartnerName('');
         setSearchUserQuery('');
         setGuestName('');
+        setGuestDni('');
         setGuestCategory(tournament?.category || '4ta');
         setManualFee(tournament?.registration_price || 0);
         setManualPaymentStatus('paid');
@@ -1382,7 +1384,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 paymentStatus: manualPaymentStatus,
                 partnerId,
                 partnerName,
-                availabilityNotes: manualAvailabilityNotes.trim() || undefined
+                availabilityNotes: manualAvailabilityNotes.trim() || undefined,
+                dni: enrollMode === 'guest' ? (guestDni.trim() || undefined) : undefined
             });
 
             addToast(`¡${pName} ${partnerName ? `y ${partnerName}` : ''} fueron inscriptos correctamente!`, 'success');
@@ -1421,6 +1424,21 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         } catch (e: any) {
             addToast("Error al actualizar pago", 'error');
             loadTournament();
+        }
+    };
+
+    const handleUpdatePlayerDni = async (player: TournamentPlayer, dni: string) => {
+        try {
+            const res = await api.players.updateDni(player.id, dni);
+            if (res?.matchedProfile) {
+                addToast(`¡DNI guardado y cuenta vinculada automáticamente a ${res.matchedProfile.name}!`, 'success');
+            } else {
+                addToast(`DNI guardado correctamente. Se vinculará cuando el jugador cree su cuenta.`, 'success');
+            }
+            // Recargar datos actualizados
+            loadTournament();
+        } catch (e: any) {
+            addToast("Error al guardar DNI: " + (e.message || 'Error de base de datos'), 'error');
         }
     };
 
@@ -4068,6 +4086,8 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     onSelectUserForEnroll={setSelectedUserForEnroll}
                     guestName={guestName}
                     onGuestNameChange={setGuestName}
+                    guestDni={guestDni}
+                    onGuestDniChange={setGuestDni}
                     guestPartnerName={guestPartnerName}
                     onGuestPartnerNameChange={setGuestPartnerName}
                     guestCategory={guestCategory}
@@ -4400,6 +4420,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     onUnenrollPlayer={handleUnenrollPlayer}
                     onTogglePaymentStatus={handleTogglePaymentStatus}
                     onViewReceipt={url => setViewingReceiptModal(url)}
+                    onUpdateDni={handleUpdatePlayerDni}
                     deletingPlayerId={deletingPlayerId}
                 />
             )}
