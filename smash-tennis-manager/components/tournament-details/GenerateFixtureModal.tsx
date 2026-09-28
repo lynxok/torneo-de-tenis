@@ -1,6 +1,6 @@
-import React from 'react';
-import { Tournament, TournamentPlayer } from '../../types';
-import { Settings2, X, Info, Grid, Layers, Shuffle, Loader2, Check } from 'lucide-react';
+import React, { useState } from 'react';
+import { Tournament, TournamentPlayer, GroupStageFormat } from '../../types';
+import { Settings2, X, Info, Grid, Layers, Shuffle, Loader2, Check, Zap, HelpCircle } from 'lucide-react';
 
 export interface GenerateFixtureModalProps {
   isOpen: boolean;
@@ -11,8 +11,9 @@ export interface GenerateFixtureModalProps {
   onNumGroupsChange: (num: number) => void;
   onShufflePreview: (num: number) => void;
   previewGroups: { name: string; players: TournamentPlayer[] }[];
-  onConfirmFixture: () => void;
+  onConfirmFixture: (groupStageFormat: GroupStageFormat) => void;
   generatingFixture: boolean;
+  initialGroupStageFormat?: GroupStageFormat;
 }
 
 export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
@@ -25,8 +26,13 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
   onShufflePreview,
   previewGroups,
   onConfirmFixture,
-  generatingFixture
+  generatingFixture,
+  initialGroupStageFormat = 'round_robin'
 }) => {
+  const [selectedFormat, setSelectedFormat] = useState<GroupStageFormat>(
+    (tournament.rules?.group_stage_format as GroupStageFormat) || initialGroupStageFormat
+  );
+
   if (!isOpen) return null;
 
   return (
@@ -63,6 +69,56 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
               <p className="text-[11px] text-amber-300/80 italic">
                 💡 Una vez generado el fixture, podrás reubicar o intercambiar a los jugadores destacados entre zonas usando el botón <strong>"Intercambiar Jugadores"</strong>.
               </p>
+            </div>
+          </div>
+
+          {/* GROUP STAGE MATCH FORMAT SELECTOR */}
+          <div className="space-y-2">
+            <label className="text-xs text-muted uppercase font-bold flex items-center justify-between">
+              <span>Modalidad de Partidos en Zonas</span>
+              <span className="text-amber-400 font-normal text-[11px] flex items-center gap-1">
+                <Zap size={12} /> Zona Cruzada Disponible
+              </span>
+            </label>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                onClick={() => setSelectedFormat('round_robin')}
+                className={`p-3.5 rounded-xl border text-left transition-all ${
+                  selectedFormat === 'round_robin'
+                    ? 'bg-primary/20 border-primary text-white shadow-sm ring-1 ring-primary/50'
+                    : 'bg-sidebar/50 border-white/5 text-muted hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-white">Todos contra Todos</span>
+                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full text-slate-300 font-mono">Clásico</span>
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
+                  Todos juegan contra todos dentro del grupo (6 partidos en zona de 4). Cada jugador disputa 3 partidos.
+                </p>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSelectedFormat('cross_4')}
+                className={`p-3.5 rounded-xl border text-left transition-all ${
+                  selectedFormat === 'cross_4'
+                    ? 'bg-amber-500/20 border-amber-500 text-white shadow-sm ring-1 ring-amber-500/50'
+                    : 'bg-sidebar/50 border-white/5 text-muted hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs text-amber-300 flex items-center gap-1.5">
+                    <Zap size={13} className="text-amber-400" /> Zona Cruzada de 4
+                  </span>
+                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">2 Fechas</span>
+                </div>
+                <p className="text-[11px] text-slate-300/80 mt-1 leading-relaxed">
+                  4 partidos en total por zona: cruces iniciales + cruces <em>Ganador vs Perdedor</em>. Cada jugador disputa exactamente 2 partidos.
+                </p>
+              </button>
             </div>
           </div>
 
@@ -207,24 +263,33 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-60 overflow-y-auto pr-1">
-              {previewGroups.map((grp, idx) => (
-                <div key={idx} className="bg-slate-900/90 border border-white/10 rounded-xl p-3 space-y-2">
-                  <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
-                    <span className="font-bold text-xs text-primary">{grp.name}</span>
-                    <span className="text-[10px] text-muted bg-white/5 px-2 py-0.5 rounded-full">
-                      {grp.players.length} jugadores • {(grp.players.length * (grp.players.length - 1)) / 2} partidos
-                    </span>
+              {previewGroups.map((grp, idx) => {
+                const isGroupCross4 = selectedFormat === 'cross_4' && grp.players.length === 4;
+                const matchCount = isGroupCross4 ? 4 : (grp.players.length * (grp.players.length - 1)) / 2;
+
+                return (
+                  <div key={idx} className="bg-slate-900/90 border border-white/10 rounded-xl p-3 space-y-2">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-1.5">
+                      <span className="font-bold text-xs text-primary">{grp.name}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-mono font-medium ${
+                        isGroupCross4 
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' 
+                          : 'bg-white/5 text-muted'
+                      }`}>
+                        {grp.players.length} jugadores • {matchCount} partidos {isGroupCross4 ? '(Cruzada)' : ''}
+                      </span>
+                    </div>
+                    <ul className="space-y-1">
+                      {grp.players.map((p, pIdx) => (
+                        <li key={p.id || pIdx} className="text-xs text-slate-300 flex items-center justify-between">
+                          <span className="truncate">{pIdx + 1}. {p.name || p.player_name}</span>
+                          <span className="text-[10px] text-muted font-mono">{p.category || tournament.category}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
-                  <ul className="space-y-1">
-                    {grp.players.map((p, pIdx) => (
-                      <li key={p.id || pIdx} className="text-xs text-slate-300 flex items-center justify-between">
-                        <span className="truncate">{pIdx + 1}. {p.name || p.player_name}</span>
-                        <span className="text-[10px] text-muted font-mono">{p.category || tournament.category}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -232,7 +297,17 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
         {/* Footer */}
         <div className="p-5 border-t border-white/10 bg-white/5 flex flex-col sm:flex-row justify-between items-center gap-3">
           <div className="text-xs text-muted">
-            Total de partidos a disputar: <strong className="text-white">{previewGroups.reduce((acc, g) => acc + (g.players.length * (g.players.length - 1)) / 2, 0)} partidos</strong>
+            Total de partidos a disputar:{' '}
+            <strong className="text-white">
+              {previewGroups.reduce((acc, g) => {
+                const isC4 = selectedFormat === 'cross_4' && g.players.length === 4;
+                return acc + (isC4 ? 4 : (g.players.length * (g.players.length - 1)) / 2);
+              }, 0)}{' '}
+              partidos
+            </strong>{' '}
+            {selectedFormat === 'cross_4' && (
+              <span className="text-amber-400 font-medium ml-1">(Modalidad Cruzada)</span>
+            )}
           </div>
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             <button
@@ -244,7 +319,7 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
             </button>
             <button
               type="button"
-              onClick={onConfirmFixture}
+              onClick={() => onConfirmFixture(selectedFormat)}
               disabled={generatingFixture || previewGroups.length === 0}
               className="px-6 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-1.5 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
             >

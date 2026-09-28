@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { Tournament, UserProfile, TournamentPlayer, Match, Booking, Institution } from '../types';
+import { Tournament, UserProfile, TournamentPlayer, Match, Booking, Institution, GroupStageFormat } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
@@ -1587,12 +1587,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         setPreviewGroups(generated);
     };
 
-    const handleConfirmCustomFixture = async () => {
+    const handleConfirmCustomFixture = async (format: GroupStageFormat = 'round_robin') => {
         if (!tournament || previewGroups.length === 0) return;
         setGeneratingFixture(true);
         try {
-            await api.tournaments.generateFixture(tournament.id, previewGroups);
-            addToast(`¡Fixture generado exitosamente con ${previewGroups.length} zonas!`, 'success');
+            await api.tournaments.generateFixture(tournament.id, previewGroups, format);
+            addToast(`¡Fixture generado con éxito (${previewGroups.length} zonas - ${format === 'cross_4' ? 'Modalidad Cruzada de 4' : 'Todos contra todos'})!`, 'success');
             setShowFixtureModal(false);
             loadTournament();
         } catch (e: any) {

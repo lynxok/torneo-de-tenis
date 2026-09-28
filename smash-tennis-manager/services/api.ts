@@ -1016,7 +1016,11 @@ export const api = {
         async getPointsDefense(previousTournamentId: string) {
             return []; // Needs historical data
         },
-        async generateFixture(tournamentId: string, customGroups?: { name: string; players: any[] }[]) {
+        async generateFixture(
+            tournamentId: string, 
+            customGroups?: { name: string; players: any[] }[],
+            groupStageFormat: 'round_robin' | 'cross_4' = 'round_robin'
+        ) {
             let groupsToUse: { name: string; players: any[] }[] = [];
 
             if (customGroups && customGroups.length > 0) {
@@ -1058,22 +1062,103 @@ export const api = {
                 const groupName = groupObj.name || `Grupo ${String.fromCharCode(65 + groupIdx)}`;
                 const group = groupObj.players;
 
-                for (let i = 0; i < group.length; i++) {
-                    for (let j = i + 1; j < group.length; j++) {
-                        const p1 = group[i];
-                        const p2 = group[j];
+                // Formato Cruzado para zonas de 4 jugadores (4 partidos en 2 fechas)
+                if (groupStageFormat === 'cross_4' && group.length === 4) {
+                    const p0 = group[0];
+                    const p1 = group[1];
+                    const p2 = group[2];
+                    const p3 = group[3];
 
-                        matchesToInsert.push({
-                            tournament_id: tournamentId,
-                            player1_id: p1.player_id || p1.id,
-                            player1_name: p1.player_name || p1.name,
-                            player2_id: p2.player_id || p2.id,
-                            player2_name: p2.player_name || p2.name,
-                            round: 'Fase de Grupos',
-                            group_number: groupIdx + 1,
-                            proposal_data: { group_name: groupName },
-                            scheduling_status: 'confirmed'
-                        });
+                    // Partido 1 (Fecha 1: Cruce A)
+                    matchesToInsert.push({
+                        tournament_id: tournamentId,
+                        player1_id: p0.player_id || p0.id,
+                        player1_name: p0.player_name || p0.name,
+                        player2_id: p1.player_id || p1.id,
+                        player2_name: p1.player_name || p1.name,
+                        round: 'Fase de Grupos',
+                        group_number: groupIdx + 1,
+                        proposal_data: {
+                            group_name: groupName,
+                            zone_match_number: 1,
+                            group_format: 'cross_4',
+                            stage_round: 'Fecha 1'
+                        },
+                        scheduling_status: 'confirmed'
+                    });
+
+                    // Partido 2 (Fecha 1: Cruce B)
+                    matchesToInsert.push({
+                        tournament_id: tournamentId,
+                        player1_id: p2.player_id || p2.id,
+                        player1_name: p2.player_name || p2.name,
+                        player2_id: p3.player_id || p3.id,
+                        player2_name: p3.player_name || p3.name,
+                        round: 'Fase de Grupos',
+                        group_number: groupIdx + 1,
+                        proposal_data: {
+                            group_name: groupName,
+                            zone_match_number: 2,
+                            group_format: 'cross_4',
+                            stage_round: 'Fecha 1'
+                        },
+                        scheduling_status: 'confirmed'
+                    });
+
+                    // Partido 3 (Fecha 2: Ganador P1 vs Perdedor P2)
+                    matchesToInsert.push({
+                        tournament_id: tournamentId,
+                        player1_id: null,
+                        player1_name: 'Ganador P1',
+                        player2_id: null,
+                        player2_name: 'Perdedor P2',
+                        round: 'Fase de Grupos',
+                        group_number: groupIdx + 1,
+                        proposal_data: {
+                            group_name: groupName,
+                            zone_match_number: 3,
+                            group_format: 'cross_4',
+                            stage_round: 'Fecha 2 (Cruces)'
+                        },
+                        scheduling_status: 'proposed'
+                    });
+
+                    // Partido 4 (Fecha 2: Ganador P2 vs Perdedor P1)
+                    matchesToInsert.push({
+                        tournament_id: tournamentId,
+                        player1_id: null,
+                        player1_name: 'Ganador P2',
+                        player2_id: null,
+                        player2_name: 'Perdedor P1',
+                        round: 'Fase de Grupos',
+                        group_number: groupIdx + 1,
+                        proposal_data: {
+                            group_name: groupName,
+                            zone_match_number: 4,
+                            group_format: 'cross_4',
+                            stage_round: 'Fecha 2 (Cruces)'
+                        },
+                        scheduling_status: 'proposed'
+                    });
+                } else {
+                    // Formato Clásico: Round Robin (todos contra todos)
+                    for (let i = 0; i < group.length; i++) {
+                        for (let j = i + 1; j < group.length; j++) {
+                            const p1 = group[i];
+                            const p2 = group[j];
+
+                            matchesToInsert.push({
+                                tournament_id: tournamentId,
+                                player1_id: p1.player_id || p1.id,
+                                player1_name: p1.player_name || p1.name,
+                                player2_id: p2.player_id || p2.id,
+                                player2_name: p2.player_name || p2.name,
+                                round: 'Fase de Grupos',
+                                group_number: groupIdx + 1,
+                                proposal_data: { group_name: groupName, group_format: 'round_robin' },
+                                scheduling_status: 'confirmed'
+                            });
+                        }
                     }
                 }
             });
@@ -1082,13 +1167,24 @@ export const api = {
             const { error: matchError } = await supabase.from('matches').insert(matchesToInsert);
             if (matchError) throw matchError;
 
-            // 6. Activate Tournament
-            const { error: updateError } = await supabase
-                .from('tournaments')
-                .update({ status: 'active' })
-                .eq('id', tournamentId);
-
-            if (updateError) throw updateError;
+            // 6. Activate Tournament & record rules
+            try {
+                const { data: tourData } = await supabase.from('tournaments').select('rules').eq('id', tournamentId).single();
+                const currentRules = tourData?.rules || {};
+                await supabase
+                    .from('tournaments')
+                    .update({ 
+                        status: 'active',
+                        rules: { ...currentRules, group_stage_format: groupStageFormat }
+                    })
+                    .eq('id', tournamentId);
+            } catch (tourUpdErr) {
+                console.warn("Could not persist group_stage_format in tournament rules:", tourUpdErr);
+                await supabase
+                    .from('tournaments')
+                    .update({ status: 'active' })
+                    .eq('id', tournamentId);
+            }
 
             return true;
         },
@@ -1732,6 +1828,8 @@ export const api = {
 
                     // Auto-advance winner in playoff bracket tree
                     await api.matches.advancePlayoffWinner(matchId, winnerId, isDoubles, winnerPartnerId);
+                    // Auto-advance group cross match if applicable
+                    await api.matches.advanceGroupCrossMatch(matchId, winnerId, isDoubles, winnerPartnerId);
                 } catch (rankingErr) {
                     console.log("Ranking point auto-update fallback (non-blocking):", rankingErr);
                 }
@@ -1754,6 +1852,7 @@ export const api = {
                     // Update next round with new winner if confirmed
                     if (scoreStatus === 'confirmed') {
                         await api.matches.advancePlayoffWinner(matchId, winnerId, isDoubles, winnerPartnerId);
+                        await api.matches.advanceGroupCrossMatch(matchId, winnerId, isDoubles, winnerPartnerId);
                     }
                 } catch (revertErr) {
                     console.warn("Revert old winner stats fallback:", revertErr);
@@ -1785,8 +1884,9 @@ export const api = {
                 }
             }
 
-            // Revert playoff bracket advancement
+            // Revert playoff bracket advancement & group cross match
             await api.matches.revertPlayoffWinner(matchId);
+            await api.matches.revertGroupCrossMatch(matchId);
 
             const resetPayload: any = {
                 score: null,
@@ -1889,6 +1989,8 @@ export const api = {
 
                     // Auto-advance winner in playoff bracket tree
                     await api.matches.advancePlayoffWinner(matchId, matchData.winner_id, isDoubles, matchData.winner_partner_id);
+                    // Auto-advance group cross match if applicable
+                    await api.matches.advanceGroupCrossMatch(matchId, matchData.winner_id, isDoubles, matchData.winner_partner_id);
                 } catch (e) {
                     console.warn("Error awarding points on confirmation:", e);
                 }
@@ -2072,6 +2174,192 @@ export const api = {
                 }
             } catch (revErr) {
                 console.warn("Playoff progression revert fallback:", revErr);
+            }
+        },
+
+        async advanceGroupCrossMatch(matchId: string, winnerId: string, isDoubles?: boolean, winnerPartnerId?: string) {
+            try {
+                const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+                if (!matchData || !matchData.tournament_id || matchData.round !== 'Fase de Grupos') return;
+
+                const pData = matchData.proposal_data;
+                if (pData?.group_format !== 'cross_4') return;
+
+                const zoneMatchNum = pData?.zone_match_number;
+                if (zoneMatchNum !== 1 && zoneMatchNum !== 2) return;
+
+                const tournamentId = matchData.tournament_id;
+                const groupNumber = matchData.group_number;
+
+                const isWinnerP1 = winnerId === matchData.player1_id;
+                const winnerName = isWinnerP1 ? matchData.player1_name : matchData.player2_name;
+                const winnerPartnerName = isDoubles ? (isWinnerP1 ? matchData.player1_partner_name : matchData.player2_partner_name) : null;
+                const winnerTeamName = isDoubles ? (isWinnerP1 ? matchData.team1_name : matchData.team2_name) : winnerName;
+
+                const loserId = isWinnerP1 ? matchData.player2_id : matchData.player1_id;
+                const loserName = isWinnerP1 ? matchData.player2_name : matchData.player1_name;
+                const loserPartnerId = isDoubles ? (isWinnerP1 ? matchData.player2_partner_id : matchData.player1_partner_id) : null;
+                const loserPartnerName = isDoubles ? (isWinnerP1 ? matchData.player2_partner_name : matchData.player1_partner_name) : null;
+                const loserTeamName = isDoubles ? (isWinnerP1 ? matchData.team2_name : matchData.team1_name) : loserName;
+
+                // Buscar los partidos 3 y 4 de esta misma zona
+                const { data: groupMatches } = await supabase
+                    .from('matches')
+                    .select('*')
+                    .eq('tournament_id', tournamentId)
+                    .eq('round', 'Fase de Grupos')
+                    .eq('group_number', groupNumber);
+
+                if (!groupMatches || groupMatches.length === 0) return;
+
+                const matchP3 = groupMatches.find(m => m.proposal_data?.zone_match_number === 3);
+                const matchP4 = groupMatches.find(m => m.proposal_data?.zone_match_number === 4);
+
+                if (zoneMatchNum === 1) {
+                    // Ganador de P1 va a Partido 3 como Player 1
+                    if (matchP3) {
+                        const payloadP3: any = {
+                            player1_id: winnerId,
+                            player1_name: winnerName
+                        };
+                        if (isDoubles) {
+                            payloadP3.player1_partner_id = winnerPartnerId || null;
+                            payloadP3.player1_partner_name = winnerPartnerName || null;
+                            payloadP3.team1_name = winnerTeamName || null;
+                        }
+                        if (matchP3.player2_id) {
+                            payloadP3.scheduling_status = 'confirmed';
+                        }
+                        await supabase.from('matches').update(payloadP3).eq('id', matchP3.id);
+                    }
+
+                    // Perdedor de P1 va a Partido 4 como Player 2
+                    if (matchP4) {
+                        const payloadP4: any = {
+                            player2_id: loserId,
+                            player2_name: loserName
+                        };
+                        if (isDoubles) {
+                            payloadP4.player2_partner_id = loserPartnerId || null;
+                            payloadP4.player2_partner_name = loserPartnerName || null;
+                            payloadP4.team2_name = loserTeamName || null;
+                        }
+                        if (matchP4.player1_id) {
+                            payloadP4.scheduling_status = 'confirmed';
+                        }
+                        await supabase.from('matches').update(payloadP4).eq('id', matchP4.id);
+                    }
+                } else if (zoneMatchNum === 2) {
+                    // Perdedor de P2 va a Partido 3 como Player 2
+                    if (matchP3) {
+                        const payloadP3: any = {
+                            player2_id: loserId,
+                            player2_name: loserName
+                        };
+                        if (isDoubles) {
+                            payloadP3.player2_partner_id = loserPartnerId || null;
+                            payloadP3.player2_partner_name = loserPartnerName || null;
+                            payloadP3.team2_name = loserTeamName || null;
+                        }
+                        if (matchP3.player1_id) {
+                            payloadP3.scheduling_status = 'confirmed';
+                        }
+                        await supabase.from('matches').update(payloadP3).eq('id', matchP3.id);
+                    }
+
+                    // Ganador de P2 va a Partido 4 como Player 1
+                    if (matchP4) {
+                        const payloadP4: any = {
+                            player1_id: winnerId,
+                            player1_name: winnerName
+                        };
+                        if (isDoubles) {
+                            payloadP4.player1_partner_id = winnerPartnerId || null;
+                            payloadP4.player1_partner_name = winnerPartnerName || null;
+                            payloadP4.team1_name = winnerTeamName || null;
+                        }
+                        if (matchP4.player2_id) {
+                            payloadP4.scheduling_status = 'confirmed';
+                        }
+                        await supabase.from('matches').update(payloadP4).eq('id', matchP4.id);
+                    }
+                }
+            } catch (crossErr) {
+                console.warn("Group cross progression auto-advance fallback:", crossErr);
+            }
+        },
+
+        async revertGroupCrossMatch(matchId: string) {
+            try {
+                const { data: matchData } = await supabase.from('matches').select('*').eq('id', matchId).single();
+                if (!matchData || !matchData.tournament_id || matchData.round !== 'Fase de Grupos') return;
+
+                const pData = matchData.proposal_data;
+                if (pData?.group_format !== 'cross_4') return;
+
+                const zoneMatchNum = pData?.zone_match_number;
+                if (zoneMatchNum !== 1 && zoneMatchNum !== 2) return;
+
+                const tournamentId = matchData.tournament_id;
+                const groupNumber = matchData.group_number;
+
+                const { data: groupMatches } = await supabase
+                    .from('matches')
+                    .select('*')
+                    .eq('tournament_id', tournamentId)
+                    .eq('round', 'Fase de Grupos')
+                    .eq('group_number', groupNumber);
+
+                if (!groupMatches || groupMatches.length === 0) return;
+
+                const matchP3 = groupMatches.find(m => m.proposal_data?.zone_match_number === 3);
+                const matchP4 = groupMatches.find(m => m.proposal_data?.zone_match_number === 4);
+
+                if (zoneMatchNum === 1) {
+                    if (matchP3 && !matchP3.is_played) {
+                        await supabase.from('matches').update({
+                            player1_id: null,
+                            player1_name: 'Ganador P1',
+                            player1_partner_id: null,
+                            player1_partner_name: null,
+                            team1_name: null,
+                            scheduling_status: 'proposed'
+                        }).eq('id', matchP3.id);
+                    }
+                    if (matchP4 && !matchP4.is_played) {
+                        await supabase.from('matches').update({
+                            player2_id: null,
+                            player2_name: 'Perdedor P1',
+                            player2_partner_id: null,
+                            player2_partner_name: null,
+                            team2_name: null,
+                            scheduling_status: 'proposed'
+                        }).eq('id', matchP4.id);
+                    }
+                } else if (zoneMatchNum === 2) {
+                    if (matchP3 && !matchP3.is_played) {
+                        await supabase.from('matches').update({
+                            player2_id: null,
+                            player2_name: 'Perdedor P2',
+                            player2_partner_id: null,
+                            player2_partner_name: null,
+                            team2_name: null,
+                            scheduling_status: 'proposed'
+                        }).eq('id', matchP3.id);
+                    }
+                    if (matchP4 && !matchP4.is_played) {
+                        await supabase.from('matches').update({
+                            player1_id: null,
+                            player1_name: 'Ganador P2',
+                            player1_partner_id: null,
+                            player1_partner_name: null,
+                            team1_name: null,
+                            scheduling_status: 'proposed'
+                        }).eq('id', matchP4.id);
+                    }
+                }
+            } catch (revErr) {
+                console.warn("Group cross revert fallback:", revErr);
             }
         },
 

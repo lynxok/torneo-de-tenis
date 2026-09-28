@@ -237,10 +237,12 @@ export interface ClubSponsor {
 }
 
 export type TournamentCompetitionFormat = 'tabla_general_byes' | 'zonas_playoffs' | 'eliminacion_directa';
+export type GroupStageFormat = 'round_robin' | 'cross_4';
 export type TournamentQualifiersMode = 'all' | 'top_2_per_group' | 'top_n';
 
 export interface TournamentRules {
   competition_format?: TournamentCompetitionFormat;
+  group_stage_format?: GroupStageFormat;
   min_guaranteed_matches?: number; // e.g. 1, 2, 3, 4
   allow_byes?: boolean;
   qualifiers_mode?: TournamentQualifiersMode;

@@ -13,7 +13,8 @@ import {
     MapPin, 
     MessageCircle, 
     Check, 
-    Shield 
+    Shield,
+    Zap
 } from 'lucide-react';
 import { Tournament, Match, User } from '../../types';
 import { GroupZone, UnifiedStandingRow } from '../../utils/bracketHelper';
@@ -324,11 +325,14 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                         {zone.matches.map(m => {
                                             const isUserInMatch = m.player1_id === user.id || m.player2_id === user.id || m.player1_partner_id === user.id || m.player2_partner_id === user.id;
                                             const isMatchFinishedAndConfirmed = !!(m.is_played && m.score_status === 'confirmed');
-                                            const canEditScore = isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed);
+                                            const isMatchReady = Boolean(m.player1_id && m.player2_id);
+                                            const canEditScore = isMatchReady && (isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed));
                                             const formattedScore = formatMatchScore(m.score);
                                             const isDoubles = tournament.type === 'doubles' || !!m.player1_partner_id;
-                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || 'A definir';
-                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || 'A definir';
+                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || (m.proposal_data?.group_format === 'cross_4' && m.proposal_data?.zone_match_number === 3 ? 'Ganador P1' : m.proposal_data?.zone_match_number === 4 ? 'Ganador P2' : 'A definir');
+                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || (m.proposal_data?.group_format === 'cross_4' && m.proposal_data?.zone_match_number === 3 ? 'Perdedor P2' : m.proposal_data?.zone_match_number === 4 ? 'Perdedor P1' : 'A definir');
+                                            const isP1Placeholder = !m.player1_id;
+                                            const isP2Placeholder = !m.player2_id;
                                             
                                             // Accurate team separation for Singles and Doubles
                                             const isSubmitterTeam1 = m.score_submitted_by === m.player1_id || (!!m.player1_partner_id && m.score_submitted_by === m.player1_partner_id);
@@ -358,13 +362,25 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                                             : 'border-white/5'
                                                     }`}
                                                 >
+                                                    {m.proposal_data?.group_format === 'cross_4' && (
+                                                        <div className="flex items-center justify-between pb-1.5 border-b border-white/5 text-[10px]">
+                                                            <span className="font-bold text-amber-400 flex items-center gap-1">
+                                                                <Zap size={11} /> {m.proposal_data.stage_round || (m.proposal_data.zone_match_number <= 2 ? 'Fecha 1 (Inicial)' : 'Fecha 2 (Cruce)')}
+                                                            </span>
+                                                            {m.proposal_data.zone_match_number && (
+                                                                <span className="text-slate-400 font-mono text-[9px] bg-white/5 px-1.5 py-0.5 rounded">
+                                                                    Partido #{m.proposal_data.zone_match_number}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                    )}
                                                     <div className="flex items-center justify-between gap-3">
                                                         <div className="flex-1 min-w-0 space-y-1">
-                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : isP1Placeholder ? 'text-slate-400 italic' : 'text-slate-200'}`}>
                                                                 <span className="truncate">{p1DisplayName}</span>
                                                                 {m.winner_id === m.player1_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
                                                             </div>
-                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : 'text-slate-200'}`}>
+                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : isP2Placeholder ? 'text-slate-400 italic' : 'text-slate-200'}`}>
                                                                 <span className="truncate">{p2DisplayName}</span>
                                                                 {m.winner_id === m.player2_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
                                                             </div>
@@ -402,6 +418,10 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                                                         </span>
                                                                     )}
                                                                 </div>
+                                                            ) : !isMatchReady ? (
+                                                                <span className="px-2 py-0.5 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded text-[10px] font-semibold flex items-center gap-1">
+                                                                    <Clock size={10} /> Aguardando F1
+                                                                </span>
                                                             ) : (
                                                                 <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded text-[10px] font-semibold">
                                                                     Por Jugar
@@ -409,7 +429,7 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                                             )}
 
                                                             {/* Schedule Button for Admin or Assigned Players (Solo si el partido NO fue jugado aún) */}
-                                                            {(isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
+                                                            {isMatchReady && (isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
                                                                 <button
                                                                     onClick={() => openScheduleModal(m)}
                                                                     className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
