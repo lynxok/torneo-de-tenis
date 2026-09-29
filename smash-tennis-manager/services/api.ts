@@ -659,7 +659,7 @@ export const api = {
             if (allProfileIds.length > 0) {
                 const { data: profiles } = await supabase
                     .from('profiles')
-                    .select('id, name, lastname, category, avatar_url, profile_picture_url')
+                    .select('id, name, lastname, category, avatar_url, profile_picture_url, dni')
                     .in('id', allProfileIds);
                 (profiles || []).forEach(p => profileMap.set(p.id, p));
             }
@@ -684,6 +684,7 @@ export const api = {
                     player_name: formattedName,
                     name: formattedName,
                     category,
+                    dni: p.dni || prof?.dni,
                     partner_name: partnerFormattedName,
                     team_name: p.team_name || (partnerFormattedName ? `${formattedName} / ${partnerFormattedName}` : formattedName)
                 };
@@ -1694,7 +1695,7 @@ export const api = {
 
             const profileMap = new Map();
             if (allProfileIds.length > 0) {
-                const { data: profiles } = await supabase.from('profiles').select('id, name, lastname, category').in('id', allProfileIds);
+                const { data: profiles } = await supabase.from('profiles').select('id, name, lastname, category, dni').in('id', allProfileIds);
                 (profiles || []).forEach(p => profileMap.set(p.id, p));
             }
 
@@ -1716,6 +1717,7 @@ export const api = {
                     ...p,
                     player_name: formattedName,
                     category: prof?.category || p.category,
+                    dni: p.dni || prof?.dni,
                     partner_name: partnerFormattedName,
                     team_name: p.team_name || (partnerFormattedName ? `${formattedName} / ${partnerFormattedName}` : formattedName)
                 };
