@@ -406,32 +406,32 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                                         {/* Top Row: Players / Contenders & Score Badge */}
                                                         <div className="flex items-center justify-between gap-2">
                                                             <div className="flex-1 min-w-0 space-y-1.5">
-                                                                <div className={`flex items-center justify-between gap-2 p-1 px-2 rounded-lg transition-colors ${
+                                                                <div className={`flex items-center justify-between gap-2 p-1.5 px-2.5 rounded-lg transition-colors ${
                                                                     m.winner_id === m.player1_id 
-                                                                        ? 'bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30' 
+                                                                        ? 'bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/40 shadow-sm' 
                                                                         : isP1Placeholder 
-                                                                            ? 'text-slate-400 italic bg-white/[0.02]' 
-                                                                            : 'text-slate-200 bg-white/[0.03]'
+                                                                            ? 'text-slate-400 italic bg-white/[0.03]' 
+                                                                            : 'text-white bg-white/[0.06] border border-white/5'
                                                                 }`}>
-                                                                    <span className="truncate text-xs font-semibold">{p1DisplayName}</span>
+                                                                    <span className="truncate text-xs font-bold text-white tracking-wide">{p1DisplayName}</span>
                                                                     {m.winner_id === m.player1_id && (
-                                                                        <span className="text-[10px] text-emerald-400 font-bold shrink-0 flex items-center gap-0.5">
-                                                                            <Check size={11} className="stroke-[3]" /> Ganó
+                                                                        <span className="text-[10px] text-emerald-400 font-black shrink-0 flex items-center gap-0.5">
+                                                                            <Check size={12} className="stroke-[3]" /> Ganó
                                                                         </span>
                                                                     )}
                                                                 </div>
 
-                                                                <div className={`flex items-center justify-between gap-2 p-1 px-2 rounded-lg transition-colors ${
+                                                                <div className={`flex items-center justify-between gap-2 p-1.5 px-2.5 rounded-lg transition-colors ${
                                                                     m.winner_id === m.player2_id 
-                                                                        ? 'bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30' 
+                                                                        ? 'bg-emerald-500/20 text-emerald-300 font-extrabold border border-emerald-500/40 shadow-sm' 
                                                                         : isP2Placeholder 
-                                                                            ? 'text-slate-400 italic bg-white/[0.02]' 
-                                                                            : 'text-slate-200 bg-white/[0.03]'
+                                                                            ? 'text-slate-400 italic bg-white/[0.03]' 
+                                                                            : 'text-white bg-white/[0.06] border border-white/5'
                                                                 }`}>
-                                                                    <span className="truncate text-xs font-semibold">{p2DisplayName}</span>
+                                                                    <span className="truncate text-xs font-bold text-white tracking-wide">{p2DisplayName}</span>
                                                                     {m.winner_id === m.player2_id && (
-                                                                        <span className="text-[10px] text-emerald-400 font-bold shrink-0 flex items-center gap-0.5">
-                                                                            <Check size={11} className="stroke-[3]" /> Ganó
+                                                                        <span className="text-[10px] text-emerald-400 font-black shrink-0 flex items-center gap-0.5">
+                                                                            <Check size={12} className="stroke-[3]" /> Ganó
                                                                         </span>
                                                                     )}
                                                                 </div>
