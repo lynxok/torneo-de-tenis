@@ -374,73 +374,103 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                                             )}
                                                         </div>
                                                     )}
-                                                    <div className="flex items-center justify-between gap-3">
-                                                        <div className="flex-1 min-w-0 space-y-1">
-                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player1_id ? 'text-green-400 font-bold' : isP1Placeholder ? 'text-slate-400 italic' : 'text-slate-200'}`}>
-                                                                <span className="truncate">{p1DisplayName}</span>
-                                                                {m.winner_id === m.player1_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
+                                                    {/* Card Content */}
+                                                    <div className="flex flex-col gap-2.5">
+                                                        {/* Top Row: Players / Contenders & Score Badge */}
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <div className="flex-1 min-w-0 space-y-1.5">
+                                                                <div className={`flex items-center justify-between gap-2 p-1 px-2 rounded-lg transition-colors ${
+                                                                    m.winner_id === m.player1_id 
+                                                                        ? 'bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30' 
+                                                                        : isP1Placeholder 
+                                                                            ? 'text-slate-400 italic bg-white/[0.02]' 
+                                                                            : 'text-slate-200 bg-white/[0.03]'
+                                                                }`}>
+                                                                    <span className="truncate text-xs font-semibold">{p1DisplayName}</span>
+                                                                    {m.winner_id === m.player1_id && (
+                                                                        <span className="text-[10px] text-emerald-400 font-bold shrink-0 flex items-center gap-0.5">
+                                                                            <Check size={11} className="stroke-[3]" /> Ganó
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+
+                                                                <div className={`flex items-center justify-between gap-2 p-1 px-2 rounded-lg transition-colors ${
+                                                                    m.winner_id === m.player2_id 
+                                                                        ? 'bg-emerald-500/15 text-emerald-300 font-bold border border-emerald-500/30' 
+                                                                        : isP2Placeholder 
+                                                                            ? 'text-slate-400 italic bg-white/[0.02]' 
+                                                                            : 'text-slate-200 bg-white/[0.03]'
+                                                                }`}>
+                                                                    <span className="truncate text-xs font-semibold">{p2DisplayName}</span>
+                                                                    {m.winner_id === m.player2_id && (
+                                                                        <span className="text-[10px] text-emerald-400 font-bold shrink-0 flex items-center gap-0.5">
+                                                                            <Check size={11} className="stroke-[3]" /> Ganó
+                                                                        </span>
+                                                                    )}
+                                                                </div>
                                                             </div>
-                                                            <div className={`flex justify-between items-center ${m.winner_id === m.player2_id ? 'text-green-400 font-bold' : isP2Placeholder ? 'text-slate-400 italic' : 'text-slate-200'}`}>
-                                                                <span className="truncate">{p2DisplayName}</span>
-                                                                {m.winner_id === m.player2_id && <span className="text-[10px] text-green-400 ml-2">Ganador ✓</span>}
+
+                                                            {/* Score / State Badge */}
+                                                            <div className="shrink-0 flex flex-col items-end justify-center min-w-[72px]">
+                                                                {formattedScore ? (
+                                                                    <div className="flex flex-col items-end gap-1">
+                                                                        <span className="px-2.5 py-1 bg-black/60 border border-primary/30 rounded-lg font-mono font-black text-primary text-xs shadow-inner">
+                                                                            {formattedScore}
+                                                                        </span>
+                                                                        {m.score_status === 'pending_confirmation' && (
+                                                                            <span className="text-[9px] text-amber-400 font-bold flex items-center gap-0.5" title={`Auto-confirmación en ${hoursRemaining} hs`}>
+                                                                                <Clock size={10} /> {hoursRemaining}h
+                                                                            </span>
+                                                                        )}
+                                                                        {m.score_status === 'disputed' && (
+                                                                            <span className="text-[9px] text-red-400 font-bold flex items-center gap-0.5">
+                                                                                <AlertTriangle size={10} /> Disputa
+                                                                            </span>
+                                                                        )}
+                                                                        {m.score_status === 'confirmed' && (
+                                                                            <span className="text-[9px] text-green-400 font-bold flex items-center gap-0.5">
+                                                                                <CheckCircle2 size={10} /> Verificado
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
+                                                                ) : !isMatchReady ? (
+                                                                    <span className="px-2 py-1 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded-lg text-[10px] font-semibold flex items-center gap-1 text-center justify-center">
+                                                                        <Clock size={10} /> Esperando F1
+                                                                    </span>
+                                                                ) : (
+                                                                    <span className="px-2.5 py-1 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded-lg text-[10px] font-bold text-center">
+                                                                        Por Jugar
+                                                                    </span>
+                                                                )}
                                                             </div>
                                                         </div>
-                                                        <div className="flex items-center gap-1.5 shrink-0">
+
+                                                        {/* Action Buttons Row */}
+                                                        <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-white/5 flex-wrap">
                                                             {/* H2H Button */}
                                                             {m.player1_id && m.player2_id && (
                                                                 <button
                                                                     onClick={() => setH2hPlayers({ p1Id: m.player1_id, p2Id: m.player2_id })}
-                                                                    className="p-1.5 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary transition-colors text-[10px] font-bold flex items-center gap-1"
+                                                                    className="px-2 py-1 rounded-lg bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border border-white/5 transition-colors text-[11px] font-bold flex items-center gap-1"
                                                                     title="Ver Historial Cara a Cara"
                                                                 >
                                                                     <Swords size={12} /> H2H
                                                                 </button>
                                                             )}
 
-                                                            {formattedScore ? (
-                                                                <div className="flex flex-col items-end gap-1">
-                                                                    <span className="px-2 py-1 bg-black/40 border border-white/10 rounded-lg font-mono font-bold text-primary text-xs">
-                                                                        {formattedScore}
-                                                                    </span>
-                                                                    {m.score_status === 'pending_confirmation' && (
-                                                                        <span className="text-[9px] text-amber-400 font-bold flex items-center gap-0.5" title={`Auto-confirmación en ${hoursRemaining} hs`}>
-                                                                            <Clock size={10} /> Pendiente ({hoursRemaining}h)
-                                                                        </span>
-                                                                    )}
-                                                                    {m.score_status === 'disputed' && (
-                                                                        <span className="text-[9px] text-red-400 font-bold flex items-center gap-0.5">
-                                                                            <AlertTriangle size={10} /> En Disputa
-                                                                        </span>
-                                                                    )}
-                                                                    {m.score_status === 'confirmed' && (
-                                                                        <span className="text-[9px] text-green-400 font-bold flex items-center gap-0.5">
-                                                                            <CheckCircle2 size={10} /> Verificado
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            ) : !isMatchReady ? (
-                                                                <span className="px-2 py-0.5 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded text-[10px] font-semibold flex items-center gap-1">
-                                                                    <Clock size={10} /> Aguardando F1
-                                                                </span>
-                                                            ) : (
-                                                                <span className="px-2 py-0.5 bg-yellow-500/10 text-yellow-400 border border-yellow-500/20 rounded text-[10px] font-semibold">
-                                                                    Por Jugar
-                                                                </span>
-                                                            )}
-
-                                                            {/* Schedule Button for Admin or Assigned Players (Solo si el partido NO fue jugado aún) */}
+                                                            {/* Schedule Button for Admin or Assigned Players */}
                                                             {isMatchReady && (isClubAdmin || isUserInMatch) && !m.is_played && !m.winner_id && (
                                                                 <button
                                                                     onClick={() => openScheduleModal(m)}
-                                                                    className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                    className={`px-2 py-1 rounded-lg border transition-all flex items-center gap-1 text-[11px] font-bold ${
                                                                         scheduledInfo
                                                                             ? 'bg-blue-500/20 text-blue-300 border-blue-500/30 hover:bg-blue-500/30'
-                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                            : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/5'
                                                                     }`}
                                                                     title={scheduledInfo ? `Modificar horario (${scheduledInfo.fullLabel})` : "Programar fecha, horario y cancha"}
                                                                 >
                                                                     <Calendar size={12} className={scheduledInfo ? "text-blue-400" : ""} />
-                                                                    <span className="hidden sm:inline">{scheduledInfo ? "Horario" : "Programar"}</span>
+                                                                    <span>{scheduledInfo ? "Horario" : "Programar"}</span>
                                                                 </button>
                                                             )}
 
@@ -448,7 +478,7 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                                                 <>
                                                                     <button
                                                                         onClick={() => openQuickScorerModal(m)}
-                                                                        className="p-1.5 px-2 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 text-[10px] font-black shadow-sm active:scale-95"
+                                                                        className="px-2.5 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-all flex items-center gap-1 text-[11px] font-black shadow-sm active:scale-95"
                                                                         title="Carga Rápida Táctil (Quick-Scorer)"
                                                                     >
                                                                         <Sparkles size={12} className="text-emerald-400" />
@@ -456,15 +486,15 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                                                     </button>
                                                                     <button
                                                                         onClick={() => openScoreModal(m)}
-                                                                        className={`p-1.5 rounded-lg border transition-all flex items-center gap-1 text-[10px] font-bold ${
+                                                                        className={`px-2 py-1 rounded-lg border transition-all flex items-center gap-1 text-[11px] font-bold ${
                                                                             !m.is_played
                                                                                 ? 'bg-primary/20 hover:bg-primary/30 text-primary border-primary/30 shadow-sm'
-                                                                                : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/10'
+                                                                                : 'bg-white/5 hover:bg-primary/20 text-muted hover:text-primary border-white/5'
                                                                         }`}
                                                                         title={m.is_played ? "Modificar resultado detallado" : "Cargar resultado tradicional"}
                                                                     >
                                                                         <Edit3 size={12} className={!m.is_played ? "text-primary" : ""} />
-                                                                        <span className="hidden sm:inline">{m.is_played ? "Editar" : "Detallado"}</span>
+                                                                        <span>{m.is_played ? "Editar" : "Detallado"}</span>
                                                                     </button>
                                                                 </>
                                                             )}
