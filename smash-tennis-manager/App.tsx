@@ -133,6 +133,21 @@ const AppContent = () => {
   const [activeTutorialId, setActiveTutorialId] = useState<string | null>(null);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
 
+  // Derived: find the active tutorial definition from the TUTORIALS registry
+  const activeTutorialDef = activeTutorialId
+    ? TUTORIALS.find((t: any) => t.id === activeTutorialId) ?? null
+    : null;
+
+  const handleStartTutorial = (tutorialId: string) => {
+    setActiveTutorialId(tutorialId);
+    setIsTutorialActive(true);
+  };
+
+  const handleTutorialComplete = () => {
+    setIsTutorialActive(false);
+    setActiveTutorialId(null);
+  };
+
   // DERIVED STATE: Effective User (Real + Simulation)
   const effectiveUser = userProfile ? {
     ...userProfile,
