@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smash-tennis-v1.7.9';
+const CACHE_NAME = 'smash-tennis-v1.7.10';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -90,8 +90,9 @@ self.addEventListener('fetch', (event) => {
           }
           return networkResponse;
         })
-        .catch(() => {});
+        .catch(() => new Response('', { status: 408, statusText: 'Network unavailable' }));
 
+      // Always return a valid Response — never undefined
       return cachedResponse || fetchPromise;
     })
   );
