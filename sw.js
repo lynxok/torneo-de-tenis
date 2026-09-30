@@ -1,4 +1,4 @@
-const CACHE_NAME = 'smash-tennis-v1.7.7';
+const CACHE_NAME = 'smash-tennis-v1.7.8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -80,31 +80,19 @@ self.addEventListener('fetch', (event) => {
   // Other assets (images, css, js bundles) -> Cache-first with background revalidation
   event.respondWith(
     caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => {
-                cache.put(event.request, networkResponse.clone());
-              });
-            }
-          })
-          .catch(() => {});
-        return cachedResponse;
-      }
-
-      return fetch(event.request).then((networkResponse) => {
-        if (!networkResponse || networkResponse.status !== 200) {
+      // If found in cache, return it but also fetch in background
+      const fetchPromise = fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, networkResponse.clone());
+            });
+          }
           return networkResponse;
-        }
+        })
+        .catch(() => {});
 
-        const responseToCache = networkResponse.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return networkResponse;
-      });
+      return cachedResponse || fetchPromise;
     })
   );
 });

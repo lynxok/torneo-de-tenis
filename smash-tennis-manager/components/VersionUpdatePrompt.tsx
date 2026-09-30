@@ -61,10 +61,15 @@ export const VersionUpdatePrompt: React.FC = () => {
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // 4. Listen for Service Worker updatefound event
+    // 4. Listen for Service Worker updatefound / controllerchange event
     if ('serviceWorker' in navigator) {
+      let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
-        console.log('🎾 [Smash PWA] Service Worker actualizado.');
+        if (!refreshing) {
+          refreshing = true;
+          console.log('🎾 [Smash PWA] Service Worker actualizado. Recargando automáticamente...');
+          window.location.reload();
+        }
       });
     }
 
