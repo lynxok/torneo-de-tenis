@@ -25,6 +25,7 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
   unreadCount = 0
 }) => {
   const isPlayer = role === 'player';
+  const isProfessor = role === 'professor';
 
   const navItems = [
     {
@@ -38,9 +39,9 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({
       icon: Calendar
     },
     {
-      id: 'tournaments',
-      label: 'Torneos',
-      icon: Trophy
+      id: isProfessor ? 'coach-dashboard' : 'tournaments',
+      label: isProfessor ? 'Clases' : 'Torneos',
+      icon: isProfessor ? Trophy : Trophy
     },
     {
       id: isPlayer ? 'open-matches' : 'shop',

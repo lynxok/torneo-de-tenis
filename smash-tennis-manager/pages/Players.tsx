@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { getCategoryRank, NUMERIC_CATEGORIES, getEquivalentCategory } from '../utils/categories';
 import { formatPlayerName } from '../utils/formatters';
+import { isSystemOrAdminAccount } from '../utils/ranking';
 import { formatGender, calculateAge, getAgeCategoryLabel, getGenderBadgeClass, isJuniorPlayer } from '../utils/demographics';
 import { HeadToHeadModal } from '../components/HeadToHeadModal';
 import { MatchmakingBoard } from '../components/MatchmakingBoard';
@@ -126,6 +127,9 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
   const filteredPlayers = useMemo(() => {
     // 1. Base Filter (by search name, category dropdown, institution dropdown, gender and age)
     let result = players.filter(p => {
+      // Always exclude system/admin accounts from the public directory
+      if (isSystemOrAdminAccount(p)) return false;
+
       // If viewer is player, exclude admins/coordinators/professors
       if (user.role === 'player' && (p.role === 'admin' || p.role === 'superadmin' || p.role === 'coordinator' || p.role === 'professor')) {
         return false;
@@ -327,7 +331,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                   className="py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/10 flex items-center justify-center gap-1.5"
                                   title="Ver historial cara a cara"
                               >
-                                  <Swords size={13} className="text-primary" /> H2H
+                                  <Swords size={13} className="text-primary" /> Cara a cara
                               </button>
                               <button 
                                   onClick={(e) => handleContact(e, player)}
@@ -451,7 +455,92 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                 {/* LIST VIEW */}
                 {viewMode === 'list' && (
                     <div className="bg-card/50 backdrop-blur border border-white/10 rounded-2xl overflow-hidden">
-                        <div className="overflow-x-auto">
+                        {/* Mobile Cards (< 768px) */}
+                        <div className="p-3 space-y-3 md:hidden">
+                            {filteredPlayers.map(player => (
+                                <div
+                                    key={player.id}
+                                    onClick={() => handleOpenProfile(player)}
+                                    className="bg-card/80 border border-white/10 rounded-2xl p-4 space-y-3 cursor-pointer hover:border-primary/40 transition-all shadow-md"
+                                >
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex items-center gap-3">
+                                            <UserAvatar
+                                                user={player}
+                                                size="md"
+                                                shape="circle"
+                                                isCurrentUser={player.id === user.id}
+                                            />
+                                            <div>
+                                                <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                                                    <span>{formatPlayerName(player.name, player.lastname)}</span>
+                                                    {(player.tournaments_won || 0) > 0 && <span title={`Campeón: ${player.tournaments_won} títulos`} className="text-xs">👑</span>}
+                                                    {(player.matches_won || 0) >= 5 && <span title={`${player.matches_won} victorias`} className="text-xs">🔥</span>}
+                                                    {player.id === user.id && <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase font-bold">Yo</span>}
+                                                </div>
+                                                <div className="text-xs text-muted flex items-center gap-1.5 mt-0.5">
+                                                    <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(player.gender)}`}>
+                                                        {formatGender(player.gender)}
+                                                    </span>
+                                                    <span>• {getAgeCategoryLabel(player.birth_date)}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <span className={`inline-block px-2.5 py-1 rounded-xl text-xs font-bold border shrink-0 ${player.category ? 'bg-white/5 text-white border-white/10' : 'text-muted border-transparent'}`}>
+                                            {player.category ? `${player.category}` : 'S/C'}
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs text-slate-300">
+                                        <div className="flex items-center gap-1.5 truncate max-w-[180px]">
+                                            <Building size={13} className="text-muted shrink-0" />
+                                            <span className="truncate">{player.institution || 'Sin club'}</span>
+                                        </div>
+                                        <span className="font-bold text-white">
+                                            {player.matches_won || 0} <span className="text-muted font-normal">Victorias</span>
+                                        </span>
+                                    </div>
+
+                                    <div className="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+                                        {player.id !== user.id && (
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setH2hTargetPlayer(player);
+                                                }}
+                                                className="min-h-[44px] min-w-[44px] px-3 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs flex items-center justify-center gap-1 transition-all"
+                                                title="Historial Cara a cara"
+                                            >
+                                                <Swords size={16} className="text-primary" />
+                                                <span className="text-xs">Cara a cara</span>
+                                            </button>
+                                        )}
+                                        {player.id !== user.id && (
+                                            !player.phone || player.show_whatsapp === false ? (
+                                                <button
+                                                    onClick={(e) => handleContact(e, player)}
+                                                    className="min-h-[44px] min-w-[44px] px-3 rounded-xl bg-white/5 text-slate-500 border border-white/5 text-xs flex items-center justify-center gap-1"
+                                                    title="Sin WhatsApp"
+                                                >
+                                                    <Lock size={14} />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => handleContact(e, player)}
+                                                    className="min-h-[44px] min-w-[44px] px-3.5 rounded-xl bg-primary text-dark font-bold hover:bg-primary-hover transition-all flex items-center justify-center gap-1 text-xs"
+                                                    title="Desafiar"
+                                                >
+                                                    <MessageCircle size={15} /> Desafiar
+                                                </button>
+                                            )
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Desktop Table (>= 768px) */}
+                        <div className="overflow-x-auto hidden md:block">
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-white/5 border-b border-white/10 text-muted text-xs uppercase tracking-wider">
@@ -523,7 +612,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                                                 setH2hTargetPlayer(player);
                                                             }}
                                                             className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 text-xs flex items-center gap-1 transition-all"
-                                                            title="Ver Historial Cara a Cara (H2H)"
+                                                            title="Ver Historial Cara a cara (H2H)"
                                                         >
                                                             <Swords size={15} className="text-primary" />
                                                         </button>
@@ -612,7 +701,7 @@ export const Players: React.FC<PlayersProps> = ({ user, onNavigate }) => {
                                                 className="py-2 px-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-bold transition-all border border-white/10 flex items-center justify-center gap-1.5"
                                                 title="Historial Cara a Cara"
                                             >
-                                                <Swords size={13} className="text-primary" /> H2H
+                                                <Swords size={13} className="text-primary" /> Cara a cara
                                             </button>
                                             {!isEligible ? (
                                                 <button 

@@ -142,21 +142,21 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </div>
 
             {/* TOP NAVBAR */}
-            <header className="sticky top-0 z-50 backdrop-blur-md bg-[#07090e]/85 border-b border-white/10">
-                <div className="max-w-6xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
+            <header className="sticky top-0 z-50 backdrop-blur-md bg-[#07090e]/90 border-b border-white/10">
+                <div className="max-w-6xl mx-auto px-3 sm:px-6 h-16 sm:h-20 flex items-center justify-between gap-2">
                     {/* Logo */}
-                    <div className="flex items-center gap-3 cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                        <img src="/Smash.png" alt="Smash Tenis" className="h-10 w-auto object-contain" />
-                        <div className="flex items-center gap-2">
-                            <span className="font-bold text-white tracking-wide text-sm">SMASH</span>
-                            <span className="text-[10px] font-bold text-[#ccff00] bg-[#ccff00]/10 border border-[#ccff00]/20 px-2 py-0.5 rounded-full">
-                                TENIS & PÁDEL
+                    <div className="flex items-center gap-2 sm:gap-3 cursor-pointer shrink-0" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                        <img src="/Smash.png" alt="Smash Tenis" className="h-8 sm:h-10 w-auto object-contain" />
+                        <div className="flex items-center gap-1.5">
+                            <span className="font-bold text-white tracking-wide text-xs sm:text-sm">SMASH</span>
+                            <span className="hidden xs:inline-block text-[9px] sm:text-[10px] font-bold text-[#ccff00] bg-[#ccff00]/10 border border-[#ccff00]/20 px-1.5 sm:px-2 py-0.5 rounded-full">
+                                TENIS
                             </span>
                         </div>
                     </div>
 
                     {/* Quick Role Navigation Pills */}
-                    <div className="hidden md:flex items-center gap-1.5 bg-white/5 p-1 rounded-2xl border border-white/10">
+                    <div className="hidden lg:flex items-center gap-1.5 bg-white/5 p-1 rounded-2xl border border-white/10">
                         <button
                             type="button"
                             onClick={() => {
@@ -205,36 +205,37 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
 
                     {/* Auth CTAs */}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
                         {user ? (
                             <>
                                 <button
                                     onClick={onNavigateDashboard}
-                                    className="px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 bg-[#ccff00] hover:bg-[#b8e600] rounded-xl shadow-md shadow-[#ccff00]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center gap-1.5"
+                                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-slate-950 bg-[#ccff00] hover:bg-[#b8e600] rounded-xl shadow-md shadow-[#ccff00]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer flex items-center gap-1.5 min-h-[44px]"
                                 >
                                     <Trophy size={14} />
-                                    <span>Ir a mi Panel</span>
+                                    <span>Mi Panel</span>
                                 </button>
                                 <button
                                     onClick={onLogout}
-                                    className="px-3 py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                                    className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 transition-colors cursor-pointer min-h-[44px]"
                                 >
-                                    Cerrar Sesión
+                                    Salir
                                 </button>
                             </>
                         ) : (
                             <>
                                 <button
                                     onClick={() => onOpenAuth('login')}
-                                    className="px-3.5 py-2 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer"
+                                    className="px-2.5 sm:px-3.5 py-1.5 sm:py-2 text-xs sm:text-sm font-semibold text-slate-300 hover:text-white transition-colors cursor-pointer min-h-[44px] flex items-center"
                                 >
                                     Ingresar
                                 </button>
                                 <button
                                     onClick={() => onOpenAuth('register', activeRole === 'organizer' ? 'admin' : 'player')}
-                                    className="px-4 py-2 text-xs sm:text-sm font-bold text-slate-950 bg-[#ccff00] hover:bg-[#b8e600] rounded-xl shadow-md shadow-[#ccff00]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                                    className="px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-bold text-slate-950 bg-[#ccff00] hover:bg-[#b8e600] rounded-xl shadow-md shadow-[#ccff00]/20 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer min-h-[44px] flex items-center"
                                 >
-                                    {activeRole === 'organizer' ? 'Crear Club Gratis' : 'Registrarme Gratis'}
+                                    <span className="hidden sm:inline">{activeRole === 'organizer' ? 'Crear Club Gratis' : 'Registrarme Gratis'}</span>
+                                    <span className="sm:hidden">Registrate</span>
                                 </button>
                             </>
                         )}

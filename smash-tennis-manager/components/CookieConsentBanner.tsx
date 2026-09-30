@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Cookie, ShieldCheck, Check, ChevronDown, ChevronUp, Lock } from 'lucide-react';
 import { soundEffects } from '../services/soundEffects';
+import { supabase } from '../services/supabaseClient';
 
 export const CookieConsentBanner: React.FC = () => {
   const [isVisible, setIsVisible] = useState(false);
@@ -17,12 +18,22 @@ export const CookieConsentBanner: React.FC = () => {
       const hasCookieConsent = cookies.some(c => c.trim().startsWith('smash_cookie_consent='));
       if (hasCookieConsent) return;
 
-      // Mostrar el banner tras un breve retardo para una carga fluida
-      const timer = setTimeout(() => {
-        setIsVisible(true);
-      }, 1200);
+      // Suprimir automáticamente si el usuario ya tiene sesión iniciada
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          try {
+            localStorage.setItem('smash_cookie_consent', 'essential');
+          } catch (e) {}
+          return;
+        }
 
-      return () => clearTimeout(timer);
+        // Mostrar el banner tras un breve retardo para una carga fluida
+        const timer = setTimeout(() => {
+          setIsVisible(true);
+        }, 1200);
+
+        return () => clearTimeout(timer);
+      }).catch(() => {});
     } catch (e) {
       // Fallback silencioso en entornos restringidos
     }
@@ -45,8 +56,8 @@ export const CookieConsentBanner: React.FC = () => {
   if (!isVisible) return null;
 
   return (
-    <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-6 md:max-w-lg z-[90] animate-in slide-in-from-bottom-5 duration-300">
-      <div className="bg-slate-950/95 backdrop-blur-xl border border-primary/30 hover:border-primary/50 rounded-2xl shadow-2xl shadow-black/80 p-4 sm:p-5 text-white space-y-3 relative overflow-hidden">
+    <div className="fixed bottom-20 md:bottom-4 left-3 right-3 md:left-auto md:right-6 md:max-w-md z-[85] animate-in slide-in-from-bottom-5 duration-300">
+      <div className="bg-slate-950/95 backdrop-blur-xl border border-primary/30 hover:border-primary/50 rounded-2xl shadow-2xl shadow-black/80 p-3 sm:p-4 text-white space-y-2.5 relative overflow-hidden">
         
         {/* Glow de fondo */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-primary/15 rounded-full blur-2xl pointer-events-none -z-0"></div>

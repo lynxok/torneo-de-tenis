@@ -489,15 +489,140 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
         return groups;
     }, [displayedMembers, selectedCategory]);
 
-    const renderUserRow = (u: RankedPlayer) => {
-        const isPodium = u.category_rank <= 3;
+    // Confirmation Modal for Role Update
+    const [roleChangeTarget, setRoleChangeTarget] = useState<{ user: UserProfile; newRole: UserRole } | null>(null);
+
+    const requestRoleChange = (targetUser: UserProfile, newRole: UserRole) => {
+        if (targetUser.role === newRole) return;
+        setRoleChangeTarget({ user: targetUser, newRole });
+    };
+
+    const confirmRoleChange = async () => {
+        if (!roleChangeTarget) return;
+        try {
+            await api.auth.updateProfile(roleChangeTarget.user.id, { role: roleChangeTarget.newRole });
+            setRoleChangeTarget(null);
+            loadUsers();
+        } catch (e) {
+            alert('Error al actualizar el rol');
+        }
+    };
+
+    const renderUserRoleBadge = (u: UserProfile) => (
+        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
+            u.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
+            u.role === 'superadmin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
+            u.role === 'professor' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
+            'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+        }`}>
+            <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role === 'admin' ? 'Organizador' : u.role === 'superadmin' ? 'Superadmin' : 'Jugador'}
+        </span>
+    );
+
+    const renderUserCardMobile = (u: UserProfile) => {
         const podiumBadge = u.category_rank === 1
-            ? 'bg-yellow-500/20 text-yellow-300 border-yellow-500/40 shadow-yellow-500/10'
+            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
             : u.category_rank === 2
-                ? 'bg-slate-300/20 text-slate-200 border-slate-300/40 shadow-slate-300/10'
+                ? 'bg-slate-300/20 text-slate-200 border-slate-300/40'
                 : u.category_rank === 3
-                    ? 'bg-amber-700/20 text-amber-300 border-amber-700/40 shadow-amber-700/10'
-                    : 'bg-white/5 text-slate-400 border-white/10';
+                    ? 'bg-orange-600/20 text-orange-300 border-orange-600/40'
+                    : 'bg-white/5 text-muted border-white/10';
+
+        const podiumIcon = u.category_rank === 1
+            ? '🥇'
+            : u.category_rank === 2
+                ? '🥈'
+                : u.category_rank === 3
+                    ? '🥉'
+                    : null;
+
+        return (
+            <div key={u.id} className="bg-card/70 border border-white/10 rounded-2xl p-4 space-y-3 shadow-md md:hidden">
+                <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                        <UserAvatar user={u} size="md" shape="circle" />
+                        <div>
+                            <div className="font-bold text-white flex items-center gap-1.5 flex-wrap">
+                                {formatPlayerName(u.name, u.lastname)}
+                                {u.is_member && (
+                                    <span className="bg-primary/20 text-primary border border-primary/30 text-[10px] px-1.5 py-0.2 rounded font-bold uppercase">
+                                        Socio {u.member_number ? `#${u.member_number}` : ''}
+                                    </span>
+                                )}
+                            </div>
+                            <div className="text-xs text-muted truncate max-w-[190px]">{u.email}</div>
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-semibold ${getGenderBadgeClass(u.gender)}`}>
+                                    {formatGender(u.gender)}
+                                </span>
+                                <span className="text-[11px] text-slate-400">
+                                    {getAgeCategoryLabel(u.birth_date)}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    <span className={`inline-flex items-center justify-center gap-0.5 px-2.5 py-1 rounded-xl text-xs font-black border shadow-sm shrink-0 ${podiumBadge}`}>
+                        {podiumIcon ? `${podiumIcon} #${u.category_rank}` : `#${u.category_rank}`}
+                    </span>
+                </div>
+
+                <div className="flex items-center justify-between pt-2 border-t border-white/5 text-xs">
+                    <span className="font-black text-primary flex items-center gap-1">
+                        <Award size={13} className="text-accent" /> {u.calculated_points} pts
+                        <span className="text-muted font-normal text-[11px] ml-1">({u.matches_won || 0} PG)</span>
+                    </span>
+                    {renderUserRoleBadge(u)}
+                </div>
+
+                <div className="flex items-center justify-between gap-2 pt-2 border-t border-white/5">
+                    <select
+                        className="bg-slate-800 text-white text-xs py-2 px-3 rounded-xl border border-white/10 outline-none flex-1"
+                        value={u.role}
+                        onChange={(e) => requestRoleChange(u, e.target.value as UserRole)}
+                        disabled={!isSuperAdmin && u.role === 'superadmin'}
+                    >
+                        <option value="player">Jugador</option>
+                        <option value="professor">Profesor</option>
+                        <option value="admin">Organizador / Admin</option>
+                        {isSuperAdmin && (
+                            <>
+                                <option value="coordinator">Coordinador</option>
+                                <option value="superadmin">Super Admin</option>
+                            </>
+                        )}
+                    </select>
+
+                    <button
+                        onClick={() => openEditModal(u)}
+                        className="p-2.5 rounded-xl bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-all border border-blue-500/20 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                        title="Editar datos del usuario"
+                    >
+                        <Edit2 size={16} />
+                    </button>
+
+                    {isSuperAdmin && (
+                        <button
+                            onClick={() => handleDeleteUser(u)}
+                            disabled={u.id === user?.id || deletingUserId === u.id}
+                            className="p-2.5 rounded-xl bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-all border border-red-500/20 disabled:opacity-30 disabled:cursor-not-allowed min-h-[44px] min-w-[44px] flex items-center justify-center"
+                            title={u.id === user?.id ? "No puedes eliminar tu propia cuenta" : "Eliminar usuario permanentemente"}
+                        >
+                            {deletingUserId === u.id ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                        </button>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
+    const renderUserRow = (u: UserProfile) => {
+        const podiumBadge = u.category_rank === 1
+            ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
+            : u.category_rank === 2
+                ? 'bg-slate-300/20 text-slate-200 border-slate-300/40'
+                : u.category_rank === 3
+                    ? 'bg-orange-600/20 text-orange-300 border-orange-600/40'
+                    : 'bg-white/5 text-muted border-white/10';
 
         const podiumIcon = u.category_rank === 1
             ? '🥇'
@@ -550,14 +675,7 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 </td>
                 <td className="p-3.5">
                     <div className="flex flex-col items-start gap-1">
-                        <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold uppercase ${
-                            u.role === 'admin' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-                            u.role === 'superadmin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                            u.role === 'professor' ? 'bg-green-500/20 text-green-400 border border-green-500/30' :
-                            'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                        }`}>
-                            <Shield size={12} /> {u.role === 'professor' ? 'Profesor' : u.role}
-                        </span>
+                        {renderUserRoleBadge(u)}
 
                         {/* VIP & Free Trial Badges */}
                         {u.is_membership_active && (
@@ -587,11 +705,11 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                 </td>
                 <td className="p-3.5 text-right">
                     <div className="flex justify-end gap-2">
-                        {/* Role Select */}
+                        {/* Role Select with Modal Confirmation */}
                         <select
                             className="bg-slate-800 text-white text-xs py-1.5 px-2 rounded-lg border border-white/10 outline-none cursor-pointer hover:border-white/30 focus:border-primary transition-all shadow-sm"
                             value={u.role}
-                            onChange={(e) => handleRoleUpdate(u.id, e.target.value as UserRole)}
+                            onChange={(e) => requestRoleChange(u, e.target.value as UserRole)}
                             disabled={!isSuperAdmin && u.role === 'superadmin'}
                         >
                             <option value="player" className="bg-slate-800 text-white">Jugador</option>
@@ -1018,24 +1136,32 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                                             Sin jugadores asignados en {group.category}.
                                         </div>
                                     ) : (
-                                        <div className="overflow-x-auto">
-                                            <table className="w-full text-left border-collapse">
-                                                <thead>
-                                                    <tr className="bg-white/5 border-b border-white/10 text-muted text-[11px] uppercase tracking-wider">
-                                                        <th className="p-3.5 text-center w-24">Ranking</th>
-                                                        <th className="p-3.5">Usuario / Socio</th>
-                                                        <th className="p-3.5">Puntos Oficiales</th>
-                                                        <th className="p-3.5">Tipo & Rol</th>
-                                                        <th className="p-3.5 hidden md:table-cell">Institución</th>
-                                                        <th className="p-3.5 hidden lg:table-cell">Contacto</th>
-                                                        <th className="p-3.5 text-right">Acciones</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-white/5">
-                                                    {group.players.map(u => renderUserRow(u))}
-                                                </tbody>
-                                            </table>
-                                        </div>
+                                        <>
+                                            {/* Mobile Card View (< 768px) */}
+                                            <div className="p-3 space-y-3 md:hidden">
+                                                {group.players.map(u => renderUserCardMobile(u))}
+                                            </div>
+
+                                            {/* Desktop Table View (>= 768px) */}
+                                            <div className="overflow-x-auto hidden md:block">
+                                                <table className="w-full text-left border-collapse">
+                                                    <thead>
+                                                        <tr className="bg-white/5 border-b border-white/10 text-muted text-[11px] uppercase tracking-wider">
+                                                            <th className="p-3.5 text-center w-24">Ranking</th>
+                                                            <th className="p-3.5">Usuario / Socio</th>
+                                                            <th className="p-3.5">Puntos Oficiales</th>
+                                                            <th className="p-3.5">Tipo & Rol</th>
+                                                            <th className="p-3.5 hidden md:table-cell">Institución</th>
+                                                            <th className="p-3.5 hidden lg:table-cell">Contacto</th>
+                                                            <th className="p-3.5 text-right">Acciones</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-white/5">
+                                                        {group.players.map(u => renderUserRow(u))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </>
                                     )}
                                 </div>
                             ))}
@@ -1043,7 +1169,13 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                     ) : (
                         /* FLAT UNIFIED TABLE */
                         <div className="bg-card/50 backdrop-blur border border-white/10 rounded-2xl overflow-hidden shadow-xl" id="users-table">
-                            <div className="overflow-x-auto">
+                            {/* Mobile Card View (< 768px) */}
+                            <div className="p-3 space-y-3 md:hidden">
+                                {displayedMembers.map(u => renderUserCardMobile(u))}
+                            </div>
+
+                            {/* Desktop Table View (>= 768px) */}
+                            <div className="overflow-x-auto hidden md:block">
                                 <table className="w-full text-left border-collapse">
                                     <thead>
                                         <tr className="bg-white/5 border-b border-white/10 text-muted text-[11px] uppercase tracking-wider">
@@ -1063,6 +1195,46 @@ export const AdminUsers: React.FC<AdminUsersProps> = ({ user }) => {
                             </div>
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* ROLE CHANGE CONFIRMATION MODAL */}
+            {roleChangeTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+                    <div className="bg-card border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4">
+                        <div className="flex items-center gap-3">
+                            <div className="w-12 h-12 rounded-2xl bg-primary/20 text-primary border border-primary/30 flex items-center justify-center shrink-0">
+                                <Shield size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-bold text-white">¿Confirmar cambio de rol?</h3>
+                                <p className="text-xs text-muted">Esta acción modificará los permisos de acceso del usuario inmediatamente.</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-white/5 border border-white/10 rounded-xl p-3.5 text-sm space-y-1">
+                            <div className="text-muted text-xs">Usuario:</div>
+                            <div className="font-bold text-white">{roleChangeTarget.user.name} {roleChangeTarget.user.lastname} ({roleChangeTarget.user.email})</div>
+                            <div className="text-xs text-muted pt-1">
+                                Nuevo rol propuesto: <strong className="text-primary uppercase">{roleChangeTarget.newRole === 'professor' ? 'Profesor' : roleChangeTarget.newRole === 'admin' ? 'Organizador' : roleChangeTarget.newRole === 'player' ? 'Jugador' : roleChangeTarget.newRole === 'coordinator' ? 'Coordinador' : roleChangeTarget.newRole}</strong>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end gap-3 pt-2">
+                            <button
+                                onClick={() => setRoleChangeTarget(null)}
+                                className="px-4 py-2 rounded-xl border border-white/10 text-muted hover:text-white text-sm"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={confirmRoleChange}
+                                className="px-5 py-2 rounded-xl bg-primary text-dark font-bold text-sm hover:bg-primary-hover shadow-lg shadow-primary/20"
+                            >
+                                Sí, cambiar rol
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
 

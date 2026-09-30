@@ -1351,7 +1351,7 @@ export const Profile: React.FC<ProfileProps> = ({ user, onProfileUpdate }) => {
                     onClose={() => setShowPlayerCardModal(false)}
                     user={user}
                     stats={playerStats}
-                    rank={rankInfo.globalRank}
+                    rank={rankInfo.categoryRank || rankInfo.globalRank || 1}
                 />
             )}
         </div>

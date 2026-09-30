@@ -654,12 +654,16 @@ export const AdminInstitutions: React.FC<AdminInstitutionsProps> = ({ user }) =>
                     {activeTab === 'facilities' && (
                         <div className="space-y-6">
                             <div>
-                                <h4 className="text-sm font-bold text-white mb-3">Cantidad de Canchas</h4>
+                                <h4 className="text-sm font-bold text-white mb-3">Cantidad de Canchas & Superficies</h4>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                                     <InputNumber label="Total" value={formData.courts_total} onChange={v => setFormData({...formData, courts_total: v})} />
                                     <InputNumber label="Polvo" value={formData.courts_clay} onChange={v => setFormData({...formData, courts_clay: v})} />
                                     <InputNumber label="Cemento" value={formData.courts_hard} onChange={v => setFormData({...formData, courts_hard: v})} />
                                     <InputNumber label="Indoor" value={formData.courts_indoor} onChange={v => setFormData({...formData, courts_indoor: v})} />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-white/5">
+                                    <InputNumber label="Con Luz Artificial" value={formData.courts_with_light || 0} onChange={v => setFormData({...formData, courts_with_light: v})} />
+                                    <InputNumber label="Sin Luz (Diurnas)" value={formData.courts_without_light || 0} onChange={v => setFormData({...formData, courts_without_light: v})} />
                                 </div>
                             </div>
 

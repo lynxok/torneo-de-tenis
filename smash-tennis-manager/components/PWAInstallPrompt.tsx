@@ -27,15 +27,29 @@ export const PWAInstallPrompt: React.FC = () => {
 
         if (isStandaloneMode) return;
 
-        // Check dismissed permanently (persists across sessions)
-        const dismissed = localStorage.getItem('pwa_banner_dismissed');
+        // Check frequency & dismiss state with try/catch
+        let shouldShow = false;
+        try {
+            const dismissed = localStorage.getItem('pwa_banner_dismissed');
+            const lastShown = localStorage.getItem('pwa_banner_last_shown');
+            const now = Date.now();
+            // Don't show if permanently dismissed or shown in last 24h
+            if (!dismissed && (!lastShown || now - Number(lastShown) > 24 * 60 * 60 * 1000)) {
+                shouldShow = true;
+            }
+        } catch (e) {
+            console.warn('localStorage not accessible for PWA banner', e);
+        }
 
         // Android / Desktop beforeinstallprompt
         const handleBeforeInstall = (e: any) => {
             e.preventDefault();
             setDeferredPrompt(e);
-            if (!dismissed) {
+            if (shouldShow) {
                 setShowBanner(true);
+                try {
+                    localStorage.setItem('pwa_banner_last_shown', String(Date.now()));
+                } catch (e) {}
             }
         };
 
@@ -58,9 +72,14 @@ export const PWAInstallPrompt: React.FC = () => {
 
         window.addEventListener('open-pwa-install', handleManualOpen);
 
-        // For mobile non-standalone, show subtle banner after 3 seconds if not dismissed
-        if (!dismissed && !isStandaloneMode) {
-            const timer = setTimeout(() => setShowBanner(true), 3000);
+        // For mobile non-standalone, show subtle banner after 5 seconds if eligible
+        if (shouldShow && !isStandaloneMode) {
+            const timer = setTimeout(() => {
+                setShowBanner(true);
+                try {
+                    localStorage.setItem('pwa_banner_last_shown', String(Date.now()));
+                } catch (e) {}
+            }, 5000);
             return () => clearTimeout(timer);
         }
 
@@ -88,16 +107,18 @@ export const PWAInstallPrompt: React.FC = () => {
 
     const handleDismissBanner = () => {
         setShowBanner(false);
-        localStorage.setItem('pwa_banner_dismissed', 'true');
+        try {
+            localStorage.setItem('pwa_banner_dismissed', 'true');
+        } catch (e) {}
     };
 
     if (isStandalone) return null;
 
     return (
         <>
-            {/* FLOATING BANNER */}
+            {/* FLOATING BANNER (bottom-20 on mobile to clear BottomNavBar, bottom-4 on desktop) */}
             {showBanner && !showInstructionsModal && (
-                <div className="fixed bottom-4 left-4 right-4 md:left-auto md:right-4 md:max-w-sm z-50 animate-in fade-in slide-in-from-bottom-5 duration-300">
+                <div className="fixed bottom-20 left-4 right-4 md:bottom-4 md:left-auto md:right-4 md:max-w-sm z-40 animate-in fade-in slide-in-from-bottom-5 duration-300">
                     <div className="bg-gradient-to-r from-slate-900 via-card to-slate-950 border border-primary/40 p-4 rounded-2xl shadow-2xl shadow-primary/20 flex items-center justify-between gap-3 relative">
                         <div className="flex items-center gap-3">
                             <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary/30 to-primary/10 border border-primary/40 flex items-center justify-center text-primary shrink-0 shadow-inner">

@@ -37,12 +37,17 @@ import {
     ShoppingBag,
     Receipt,
     Building2,
-    Download
+    Download,
+    Bell,
+    BellRing,
+    ChevronDown
 } from 'lucide-react';
 import { WeatherWidget } from '../components/WeatherWidget';
 import { StoriesBar } from '../components/stories/StoriesBar';
 import { formatMatchScore } from '../utils/formatters';
 import { checkPlayerGenderEligibility } from '../utils/demographics';
+import { getUserRankInfo } from '../utils/ranking';
+import { Skeleton } from '../components/ui/Skeleton';
 
 
 interface DashboardProps {
@@ -68,7 +73,9 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
         todayBookings: 0,
         pendingUsers: 0,
         revenueToday: 0,
-        revenueTrend: ''
+        revenueTrend: '',
+        tournamentsSubLabel: 'Torneos activos',
+        coachClassesTodayCount: 0
     });
     const [todayBookings, setTodayBookings] = useState<Booking[]>([]);
     const [pendingUsersList, setPendingUsersList] = useState<UserProfile[]>([]);
@@ -151,12 +158,43 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 revenueTrend = '+100%';
             }
 
+            // Derive dynamic tournament phase label
+            const groupStageTournaments = tournaments.filter(t => !t.status || t.status === 'in_progress' || t.status === 'groups');
+            const playoffTournaments = tournaments.filter(t => t.status === 'playoffs');
+            let tournamentsSubLabel = "Torneos activos";
+            if (groupStageTournaments.length > 0 && playoffTournaments.length === 0) {
+                tournamentsSubLabel = "En fase de grupos";
+            } else if (playoffTournaments.length > 0 && groupStageTournaments.length === 0) {
+                tournamentsSubLabel = "En cuadro / playoffs";
+            } else if (tournaments.length > 0) {
+                tournamentsSubLabel = `${groupStageTournaments.length} en grupos • ${playoffTournaments.length} en cuadro`;
+            } else {
+                tournamentsSubLabel = "Sin torneos en disputa";
+            }
+
+            // Real professor classes calculation from assigned roster and localStorage packs/groups
+            let coachClassesTodayCount = 0;
+            if (isProfessor) {
+                try {
+                    const savedGroups = localStorage.getItem(`smash_coach_groups_${user.id}`);
+                    const parsedGroups = savedGroups ? JSON.parse(savedGroups) : [];
+                    const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+                    const currentDayName = dayNames[new Date().getDay()];
+                    const todayGroups = parsedGroups.filter((g: any) => g.scheduleDays && g.scheduleDays.includes(currentDayName));
+                    coachClassesTodayCount = todayGroups.length > 0 ? todayGroups.length : (bookingsData.length || 0);
+                } catch (e) {
+                    coachClassesTodayCount = bookingsData.length || 0;
+                }
+            }
+
             setStats({
                 activeTournaments: tournaments.length,
                 todayBookings: bookingsData.length,
                 pendingUsers: pendingProfiles.length,
                 revenueToday: todayRevenue,
-                revenueTrend
+                revenueTrend,
+                tournamentsSubLabel,
+                coachClassesTodayCount
             });
             setPendingUsersList(pendingProfiles);
             setTodayBookings(bookingsData);
@@ -317,11 +355,11 @@ const AdminDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 {!isProfessor ? (
                     <KPICard label="Ingresos Hoy" value={`$${stats.revenueToday.toLocaleString()}`} sub="vs. ayer" icon={DollarSign} color="text-green-400" trend={stats.revenueTrend} onClick={() => onNavigate('reports')} />
                 ) : (
-                    <KPICard label="Clases Hoy" value="4" sub="Mis entrenamientos" icon={Activity} color="text-green-400" />
+                    <KPICard label="Clases Hoy" value={stats.coachClassesTodayCount} sub="Mis entrenamientos" icon={Activity} color="text-green-400" onClick={() => onNavigate('coach-dashboard')} />
                 )}
 
-                <KPICard label="Reservas / Partidos" value={stats.todayBookings} sub="Turnos ocupados hoy" icon={Calendar} color="text-blue-400" />
-                <KPICard label="Torneos Activos" value={stats.activeTournaments} sub="En fase de grupos" icon={Trophy} color="text-amber-400" onClick={() => onNavigate('tournaments')} />
+                <KPICard label="Reservas / Partidos" value={stats.todayBookings} sub="Turnos ocupados hoy" icon={Calendar} color="text-blue-400" onClick={() => onNavigate('bookings')} />
+                <KPICard label="Torneos Activos" value={stats.activeTournaments} sub={stats.tournamentsSubLabel} icon={Trophy} color="text-amber-400" onClick={() => onNavigate('tournaments')} />
                 <KPICard label="Solicitudes" value={stats.pendingUsers} sub="Pendientes de aprobación" icon={Users} color="text-purple-400" onClick={() => onNavigate('admin-users')} />
             </div>
 
@@ -673,24 +711,45 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
     const [disputeMatch, setDisputeMatch] = useState<Match | null>(null);
     const [disputeReason, setDisputeReason] = useState('');
     const [submittingDispute, setSubmittingDispute] = useState(false);
+    const [allProfiles, setAllProfiles] = useState<UserProfile[]>([]);
     const [stats, setStats] = useState({
         winRate: 0,
         totalPlayed: 0,
         pending: 0
     });
 
+    // Notify when open category tournaments & collapsible stories
+    const [notifyCategoryOpen, setNotifyCategoryOpen] = useState<boolean>(() => {
+        try {
+            return localStorage.getItem(`smash_notify_open_cat_${user.id}`) === 'true';
+        } catch (e) {
+            return false;
+        }
+    });
+    const [showStories, setShowStories] = useState<boolean>(false);
+
+    const toggleNotifyCategoryOpen = () => {
+        const nextVal = !notifyCategoryOpen;
+        setNotifyCategoryOpen(nextVal);
+        try {
+            localStorage.setItem(`smash_notify_open_cat_${user.id}`, String(nextVal));
+        } catch (e) {}
+    };
+
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [tournamentsData, matchesData, rankingData] = await Promise.all([
+                const [tournamentsData, matchesData, rankingData, profilesData] = await Promise.all([
                     api.tournaments.getActive(), // Gets all active tournaments
                     api.matches.getByUser(user.id),
-                    api.rankings.getHistory(user.id) // Fetch Point History
+                    api.rankings.getHistory(user.id), // Fetch Point History
+                    api.auth.getAllProfiles().catch(() => [])
                 ]);
 
                 setActiveTournaments(tournamentsData);
                 setMatches(matchesData);
                 setRankingHistory(rankingData);
+                setAllProfiles(profilesData || []);
 
                 // Process Stats
                 const played = matchesData.filter(m => m.winner_id).length;
@@ -771,8 +830,13 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
         return ageInMonths >= 8 && ageInMonths < 12;
     });
 
-    // Calculate Total Points
-    const totalPoints = rankingHistory.reduce((sum, pt) => sum + pt.points, 0);
+    // Unified Source of Truth for Points & Rank
+    const playerRankInfo = React.useMemo(() => {
+        return getUserRankInfo(user.id, allProfiles.length > 0 ? allProfiles : [user]);
+    }, [user, allProfiles]);
+
+    // Points from official formula (with fallback to history if profiles not yet loaded)
+    const totalPoints = playerRankInfo.points || rankingHistory.reduce((sum, pt) => sum + pt.points, 0);
 
     // Derive Lists
     // 1. My Enrolled Tournaments: Where user has matches OR is part of the player list (approximated by match participation for this demo)
@@ -797,22 +861,47 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
         return t.category.includes(myCat) || t.category === 'Open';
     });
 
-    if (loading) return <div className="flex h-96 items-center justify-center text-primary animate-pulse">Cargando tu panel...</div>;
+
+    if (loading) return (
+        <div className="space-y-8 animate-pulse">
+            {/* Header skeleton */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div className="space-y-2">
+                    <Skeleton className="h-9 w-52" />
+                    <Skeleton className="h-4 w-40" />
+                </div>
+            </div>
+            {/* Quick actions skeleton */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)}
+            </div>
+            {/* Next match skeleton */}
+            <Skeleton className="h-40 rounded-3xl" />
+            {/* Tournaments list skeleton */}
+            <div className="space-y-3">
+                <Skeleton className="h-6 w-64" />
+                {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-16 rounded-2xl" />)}
+            </div>
+            {/* Ranking skeleton */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-4">
+                    {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}
+                </div>
+                <div className="space-y-4">
+                    <Skeleton className="h-48 rounded-2xl" />
+                    <Skeleton className="h-32 rounded-2xl" />
+                </div>
+            </div>
+        </div>
+    );
 
     return (
         <div className="space-y-8 animate-fade-up">
-            {/* Historias Temporales Smash */}
-            <StoriesBar 
-                currentUser={user} 
-                institutions={[]} 
-                onSelectUser={(userId) => onNavigate('profile', { userId })} 
-            />
-
             <div id="dashboard-header" className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>
                     <h1 className="text-3xl font-bold text-white mb-1">Hola, {user.name}</h1>
                     <p className="text-muted">
-                        Bienvenido al panel general.
+                        Bienvenido a tu panel de jugador.
                     </p>
                 </div>
 
@@ -827,6 +916,29 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                 <QuickAction icon={Search} label="Buscar Rival" onClick={() => onNavigate('players')} color="bg-purple-500" />
                 <QuickAction icon={Trophy} label="Mis Torneos" onClick={() => onNavigate('tournaments')} color="bg-amber-500" />
                 <QuickAction icon={Zap} label="Ver Ranking" onClick={() => onNavigate('rankings')} color="bg-slate-700" />
+            </div>
+
+            {/* Collapsible Stories Bar */}
+            <div className="bg-card/40 border border-white/5 rounded-2xl p-2.5">
+                <button
+                    onClick={() => setShowStories(!showStories)}
+                    className="w-full flex items-center justify-between text-xs font-bold text-slate-400 hover:text-white px-2 py-1 transition-colors"
+                >
+                    <span className="flex items-center gap-2">
+                        <Sparkles size={14} className="text-primary" />
+                        Historias de la Comunidad ({showStories ? 'Ocultar' : 'Mostrar'})
+                    </span>
+                    <ChevronDown size={14} className={`transform transition-transform ${showStories ? 'rotate-180' : ''}`} />
+                </button>
+                {showStories && (
+                    <div className="pt-3 border-t border-white/5 mt-2 animate-in fade-in duration-200">
+                        <StoriesBar 
+                            currentUser={user} 
+                            institutions={[]} 
+                            onSelectUser={(userId) => onNavigate('profile', { userId })} 
+                        />
+                    </div>
+                )}
             </div>
 
             {/* INCENTIVE BANNER: SUBE TU FOTO Y GANA +50 PTS */}
@@ -858,7 +970,7 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* Left Column (2/3) */}
                 <div id="dashboard-main-content" className="lg:col-span-2 space-y-8">
-                    {/* --- PENDING SCORE CONFIRMATION ALERTS (24h Window) --- */}
+                    {/* 1. PRIORITY ALERTS: PENDING SCORE CONFIRMATION ALERTS (24h Window) */}
                     {pendingReviewMatches.length > 0 && (
                         <div className="space-y-4 animate-in slide-in-from-top-4 fade-in duration-300">
                             <div className="bg-gradient-to-r from-amber-950/50 via-card to-amber-900/30 border-2 border-amber-500/50 rounded-3xl p-6 shadow-xl relative overflow-hidden">
@@ -871,7 +983,7 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                             </div>
                                             <div>
                                                 <h3 className="text-lg font-bold text-white">Resultado(s) Pendientes de tu Revisión</h3>
-                                                <p className="text-xs text-amber-200/80">Tu rival cargó el tanteador. Tienes 24 horas para confirmarlo o reportar discrepancia.</p>
+                                                <p className="text-xs text-amber-200/80">Tu rival cargó el tanteador. Tenés 24 horas para confirmarlo o reportar discrepancia.</p>
                                             </div>
                                         </div>
                                         <span className="text-xs bg-amber-500/20 text-amber-300 font-bold px-3 py-1 rounded-full border border-amber-500/30 shrink-0 hidden sm:inline-block">
@@ -931,70 +1043,7 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                         </div>
                     )}
 
-                    {/* --- NEW SECTION: POINTS DEFENSE ALERT --- */}
-                    {expiringPoints.length > 0 && (
-                        <div className="space-y-4 animate-in slide-in-from-top-4 fade-in duration-500">
-                            <div className="bg-gradient-to-r from-orange-900/40 to-card border border-orange-500/30 rounded-3xl p-6 relative overflow-hidden">
-                                {/* Background Effect */}
-                                <div className="absolute top-0 right-0 p-4 opacity-10 text-orange-500"><Shield size={120} /></div>
-
-                                <div className="relative z-10">
-                                    <div className="flex items-center gap-2 mb-4">
-                                        <div className="p-2 bg-orange-500 text-black rounded-lg shadow-lg shadow-orange-500/20">
-                                            <AlertTriangle size={20} />
-                                        </div>
-                                        <h3 className="text-xl font-bold text-white">Defensa de Puntos</h3>
-                                    </div>
-
-                                    <p className="text-sm text-slate-300 mb-4 max-w-lg">
-                                        Tienes puntos importantes que vencerán en los próximos meses.
-                                        Compite en las nuevas ediciones para defender tu posición en el ranking.
-                                    </p>
-
-                                    <div className="space-y-3">
-                                        {expiringPoints.map((pt) => {
-                                            // Calculate exact expiration
-                                            const obtained = new Date(pt.date_obtained);
-                                            const expiration = new Date(obtained);
-                                            expiration.setFullYear(obtained.getFullYear() + 1);
-
-                                            return (
-                                                <div key={pt.id} className="bg-black/30 border border-white/5 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="text-center">
-                                                            <div className="text-xl font-bold text-orange-400">{pt.points}</div>
-                                                            <div className="text-[10px] text-muted uppercase">Puntos</div>
-                                                        </div>
-                                                        <div className="h-8 w-px bg-white/10 hidden sm:block"></div>
-                                                        <div>
-                                                            <div className="font-bold text-white">{pt.tournament_name}</div>
-                                                            <div className="text-xs text-orange-300 flex items-center gap-1">
-                                                                <Clock size={12} /> Vence el {expiration.toLocaleDateString()}
-                                                            </div>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* CTA: If next edition exists */}
-                                                    {pt.next_edition_id ? (
-                                                        <button
-                                                            onClick={() => onNavigate('tournament-detail', pt.next_edition_id)}
-                                                            className="w-full sm:w-auto px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-lg text-sm transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2"
-                                                        >
-                                                            <Shield size={16} /> Defender Título
-                                                        </button>
-                                                    ) : (
-                                                        <div className="text-xs text-muted italic px-2">Esperando nueva edición...</div>
-                                                    )}
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 1. NEXT MATCH CARD (Enhanced) */}
+                    {/* 2. NEXT MATCH OR ACTIVE BOOKING ALERT */}
                     {nextMatch ? (
                         <div className="bg-gradient-to-r from-blue-900 to-slate-900 border border-blue-500/30 rounded-3xl p-6 relative overflow-hidden group cursor-pointer hover:border-blue-500/50 transition-all shadow-xl" onClick={() => onNavigate('tournament-detail', nextMatch.tournament_id)}>
                             <div className="absolute top-0 right-0 p-4 opacity-10"><Swords size={120} /></div>
@@ -1015,7 +1064,7 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                         <div className="flex flex-col">
                                             <span className="text-muted text-xs uppercase font-bold mb-1">Tu Rival</span>
                                             <div className="text-3xl font-bold text-white truncate">
-                                                {nextMatch.player1_id === user.id ? nextMatch.player2_name : nextMatch.player1_name || 'TBD'}
+                                                {nextMatch.player1_id === user.id ? nextMatch.player2_name : nextMatch.player1_name || 'A definir'}
                                             </div>
                                             <div className="text-sm text-blue-300 mt-1">{nextMatch.round}</div>
                                         </div>
@@ -1055,117 +1104,78 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                             </div>
                         </div>
                     ) : (
-                        <div className="bg-white/5 border border-white/10 rounded-3xl p-8 text-center flex flex-col items-center justify-center gap-4">
-                            <div className="w-16 h-16 bg-slate-800/50 rounded-full flex items-center justify-center text-muted">
-                                <Calendar size={32} />
+                        <div className="bg-card/60 border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2.5 bg-white/5 rounded-xl text-primary border border-white/5 shrink-0">
+                                    <Calendar size={20} />
+                                </div>
+                                <div>
+                                    <h4 className="text-sm font-bold text-white">Sin partidos próximos en agenda</h4>
+                                    <p className="text-xs text-muted">¿Querés jugar hoy? Reservá cancha o buscá rival en los partidos abiertos.</p>
+                                </div>
                             </div>
-                            <div className="space-y-1">
-                                <h3 className="text-lg font-bold text-white">Sin partidos programados</h3>
-                                <p className="text-muted text-sm">No tienes partidos coordinados próximamente.</p>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
-                                <button
-                                    onClick={() => onNavigate('open-matches')}
-                                    className="px-5 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl shadow-lg shadow-primary/20 flex items-center gap-2 transition-all cursor-pointer"
-                                >
-                                    <Swords size={15} /> Buscar partido
-                                </button>
+                            <div className="flex items-center gap-2 w-full sm:w-auto shrink-0">
                                 <button
                                     onClick={() => onNavigate('bookings')}
-                                    className="px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-slate-300 hover:text-white text-xs font-bold rounded-xl flex items-center gap-2 transition-all cursor-pointer"
+                                    className="flex-1 sm:flex-none px-3.5 py-2 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all shadow-md shadow-primary/20"
                                 >
-                                    <Calendar size={14} /> Reservar Cancha
+                                    <Calendar size={13} /> Reservar Cancha
+                                </button>
+                                <button
+                                    onClick={() => onNavigate('open-matches')}
+                                    className="flex-1 sm:flex-none px-3.5 py-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white border border-white/10 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-all"
+                                >
+                                    <Swords size={13} /> Buscar Rival
                                 </button>
                             </div>
                         </div>
                     )}
 
-                    {/* 2. MY ENROLLED TOURNAMENTS */}
+                    {/* 3. OPEN COMPATIBLE TOURNAMENTS (WITH "AVISAME CUANDO ABRA UNO") */}
                     <div>
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                                <Trophy className="text-amber-500" size={20} /> Mis Competiciones
-                            </h3>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {enrolledTournaments.length === 0 ? (
-                                <div className="col-span-full border border-dashed border-white/10 rounded-2xl p-6 text-center text-sm text-muted">
-                                    No estás inscrito en ningún torneo activo.
-                                </div>
-                            ) : (
-                                enrolledTournaments.map(t => (
-                                    <Card key={t.id} onClick={() => onNavigate('tournament-detail', t.id)} className="group hover:bg-white/5 relative overflow-hidden border-l-4 border-l-amber-500">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <div className="bg-amber-500/10 text-amber-400 text-[10px] font-bold px-2 py-1 rounded-full uppercase border border-amber-500/20">Participando</div>
-                                            <ArrowRight className="text-muted group-hover:text-amber-400 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" size={16} />
-                                        </div>
-                                        <h4 className="font-bold text-white mb-1 truncate">{t.name}</h4>
-                                        <p className="text-xs text-muted mb-3 flex items-center gap-1"><MapPin size={12} /> {t.institutions?.name}</p>
-
-                                        {/* Fake Progress Bar */}
-                                        <div className="flex justify-between text-[10px] text-muted mb-1">
-                                            <span>Progreso</span>
-                                            <span>Fase de Grupos</span>
-                                        </div>
-                                        <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"><div className="bg-amber-500 h-full w-1/2 rounded-full"></div></div>
-                                    </Card>
-                                ))
-                            )}
-                        </div>
-                    </div>
-
-                    {/* 3. EXPLORE TOURNAMENTS MAP BANNER */}
-                    <div 
-                        onClick={() => onNavigate('tournaments', { view: 'map' })}
-                        className="bg-gradient-to-r from-sky-950/60 via-slate-900 to-blue-950/40 border border-sky-500/30 rounded-3xl p-5 relative overflow-hidden group cursor-pointer hover:border-sky-400/60 transition-all shadow-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
-                    >
-                        <div className="flex items-center gap-4">
-                            <div className="w-12 h-12 rounded-2xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400 font-extrabold text-xl shrink-0 group-hover:scale-110 transition-transform shadow-lg shadow-sky-500/10">
-                                🗺️
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <h4 className="text-base font-extrabold text-white group-hover:text-sky-300 transition-colors">
-                                        Mapa Interactivo de Torneos
-                                    </h4>
-                                    <span className="text-[10px] bg-sky-500/20 text-sky-300 font-bold px-2 py-0.5 rounded-full border border-sky-400/30">
-                                        📍 GPS & Cercanía
-                                    </span>
-                                </div>
-                                <p className="text-xs text-slate-300 mt-0.5">
-                                    Explora torneos activos en Entre Ríos, Santa Fe y el país ordenados por distancia a tu ubicación.
-                                </p>
-                            </div>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400 bg-sky-500/10 group-hover:bg-sky-500 group-hover:text-white px-3.5 py-2 rounded-xl transition-all shrink-0 w-full sm:w-auto justify-center">
-                            <span>Ver en Mapa</span>
-                            <ArrowRight size={14} />
-                        </div>
-                    </div>
-
-                    {/* 4. OPEN TOURNAMENTS (Compatible) */}
-                    <div>
-                        <div className="flex items-center justify-between gap-2 mb-4">
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-4">
                             <div className="flex items-center gap-2">
                                 <div className="p-1.5 bg-green-500/20 rounded-lg text-green-400"><UserPlus size={18} /></div>
                                 <div>
-                                    <h3 className="text-lg font-bold text-white leading-none">Inscripciones Abiertas</h3>
-                                    <p className="text-xs text-muted">Torneos disponibles para tu categoría ({user.category || 'Sin Cat.'}).</p>
+                                    <h3 className="text-lg font-bold text-white leading-none">Torneos Abiertos para tu Categoría</h3>
+                                    <p className="text-xs text-muted">Disponibles para {user.category ? `${user.category} categoría` : 'tu perfil'}.</p>
                                 </div>
                             </div>
-                            <button
-                                onClick={() => onNavigate('tournaments', { view: 'map' })}
-                                className="text-xs text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-xl border border-sky-500/20 transition-all"
-                            >
-                                <span>Ver en Mapa</span>
-                                <ArrowRight size={12} />
-                            </button>
+                            <div className="flex items-center gap-2 w-full sm:w-auto">
+                                <button
+                                    onClick={toggleNotifyCategoryOpen}
+                                    className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 border transition-all ${
+                                        notifyCategoryOpen
+                                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                                            : 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+                                    }`}
+                                    title="Notificarme cuando abra un torneo compatible con mi categoría"
+                                >
+                                    {notifyCategoryOpen ? <BellRing size={13} className="text-amber-400" /> : <Bell size={13} />}
+                                    <span>{notifyCategoryOpen ? 'Avisos activados' : 'Avisame cuando abra uno'}</span>
+                                </button>
+                                <button
+                                    onClick={() => onNavigate('tournaments', { view: 'map' })}
+                                    className="text-xs text-sky-400 hover:text-sky-300 font-bold flex items-center gap-1 bg-sky-500/10 hover:bg-sky-500/20 px-3 py-1.5 rounded-xl border border-sky-500/20 transition-all shrink-0"
+                                >
+                                    <span>Mapa</span>
+                                    <ArrowRight size={12} />
+                                </button>
+                            </div>
                         </div>
 
                         <div className="space-y-3">
                             {compatibleTournaments.length === 0 ? (
-                                <div className="text-center py-8 text-muted text-sm bg-white/5 rounded-2xl">
-                                    No hay torneos abiertos compatibles con tu perfil en este momento.
+                                <div className="text-center py-8 text-muted text-sm bg-white/5 rounded-2xl border border-white/5 space-y-2">
+                                    <p>No hay torneos abiertos de {user.category || 'tu'} categoría en este momento.</p>
+                                    {!notifyCategoryOpen && (
+                                        <button
+                                            onClick={toggleNotifyCategoryOpen}
+                                            className="inline-flex items-center gap-1.5 text-xs text-amber-400 font-bold hover:underline"
+                                        >
+                                            <Bell size={12} /> Tocá acá para que te avisemos apenas abra una inscripción
+                                        </button>
+                                    )}
                                 </div>
                             ) : (
                                 compatibleTournaments.map(t => {
@@ -1213,13 +1223,130 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                                                     onClick={() => onNavigate('tournament-detail', t.id)}
                                                     className="px-4 py-2 bg-white/5 hover:bg-green-600 hover:text-white text-green-400 text-xs font-bold rounded-xl transition-all border border-white/10 group-hover:border-green-600 shadow-lg"
                                                 >
-                                                    Inscribirse
+                                                    Inscribirme
                                                 </button>
                                             )}
                                         </div>
                                     );
                                 })
                             )}
+                        </div>
+                    </div>
+
+                    {/* 4. POINTS DEFENSE ALERT */}
+                    {expiringPoints.length > 0 && (
+                        <div className="space-y-4 animate-in slide-in-from-top-4 fade-in duration-500">
+                            <div className="bg-gradient-to-r from-orange-900/40 to-card border border-orange-500/30 rounded-3xl p-6 relative overflow-hidden">
+                                <div className="absolute top-0 right-0 p-4 opacity-10 text-orange-500"><Shield size={120} /></div>
+
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-2 mb-4">
+                                        <div className="p-2 bg-orange-500 text-black rounded-lg shadow-lg shadow-orange-500/20">
+                                            <AlertTriangle size={20} />
+                                        </div>
+                                        <h3 className="text-xl font-bold text-white">Defensa de Puntos</h3>
+                                    </div>
+
+                                    <p className="text-sm text-slate-300 mb-4 max-w-lg">
+                                        Tenés puntos importantes que vencerán en los próximos meses.
+                                        Competí en las nuevas ediciones para defender tu posición en el ranking.
+                                    </p>
+
+                                    <div className="space-y-3">
+                                        {expiringPoints.map((pt) => {
+                                            const obtained = new Date(pt.date_obtained);
+                                            const expiration = new Date(obtained);
+                                            expiration.setFullYear(obtained.getFullYear() + 1);
+
+                                            return (
+                                                <div key={pt.id} className="bg-black/30 border border-white/5 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                                    <div className="flex items-center gap-4">
+                                                        <div className="text-center">
+                                                            <div className="text-xl font-bold text-orange-400">{pt.points}</div>
+                                                            <div className="text-[10px] text-muted uppercase">Puntos</div>
+                                                        </div>
+                                                        <div className="h-8 w-px bg-white/10 hidden sm:block"></div>
+                                                        <div>
+                                                            <div className="font-bold text-white">{pt.tournament_name}</div>
+                                                            <div className="text-xs text-orange-300 flex items-center gap-1">
+                                                                <Clock size={12} /> Vence el {expiration.toLocaleDateString()}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    {pt.next_edition_id ? (
+                                                        <button
+                                                            onClick={() => onNavigate('tournament-detail', pt.next_edition_id)}
+                                                            className="w-full sm:w-auto px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-bold rounded-lg text-sm transition-all shadow-lg shadow-orange-500/20 flex items-center justify-center gap-2"
+                                                        >
+                                                            <Shield size={16} /> Defender Título
+                                                        </button>
+                                                    ) : (
+                                                        <div className="text-xs text-muted italic px-2">Esperando nueva edición...</div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 5. MY ENROLLED TOURNAMENTS (SECONDARY) */}
+                    <div>
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Trophy className="text-amber-500" size={18} /> Mis Competiciones en Curso
+                            </h3>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {enrolledTournaments.length === 0 ? (
+                                <div className="col-span-full border border-dashed border-white/10 rounded-2xl p-6 text-center text-sm text-muted">
+                                    No estás participando en torneos en curso actualmente.
+                                </div>
+                            ) : (
+                                enrolledTournaments.map(t => (
+                                    <Card key={t.id} onClick={() => onNavigate('tournament-detail', t.id)} className="group hover:bg-white/5 relative overflow-hidden border-l-4 border-l-amber-500">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="bg-amber-500/10 text-amber-400 text-[10px] font-bold px-2 py-1 rounded-full uppercase border border-amber-500/20">Participando</div>
+                                            <ArrowRight className="text-muted group-hover:text-amber-400 opacity-0 group-hover:opacity-100 transition-all transform group-hover:translate-x-1" size={16} />
+                                        </div>
+                                        <h4 className="font-bold text-white mb-1 truncate">{t.name}</h4>
+                                        <p className="text-xs text-muted mb-3 flex items-center gap-1"><MapPin size={12} /> {t.institutions?.name}</p>
+
+                                        <div className="flex justify-between text-[10px] text-muted mb-1">
+                                            <span>Progreso</span>
+                                            <span>En juego</span>
+                                        </div>
+                                        <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden"><div className="bg-amber-500 h-full w-1/2 rounded-full"></div></div>
+                                    </Card>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 6. EXPLORE TOURNAMENTS MAP BANNER (SECONDARY) */}
+                    <div 
+                        onClick={() => onNavigate('tournaments', { view: 'map' })}
+                        className="bg-gradient-to-r from-sky-950/40 via-slate-900 to-blue-950/30 border border-sky-500/20 rounded-2xl p-4 relative overflow-hidden group cursor-pointer hover:border-sky-400/50 transition-all shadow-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400 font-extrabold text-lg shrink-0 group-hover:scale-105 transition-transform">
+                                🗺️
+                            </div>
+                            <div>
+                                <h4 className="text-sm font-bold text-white group-hover:text-sky-300 transition-colors">
+                                    Mapa Interactivo del Circuito
+                                </h4>
+                                <p className="text-xs text-slate-400 mt-0.5">
+                                    Explorá torneos ordenados por distancia y geolocalización.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400 bg-sky-500/10 group-hover:bg-sky-500 group-hover:text-white px-3 py-1.5 rounded-xl transition-all shrink-0 w-full sm:w-auto justify-center">
+                            <span>Ver en Mapa</span>
+                            <ArrowRight size={13} />
                         </div>
                     </div>
 
@@ -1232,7 +1359,12 @@ const PlayerDashboard: React.FC<DashboardProps> = ({ user, onNavigate }) => {
                         <StatCard label="% Victorias" value={`${stats.winRate}%`} icon={TrendingUp} color="text-green-400" />
                         <StatCard label="Jugados" value={stats.totalPlayed} icon={Activity} color="text-blue-400" />
                         <StatCard label="Ganados" value={user.matches_won || 0} icon={Trophy} color="text-yellow-400" />
-                        <StatCard label="Rank" value="-" icon={Zap} color="text-purple-400" />
+                        <StatCard 
+                            label={`Rank ${user.category ? user.category : 'General'}`} 
+                            value={`#${playerRankInfo.categoryRank || 1}`} 
+                            icon={Zap} 
+                            color="text-purple-400" 
+                        />
                     </div>
 
                     {/* Tarjeta Pequeña de Clima en Sede (OpenResa Style Compact) */}

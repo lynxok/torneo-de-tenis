@@ -152,12 +152,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
         )}
 
-        {(role === 'admin' || role === 'superadmin' || role === 'professor') && (
+        {(role === 'admin' || role === 'superadmin') && (
           <div className="pt-3 mt-2 border-t border-white/10">
             <p className="px-3 text-xs font-semibold text-muted uppercase tracking-wider mb-2">Administración</p>
-            {(role === 'superadmin' || role === 'admin') && (
-              <NavButton view="admin-users" icon={Users} label="Usuarios" />
-            )}
+            <NavButton view="admin-users" icon={Users} label="Usuarios" />
             <NavButton view="admin-institutions" icon={Settings} label="Instituciones" />
             <NavButton view="pricing-commissions" icon={Wallet} label="Precios y Comisiones" />
             {role === 'superadmin' && (

@@ -186,8 +186,8 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
                 </div>
             </div>
 
-            {/* 1. HERO BANNER: $0 COSTO FIJO / RIESGO CERO */}
-            <div className="relative overflow-hidden rounded-3xl p-6 md:p-8 bg-gradient-to-br from-emerald-950/50 via-slate-900 to-slate-950 border border-emerald-500/30 shadow-2xl shadow-emerald-950/40">
+            {/* 1. HERO BANNER: $0 COSTO FIJO / RIESGO CERO & ACLARACIÓN VIP VS ESTÁNDAR */}
+            <div className="relative overflow-hidden rounded-3xl p-6 md:p-8 bg-gradient-to-br from-emerald-950/50 via-slate-900 to-slate-950 border border-emerald-500/30 shadow-2xl shadow-emerald-950/40 space-y-6">
                 <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
                 <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
                     <div className="lg:col-span-8 space-y-3">
@@ -198,7 +198,7 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
                             La app tiene <span className="text-emerald-400 font-extrabold">$0 costo fijo mensual</span>.
                         </h2>
                         <p className="text-slate-300 text-sm leading-relaxed">
-                            No pagas abonos de mantenimiento ni licencias obligatorias. Si tu club no organiza torneos o no registra inscriptos, <strong className="text-white">el costo es literalmente $0</strong>. Solo se aplica una pequeña comisión por inscripto cuando un torneo se disputa efectivamente.
+                            No pagas abonos de mantenimiento ni licencias obligatorias. Si tu club no organiza torneos o no registra inscriptos, <strong className="text-white">el costo es literalmente $0</strong>. Solo se aplica comisión cuando un torneo se disputa efectivamente.
                         </p>
                     </div>
 
@@ -218,6 +218,26 @@ export const PricingAndCommissions: React.FC<PricingAndCommissionsProps> = ({ us
                                 <span>Descuentos de hasta 50% por mérito</span>
                             </div>
                         </div>
+                    </div>
+                </div>
+
+                {/* Explicación Clarificadora: 0% VIP vs 5-6% Estándar */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-white/10">
+                    <div className="bg-purple-950/30 border border-purple-500/30 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center gap-2 text-purple-300 font-bold text-xs uppercase tracking-wider">
+                            <Sparkles size={15} /> 1. Mi Plan VIP (0% de Comisión)
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                            Si tu institución cuenta con una membresía anual VIP o un cupón de bienvenida activo, tus torneos tienen <strong className="text-white">0% de comisión</strong>. Todo lo recaudado por inscripciones queda 100% en el club.
+                        </p>
+                    </div>
+                    <div className="bg-amber-950/30 border border-amber-500/30 rounded-2xl p-4 space-y-2">
+                        <div className="flex items-center gap-2 text-amber-300 font-bold text-xs uppercase tracking-wider">
+                            <Calculator size={15} /> 2. Esquema Estándar (5% a 6%)
+                        </div>
+                        <p className="text-xs text-slate-300 leading-relaxed">
+                            Aplica para clubes sin plan VIP o una vez consumidos los torneos bonificados. La comisión estándar va del <strong className="text-white">5% al 6%</strong> (o menos al ascender por mérito en la escala ATP).
+                        </p>
                     </div>
                 </div>
             </div>

@@ -586,29 +586,29 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
         <div className="fixed inset-0 z-50 bg-gradient-to-br from-slate-950 via-slate-900 to-black text-white flex flex-col select-none overflow-hidden font-sans">
             
             {/* TOP BROADCAST HEADER (TV SAFE AREA) */}
-            <header className="h-20 bg-slate-950/90 border-b border-primary/30 backdrop-blur px-6 sm:px-8 flex items-center justify-between shrink-0 shadow-2xl gap-4">
+            <header className="min-h-16 h-auto py-2.5 sm:h-20 sm:py-0 bg-slate-950/90 border-b border-primary/30 backdrop-blur px-3 sm:px-8 flex items-center justify-between shrink-0 shadow-2xl gap-2 sm:gap-4 flex-wrap sm:flex-nowrap">
                 {/* Left: Brand & Institution Scoping */}
-                <div className="flex items-center gap-4 sm:gap-6 min-w-0">
+                <div className="flex items-center gap-2 sm:gap-6 min-w-0">
                     {onExit && (
                         <button 
                             onClick={onExit}
-                            className="p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted hover:text-white border border-white/10 transition-colors shrink-0"
+                            className="p-2 sm:p-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-muted hover:text-white border border-white/10 transition-colors shrink-0"
                             title="Volver al panel"
                         >
-                            <ArrowLeft size={20} />
+                            <ArrowLeft size={18} />
                         </button>
                     )}
 
-                    <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-primary to-emerald-400 p-0.5 shadow-lg shadow-primary/30 flex items-center justify-center shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                        <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-2xl bg-gradient-to-tr from-primary to-emerald-400 p-0.5 shadow-lg shadow-primary/30 flex items-center justify-center shrink-0">
                             <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-                                <Tv size={22} className="text-primary animate-pulse" />
+                                <Tv size={18} className="text-primary animate-pulse" />
                             </div>
                         </div>
                         <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                                <span className="text-base sm:text-lg font-black tracking-tight text-white uppercase truncate">SMASH BROADCAST</span>
-                                <span className="px-2 py-0.5 text-[10px] font-black bg-red-600 text-white rounded-md tracking-widest uppercase animate-pulse flex items-center gap-1 shadow-md shadow-red-600/30 shrink-0">
+                            <div className="flex items-center gap-1.5 sm:gap-2">
+                                <span className="text-xs sm:text-lg font-black tracking-tight text-white uppercase truncate">SMASH BROADCAST</span>
+                                <span className="px-1.5 py-0.5 text-[9px] sm:text-[10px] font-black bg-red-600 text-white rounded-md tracking-widest uppercase animate-pulse flex items-center gap-1 shadow-md shadow-red-600/30 shrink-0">
                                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span> EN VIVO
                                 </span>
                             </div>
@@ -1318,7 +1318,7 @@ export const BroadcastTV: React.FC<BroadcastTVProps> = ({ user, initialTournamen
                 <div className="flex items-center gap-3 shrink-0">
                     <span className="text-[11px] font-bold text-primary">Rotación: {slideDuration}s</span>
                     <span className="w-1.5 h-1.5 rounded-full bg-slate-600"></span>
-                    <span className="text-slate-500 font-mono text-[11px]">v1.7.5</span>
+                    <span className="text-slate-500 font-mono text-[11px]">v1.7.9</span>
                 </div>
             </footer>
 

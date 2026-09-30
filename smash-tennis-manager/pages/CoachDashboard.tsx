@@ -15,7 +15,7 @@ import {
     Sparkles, Phone, ShieldCheck, AlertCircle, Filter, Check, X, Loader2,
     CalendarDays, Dumbbell, BookOpen, Star, Trash2, Edit3, DollarSign,
     CheckSquare, Square, Target, Swords, Trophy, Layers, ArrowRight,
-    RefreshCw, Share2, Flame
+    RefreshCw, Share2, Flame, MoreVertical
 } from 'lucide-react';
 
 interface CoachDashboardProps {
@@ -119,6 +119,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ user, onNavigate
     // Sub-filters for My Students
     const [searchStudent, setSearchStudent] = useState('');
     const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('all');
+    const [activeMenuStudentId, setActiveMenuStudentId] = useState<string | null>(null);
 
     // Packs & Payment Status Map
     const [packsMap, setPacksMap] = useState<Record<string, CoachStudentPack>>(() => {
@@ -266,6 +267,7 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ user, onNavigate
     const [evalCategory, setEvalCategory] = useState('3ra');
     const [evalNotes, setEvalNotes] = useState('');
     const [evaluating, setEvaluating] = useState(false);
+    const [activeStudentMenuId, setActiveStudentMenuId] = useState<string | null>(null);
 
     // Initial Data Fetching
     useEffect(() => {
@@ -688,12 +690,21 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ user, onNavigate
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-2.5 w-full lg:w-auto">
+                    <div className="flex flex-wrap items-center gap-2.5 w-full lg:w-auto">
+                        {groups.length > 0 && (
+                            <button
+                                onClick={() => handleOpenAttendanceModal(groups[0])}
+                                className="px-3.5 py-2.5 bg-teal-600/30 hover:bg-teal-600/50 text-teal-300 border border-teal-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 shadow-md"
+                                title="Tomar asistencia rápida del grupo"
+                            >
+                                <CheckSquare size={15} /> Tomar Asistencia
+                            </button>
+                        )}
                         <button
                             onClick={() => setShowAddStudentModal(true)}
                             className="flex-1 lg:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-emerald-600/20 flex items-center justify-center gap-1.5"
                         >
-                            <Plus size={15} /> Sumar Alumno al Plantel
+                            <Plus size={15} /> Sumar Alumno
                         </button>
                         <button
                             onClick={() => {
@@ -924,18 +935,18 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ user, onNavigate
                                                     </div>
                                                 </div>
 
-                                                {/* Fast Class Increment Button */}
+                                                {/* Fast Class Increment Button & Actions */}
                                                 <div className="flex items-center justify-between pt-1 gap-2">
                                                     <button
                                                         onClick={() => handleIncrementPackClass(student.id, formattedName)}
-                                                        className="flex-1 py-1 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 rounded-lg text-[10px] font-bold flex items-center justify-center gap-1 transition-all"
+                                                        className="flex-1 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95"
                                                         title="Registrar 1 clase tomada"
                                                     >
-                                                        <Plus size={11} /> +1 Clase
+                                                        <Plus size={13} /> +1 Clase
                                                     </button>
                                                     <button
                                                         onClick={() => handleOpenPackModal(student)}
-                                                        className="px-2 py-1 bg-white/5 hover:bg-white/10 text-muted hover:text-white rounded-lg text-[10px] font-semibold transition-all"
+                                                        className="px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-muted hover:text-white rounded-lg text-[10px] font-semibold transition-all"
                                                         title="Ajustar Pack y Precio"
                                                     >
                                                         <Edit3 size={11} /> Ajustar
@@ -952,33 +963,83 @@ export const CoachDashboard: React.FC<CoachDashboardProps> = ({ user, onNavigate
                                             )}
                                         </div>
 
-                                        {/* Bottom Action Buttons */}
-                                        <div className="pt-2 border-t border-white/5 grid grid-cols-3 gap-1.5">
+                                        {/* Bottom Action Bar: Primary +1 Clase and More Menu */}
+                                        <div className="pt-2 border-t border-white/5 flex items-center gap-2 relative">
                                             <button
-                                                onClick={() => handleWhatsAppStudent(student)}
-                                                className="py-1.5 bg-green-600/20 hover:bg-green-600/30 text-green-300 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
-                                                title="Contactar o enviar recordatorio por WhatsApp"
+                                                onClick={() => handleIncrementPackClass(student.id, formattedName)}
+                                                className="flex-1 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow-md shadow-emerald-600/20 active:scale-[0.98]"
                                             >
-                                                <MessageCircle size={12} /> WhatsApp
+                                                <Plus size={14} /> Registrar Asistencia (+1)
                                             </button>
-                                            <button
-                                                onClick={() => handleOpenGoalModal(student)}
-                                                className="py-1.5 bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
-                                                title="Configurar objetivos técnicos y plan de trabajo"
-                                            >
-                                                <Target size={12} /> Metas
-                                            </button>
-                                            <button
-                                                onClick={() => {
-                                                    setSelectedStudentForEval(student);
-                                                    setEvalCategory(student.category || '3ra');
-                                                    setShowEvalModal(true);
-                                                }}
-                                                className="py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 transition-all"
-                                                title="Emitir recomendación de categoría"
-                                            >
-                                                <Award size={12} /> Evaluar
-                                            </button>
+
+                                            <div className="relative">
+                                                <button
+                                                    onClick={() => setActiveStudentMenuId(activeStudentMenuId === student.id ? null : student.id)}
+                                                    className="p-2 bg-white/5 hover:bg-white/10 text-slate-300 hover:text-white rounded-xl transition-all border border-white/5 flex items-center justify-center"
+                                                    title="Más opciones del alumno"
+                                                >
+                                                    <MoreVertical size={16} />
+                                                </button>
+
+                                                {activeStudentMenuId === student.id && (
+                                                    <>
+                                                        <div 
+                                                            className="fixed inset-0 z-30" 
+                                                            onClick={() => setActiveStudentMenuId(null)}
+                                                        />
+                                                        <div className="absolute right-0 bottom-full mb-2 z-40 w-48 bg-slate-900 border border-white/15 rounded-2xl shadow-2xl p-1.5 space-y-1 animate-in fade-in zoom-in-95 duration-150">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveStudentMenuId(null);
+                                                                    handleWhatsAppStudent(student);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-xs font-semibold text-green-300 hover:bg-green-500/15 rounded-xl flex items-center gap-2 transition-colors"
+                                                            >
+                                                                <MessageCircle size={14} className="text-green-400" /> WhatsApp
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveStudentMenuId(null);
+                                                                    handleOpenGoalModal(student);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-xs font-semibold text-teal-300 hover:bg-teal-500/15 rounded-xl flex items-center gap-2 transition-colors"
+                                                            >
+                                                                <Target size={14} className="text-teal-400" /> Metas y Objetivos
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveStudentMenuId(null);
+                                                                    setSelectedStudentForEval(student);
+                                                                    setEvalCategory(student.category || '3ra');
+                                                                    setShowEvalModal(true);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/15 rounded-xl flex items-center gap-2 transition-colors"
+                                                            >
+                                                                <Award size={14} className="text-emerald-400" /> Evaluar Categoría
+                                                            </button>
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveStudentMenuId(null);
+                                                                    handleOpenPackModal(student);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-white/10 rounded-xl flex items-center gap-2 transition-colors"
+                                                            >
+                                                                <Edit3 size={14} className="text-slate-400" /> Ajustar Pack
+                                                            </button>
+                                                            <div className="border-t border-white/10 my-1" />
+                                                            <button
+                                                                onClick={() => {
+                                                                    setActiveStudentMenuId(null);
+                                                                    handleRemoveStudentFromRoster(student.id, formattedName);
+                                                                }}
+                                                                className="w-full text-left px-3 py-2 text-xs font-semibold text-red-400 hover:bg-red-500/15 rounded-xl flex items-center gap-2 transition-colors"
+                                                            >
+                                                                <Trash2 size={14} /> Quitar de mi lista
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 );

@@ -364,12 +364,20 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
     };
 
     const handleCopyAlias = () => {
-        const alias = activeInstitution?.alias_mp || 'parqueespana.tenis';
+        const alias = activeInstitution?.alias_mp;
+        if (!alias) {
+            addToast("El club todavía no cargó su alias de cobro.", "error");
+            return;
+        }
         navigator.clipboard.writeText(alias);
         addToast(`¡Alias "${alias}" copiado al portapapeles!`, "success");
     };
 
     const handleOpenMercadoPago = () => {
+        if (!activeInstitution?.alias_mp) {
+            addToast("El club todavía no cargó su alias para transferir.", "error");
+            return;
+        }
         handleCopyAlias();
         setTransferInitiated(true);
         // Official MP Transfer URL or deep link
@@ -723,21 +731,29 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                             <span>Pagos Directos por Transferencia</span>
                         </h4>
                         <p className="text-xs text-slate-400">
-                            Alias de {activeInstitution?.name || 'el club'}:{' '}
-                            <strong className="font-mono text-emerald-400 text-sm">
-                                {activeInstitution?.alias_mp || 'parqueespana.tenis'}
-                            </strong>
-                            {activeInstitution?.titular_mp && ` (${activeInstitution.titular_mp})`}
+                            {activeInstitution?.alias_mp ? (
+                                <>
+                                    Alias de {activeInstitution?.name || 'el club'}:{' '}
+                                    <strong className="font-mono text-emerald-400 text-sm">
+                                        {activeInstitution.alias_mp}
+                                    </strong>
+                                    {activeInstitution?.titular_mp && ` (${activeInstitution.titular_mp})`}
+                                </>
+                            ) : (
+                                <span className="text-amber-300 italic font-medium">El club todavía no cargó su alias</span>
+                            )}
                         </p>
                     </div>
                 </div>
 
-                <button
-                    onClick={handleCopyAlias}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 shrink-0"
-                >
-                    <Copy size={14} /> Copiar Alias
-                </button>
+                {activeInstitution?.alias_mp && (
+                    <button
+                        onClick={handleCopyAlias}
+                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-emerald-600/20 flex items-center gap-1.5 shrink-0"
+                    >
+                        <Copy size={14} /> Copiar Alias
+                    </button>
+                )}
             </div>
 
             {/* Filter Tabs */}
@@ -1069,17 +1085,25 @@ export const ShopPage: React.FC<ShopPageProps> = ({ user, institutions: propInst
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <span className="text-[10px] text-muted uppercase font-bold block">Alias Oficial del Club</span>
-                                            <span className="font-mono font-black text-emerald-400 text-lg">
-                                                {activeInstitution?.alias_mp || 'parqueespana.tenis'}
-                                            </span>
+                                            {activeInstitution?.alias_mp ? (
+                                                <span className="font-mono font-black text-emerald-400 text-lg">
+                                                    {activeInstitution.alias_mp}
+                                                </span>
+                                            ) : (
+                                                <span className="text-sm font-semibold text-amber-300 italic">
+                                                    El club todavía no cargó su alias
+                                                </span>
+                                            )}
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleCopyAlias}
-                                            className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
-                                        >
-                                            <Copy size={14} /> Copiar
-                                        </button>
+                                        {activeInstitution?.alias_mp && (
+                                            <button
+                                                type="button"
+                                                onClick={handleCopyAlias}
+                                                className="px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
+                                            >
+                                                <Copy size={14} /> Copiar
+                                            </button>
+                                        )}
                                     </div>
 
                                     {activeInstitution?.titular_mp && (

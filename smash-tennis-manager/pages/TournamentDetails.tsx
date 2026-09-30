@@ -431,7 +431,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         setShowPlayerEnrollModal(true);
     };
 
-    const handleConfirmPlayerEnroll = async () => {
+    const handleConfirmPlayerEnroll = async (extraData?: { dni?: string; phone?: string }) => {
         if (!tournament) return;
 
         if (effectivePrice > 0 && !enrollmentReceiptImage) {
@@ -441,6 +441,21 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
         setIsEnrolling(true);
         try {
+            // If user supplied missing DNI or phone, update their profile
+            if (extraData?.dni || extraData?.phone) {
+                try {
+                    const profileUpdates: Partial<UserProfile> = {};
+                    if (extraData.dni && !user.dni) profileUpdates.dni = extraData.dni;
+                    if (extraData.phone && !user.phone) profileUpdates.phone = extraData.phone;
+                    if (Object.keys(profileUpdates).length > 0) {
+                        await api.auth.updateProfile(user.id, profileUpdates);
+                        Object.assign(user, profileUpdates);
+                    }
+                } catch (profErr) {
+                    console.warn("Could not auto-update user profile DNI/phone:", profErr);
+                }
+            }
+
             const expiresAt = effectivePrice > 0 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : undefined;
             await api.players.enroll(
                 tournament.id, 

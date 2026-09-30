@@ -359,12 +359,45 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             .catch(console.error);
     }, [user.institution_id]);
 
-    // Group tournaments by start month
+    // Organizer Filter States
+    const isOrganizerOrAdmin = user.role === 'admin' || user.role === 'superadmin' || user.role === 'coordinator';
+    const [scopeFilter, setScopeFilter] = useState<'my_tournaments' | 'all'>(() => 
+        (user.role === 'admin' || user.role === 'coordinator') ? 'my_tournaments' : 'all'
+    );
+    const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'open' | 'ongoing' | 'finished'>('all');
+
+    // Group tournaments by start month (applying scope and status filters)
     const groupedTournaments = React.useMemo(() => {
         const groups: { [key: string]: { monthLabel: string; sortKey: string; items: Tournament[] } } = {};
         
+        // Filter by scope
+        let list = tournaments;
+        if (scopeFilter === 'my_tournaments') {
+            list = list.filter(t => 
+                (user.institution_id && t.institution_id === user.institution_id) ||
+                (t.created_by && t.created_by === user.id)
+            );
+        }
+
+        // Filter by status
+        if (statusFilter !== 'all') {
+            list = list.filter(t => {
+                const isRegClosed = Boolean(
+                    t.registration_closed || 
+                    t.status === 'finished' ||
+                    (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
+                );
+
+                if (statusFilter === 'draft') return t.status === 'draft';
+                if (statusFilter === 'open') return t.status !== 'draft' && t.status !== 'finished' && !isRegClosed;
+                if (statusFilter === 'ongoing') return t.status === 'active' || (isRegClosed && t.status !== 'finished' && t.status !== 'draft');
+                if (statusFilter === 'finished') return t.status === 'finished';
+                return true;
+            });
+        }
+
         // Sort tournaments by start_date ascending
-        const sorted = [...tournaments].sort((a, b) => {
+        const sorted = [...list].sort((a, b) => {
             const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
             const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
             return dateA - dateB;
@@ -395,7 +428,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
         });
 
         return Object.values(groups).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-    }, [tournaments]);
+    }, [tournaments, scopeFilter, statusFilter, user]);
 
     const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all');
     const [viewMode, setViewMode] = useState<'list' | 'map'>(() => 
@@ -472,6 +505,91 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                 />
             ) : (
                 <>
+                    {/* Organizer Scope & Status Filter Pills */}
+                    {isOrganizerOrAdmin && (
+                        <div className="bg-card border border-white/10 rounded-2xl p-3.5 space-y-3 shadow-sm">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+                                {/* Scope Switcher */}
+                                <div className="flex bg-slate-900/90 p-1 rounded-xl border border-white/10 w-full sm:w-auto">
+                                    <button
+                                        onClick={() => setScopeFilter('my_tournaments')}
+                                        className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                            scopeFilter === 'my_tournaments'
+                                                ? 'bg-primary text-white shadow-md shadow-primary/20'
+                                                : 'text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        Mis Torneos
+                                    </button>
+                                    <button
+                                        onClick={() => setScopeFilter('all')}
+                                        className={`flex-1 sm:flex-initial px-4 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                                            scopeFilter === 'all'
+                                                ? 'bg-primary text-white shadow-md shadow-primary/20'
+                                                : 'text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        Todos los Torneos
+                                    </button>
+                                </div>
+
+                                {/* Status Pills */}
+                                <div className="flex items-center gap-1.5 overflow-x-auto w-full sm:w-auto pb-1 sm:pb-0 custom-scrollbar">
+                                    <button
+                                        onClick={() => setStatusFilter('all')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
+                                            statusFilter === 'all'
+                                                ? 'bg-white/15 text-white border-white/30'
+                                                : 'bg-white/5 border-white/5 text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        Todos
+                                    </button>
+                                    <button
+                                        onClick={() => setStatusFilter('draft')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
+                                            statusFilter === 'draft'
+                                                ? 'bg-slate-700 text-white border-slate-500'
+                                                : 'bg-white/5 border-white/5 text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        ⚪ Borrador
+                                    </button>
+                                    <button
+                                        onClick={() => setStatusFilter('open')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
+                                            statusFilter === 'open'
+                                                ? 'bg-emerald-500/25 text-emerald-300 border-emerald-500/40'
+                                                : 'bg-white/5 border-white/5 text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        🟢 Inscripción Abierta
+                                    </button>
+                                    <button
+                                        onClick={() => setStatusFilter('ongoing')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
+                                            statusFilter === 'ongoing'
+                                                ? 'bg-amber-500/25 text-amber-300 border-amber-500/40'
+                                                : 'bg-white/5 border-white/5 text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        🟡 En Juego
+                                    </button>
+                                    <button
+                                        onClick={() => setStatusFilter('finished')}
+                                        className={`px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all border ${
+                                            statusFilter === 'finished'
+                                                ? 'bg-purple-500/25 text-purple-300 border-purple-500/40'
+                                                : 'bg-white/5 border-white/5 text-muted hover:text-white'
+                                        }`}
+                                    >
+                                        🟣 Finalizado
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Month Quick Filter Tabs */}
                     {groupedTournaments.length > 1 && (
                         <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
@@ -691,6 +809,32 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                 </div>
 
                                                 <div className="space-y-2 text-sm border-t border-white/5 pt-3 mt-auto">
+                                                    {/* Próximo Paso Badge for Organizers & Players */}
+                                                    {(() => {
+                                                        let nextStepText = '';
+                                                        let nextStepColor = '';
+                                                        if (t.status === 'draft') {
+                                                            nextStepText = 'Próximo paso: Abrir inscripciones';
+                                                            nextStepColor = 'bg-slate-800 text-slate-300 border-white/10';
+                                                        } else if (t.status === 'finished') {
+                                                            nextStepText = 'Torneo finalizado: Ver campeones';
+                                                            nextStepColor = 'bg-purple-500/15 text-purple-300 border-purple-500/30';
+                                                        } else if (isRegClosed) {
+                                                            nextStepText = 'Próximo paso: Armar cuadros / Cargar resultados';
+                                                            nextStepColor = 'bg-amber-500/15 text-amber-300 border-amber-500/30';
+                                                        } else {
+                                                            nextStepText = 'Próximo paso: Recibir inscripciones';
+                                                            nextStepColor = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
+                                                        }
+
+                                                        return (
+                                                            <div className={`px-2.5 py-1 rounded-xl text-[10px] font-bold border flex items-center justify-between ${nextStepColor}`}>
+                                                                <span className="truncate">{nextStepText}</span>
+                                                                <ChevronRight size={12} className="shrink-0 opacity-70" />
+                                                            </div>
+                                                        );
+                                                    })()}
+
                                                     {(() => {
                                                         const countsForRanking = t.counts_for_ranking !== false && (!t.rules || t.rules.counts_for_ranking !== false);
                                                         const tierMeta = t.tier_applied ? (TIER_META[t.tier_applied] || TIER_META.challenger) : null;

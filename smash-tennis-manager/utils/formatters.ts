@@ -130,3 +130,49 @@ export function formatMatchScore(score: any): string | null {
     }
     return JSON.stringify(score);
 }
+
+/**
+ * Format a number as Argentine Peso currency.
+ * Example: formatCurrency(1500) -> "$ 1.500"
+ */
+export function formatCurrency(amount: number | null | undefined): string {
+    if (amount == null || isNaN(Number(amount))) return '—';
+    try {
+        return new Intl.NumberFormat('es-AR', {
+            style: 'currency',
+            currency: 'ARS',
+            maximumFractionDigits: 0,
+        }).format(Number(amount));
+    } catch {
+        return `$ ${Number(amount).toLocaleString('es-AR')}`;
+    }
+}
+
+/**
+ * Format an ISO date string or Date object to dd/mm/aaaa.
+ * Example: formatDate("2024-03-15") -> "15/03/2024"
+ */
+export function formatDate(date: string | Date | null | undefined): string {
+    if (!date) return '—';
+    try {
+        const d = typeof date === 'string' ? new Date(date.includes('T') ? date : date + 'T00:00:00') : date;
+        if (isNaN(d.getTime())) return String(date);
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    } catch {
+        return String(date);
+    }
+}
+
+/**
+ * Format a full name truncating with title attribute if too long.
+ * Returns { display, full } for use as: <span title={full}>{display}</span>
+ */
+export function formatTruncatedName(name?: string, lastname?: string, maxLength = 22): { display: string; full: string } {
+    const full = formatPlayerName(name, lastname);
+    const display = full.length > maxLength ? full.slice(0, maxLength - 1) + '…' : full;
+    return { display, full };
+}
+

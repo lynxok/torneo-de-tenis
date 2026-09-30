@@ -16,6 +16,7 @@ import { CookieConsentBanner } from './components/CookieConsentBanner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { BottomNavBar } from './components/BottomNavBar';
 import { soundEffects } from './services/soundEffects';
+import { canAccessView } from './utils/permissions';
 import { Menu, ShieldAlert, User, Shield, Loader2, GraduationCap } from 'lucide-react';
 
 // Resilient Code-Splitting with auto-retry on new version deployments
@@ -110,16 +111,29 @@ const AppContent = () => {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [authRole, setAuthRole] = useState<'player' | 'admin'>('player');
 
-  // Super Admin Debug State
-  const [simulatedRole, setSimulatedRole] = useState<UserRole | null>(null);
-  const [hasSelectedRole, setHasSelectedRole] = useState(false);
+  // Super Admin Debug State - Persisted in sessionStorage across reloads
+  const [simulatedRole, setSimulatedRole] = useState<UserRole | null>(() => {
+    try {
+      const stored = sessionStorage.getItem('smash_simulated_role');
+      if (stored === 'superadmin' || stored === 'admin' || stored === 'professor' || stored === 'player' || stored === 'coordinator') {
+        return stored as UserRole;
+      }
+    } catch (e) {}
+    return null;
+  });
+  const [hasSelectedRole, setHasSelectedRole] = useState<boolean>(() => {
+    try {
+      return Boolean(sessionStorage.getItem('smash_simulated_role_selected'));
+    } catch (e) {
+      return false;
+    }
+  });
 
   // --- TUTORIAL STATE ---
   const [activeTutorialId, setActiveTutorialId] = useState<string | null>(null);
   const [isTutorialActive, setIsTutorialActive] = useState(false);
 
   // DERIVED STATE: Effective User (Real + Simulation)
-  // Defined here so it can be used in effects before early returns
   const effectiveUser = userProfile ? {
     ...userProfile,
     role: simulatedRole || userProfile.role
@@ -127,6 +141,118 @@ const AppContent = () => {
 
   const fetchingProfileUserIdRef = useRef<string | null>(null);
   const fetchingMessagesRef = useRef<boolean>(false);
+
+  // Parse current URL path and return target view + navData
+  const parseCurrentUrl = () => {
+    const pathname = window.location.pathname.toLowerCase().replace(/\/$/, '') || '/';
+    const params = new URLSearchParams(window.location.search);
+
+    // Root or inicio
+    if (pathname === '/' || pathname === '/inicio') {
+      return { view: 'landing', navData: null };
+    }
+    if (pathname === '/login') {
+      return { view: 'auth', authMode: 'login' as const, navData: null };
+    }
+    if (pathname === '/registro') {
+      return { view: 'auth', authMode: 'register' as const, navData: null };
+    }
+
+    // TV / Broadcast: /tv or /tv/:sedeId
+    if (pathname.startsWith('/tv') || pathname.startsWith('/broadcast')) {
+      const parts = pathname.split('/').filter(Boolean);
+      const sedeOrTournament = parts[1] || params.get('tournament') || params.get('t') || params.get('sede');
+      return { view: 'tv', navData: sedeOrTournament || null };
+    }
+
+    // App routes: /app/*
+    if (pathname.startsWith('/app/')) {
+      const sub = pathname.replace('/app/', '');
+      const parts = sub.split('/');
+      const section = parts[0];
+      const param = parts[1];
+
+      if (section === 'inicio') return { view: 'dashboard', navData: null };
+      if (section === 'torneos') {
+        if (param) return { view: 'tournament-detail', navData: param };
+        return { view: 'tournaments', navData: params.get('view') === 'map' ? { view: 'map' } : null };
+      }
+      if (section === 'ranking') {
+        return { view: 'rankings', navData: param || null };
+      }
+      if (section === 'jugadores') {
+        return { view: 'players', navData: param ? { playerId: param } : null };
+      }
+      if (section === 'perfil') return { view: 'profile', navData: null };
+      if (section === 'reservas') return { view: 'bookings', navData: null };
+      if (section === 'tienda') return { view: 'shop', navData: null };
+      if (section === 'clases') return { view: 'coach-dashboard', navData: null };
+      if (section === 'mensajes') return { view: 'messages', navData: null };
+    }
+
+    // Admin routes: /admin/*
+    if (pathname.startsWith('/admin/')) {
+      const sub = pathname.replace('/admin/', '');
+      if (sub === 'usuarios') return { view: 'admin-users', navData: null };
+      if (sub === 'instituciones') return { view: 'admin-institutions', navData: null };
+      if (sub === 'precios') return { view: 'pricing-commissions', navData: null };
+      if (sub === 'ajustes') return { view: 'admin-settings', navData: null };
+    }
+
+    // Query param fallbacks
+    const viewParam = params.get('view');
+    const tournamentId = params.get('tournament') || params.get('t');
+    if (tournamentId) return { view: 'tournament-detail', navData: tournamentId };
+    if (viewParam && VALID_VIEWS.includes(viewParam)) return { view: viewParam, navData: null };
+
+    return { view: 'dashboard', navData: null };
+  };
+
+  const getUrlForView = (view: string, data?: any): string => {
+    switch (view) {
+      case 'landing':
+      case 'inicio':
+        return '/inicio';
+      case 'auth':
+        return authMode === 'register' ? '/registro' : '/login';
+      case 'dashboard':
+        return '/app/inicio';
+      case 'tournaments':
+        return data?.view === 'map' ? '/app/torneos?view=map' : '/app/torneos';
+      case 'tournament-detail':
+        return typeof data === 'string' ? `/app/torneos/${data}` : '/app/torneos';
+      case 'rankings':
+        return typeof data === 'string' ? `/app/ranking/${data}` : '/app/ranking';
+      case 'players':
+        return data?.playerId ? `/app/jugadores/${data.playerId}` : '/app/jugadores';
+      case 'profile':
+        return '/app/perfil';
+      case 'bookings':
+        return '/app/reservas';
+      case 'shop':
+        return '/app/tienda';
+      case 'coach-dashboard':
+      case 'classes':
+        return '/app/clases';
+      case 'messages':
+        return '/app/mensajes';
+      case 'reports':
+        return '/app/reportes';
+      case 'pricing-commissions':
+        return '/admin/precios';
+      case 'admin-users':
+        return '/admin/usuarios';
+      case 'admin-institutions':
+        return '/admin/instituciones';
+      case 'admin-settings':
+        return '/admin/ajustes';
+      case 'tv':
+      case 'broadcast':
+        return data ? `/tv/${data}` : '/tv';
+      default:
+        return '/app/inicio';
+    }
+  };
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -150,91 +276,57 @@ const AppContent = () => {
         setLoading(false);
         setSimulatedRole(null);
         setHasSelectedRole(false);
+        try {
+          sessionStorage.removeItem('smash_simulated_role');
+          sessionStorage.removeItem('smash_simulated_role_selected');
+        } catch (e) {}
         setUnreadCount(0);
         fetchingProfileUserIdRef.current = null;
         checkUnauthUrlRedirects();
       }
     });
 
-    return () => subscription.unsubscribe();
+    // Listen for browser Back/Forward (popstate)
+    const handlePopState = () => {
+      const parsed = parseCurrentUrl();
+      setActiveView(parsed.view);
+      if (parsed.navData !== undefined) setNavData(parsed.navData);
+      window.scrollTo(0, 0);
+    };
+    window.addEventListener('popstate', handlePopState);
+
+    return () => {
+      subscription.unsubscribe();
+      window.removeEventListener('popstate', handlePopState);
+    };
   }, []);
 
   const checkUnauthUrlRedirects = () => {
-    const params = new URLSearchParams(window.location.search);
-    const pathname = window.location.pathname.toLowerCase();
-    const modeParam = params.get('mode');
-    const roleParam = params.get('role');
-    const clubParam = params.get('club') || params.get('c');
-    const viewParam = params.get('view');
-
-    const isExplicitTv = pathname.includes('/tv') || pathname.includes('/broadcast') || viewParam === 'tv' || viewParam === 'broadcast';
-    if (isExplicitTv) {
+    const parsed = parseCurrentUrl();
+    if (parsed.view === 'tv') {
       setUnauthView('tv' as any);
       setActiveView('tv');
+      if (parsed.navData) setNavData(parsed.navData);
       return;
     }
-
-    const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
-
-    if (isExplicitInicio) {
-      setUnauthView('landing');
-      setActiveView('landing');
-      return;
-    }
-
-    const isShopQr = viewParam === 'shop' || params.get('court') || params.get('cancha');
-    if (isShopQr) {
+    if (parsed.view === 'shop') {
       setUnauthView('shop' as any);
       setActiveView('shop');
       return;
     }
-
-    if (modeParam === 'login' || modeParam === 'register' || clubParam || viewParam === 'auth' || viewParam === 'login' || viewParam === 'register') {
+    if (parsed.view === 'auth') {
       setUnauthView('auth');
-      if (modeParam === 'register' || viewParam === 'register') setAuthMode('register');
-      if (modeParam === 'login' || viewParam === 'login') setAuthMode('login');
-      if (roleParam === 'admin' || roleParam === 'player') setAuthRole(roleParam as any);
-    } else {
-      setUnauthView('landing');
-      setActiveView('landing');
+      if (parsed.authMode) setAuthMode(parsed.authMode);
+      return;
     }
+    setUnauthView('landing');
+    setActiveView('landing');
   };
 
   const checkUrlRedirects = () => {
-    const params = new URLSearchParams(window.location.search);
-    const pathname = window.location.pathname.toLowerCase();
-    const tournamentId = params.get('tournament') || params.get('t');
-    const clubId = params.get('club') || params.get('institution') || params.get('c');
-    const viewParam = params.get('view');
-
-    const isExplicitTv = pathname.includes('/tv') || pathname.includes('/broadcast') || viewParam === 'tv' || viewParam === 'broadcast';
-    if (isExplicitTv) {
-      setActiveView('tv');
-      if (tournamentId) setNavData(tournamentId);
-      return;
-    }
-
-    const isExplicitInicio = pathname.includes('/inicio') || pathname.endsWith('/inicio') || viewParam === 'inicio' || viewParam === 'landing';
-
-    if (isExplicitInicio) {
-      setActiveView('landing');
-    } else if (viewParam === 'shop' || params.get('court') || params.get('cancha')) {
-      setActiveView('shop');
-      if (clubId) setNavData({ clubId });
-    } else if (tournamentId) {
-      setActiveView('tournament-detail');
-      setNavData(tournamentId);
-    } else if (clubId) {
-      setActiveView('bookings');
-      setNavData({ clubId });
-    } else if (viewParam === 'map') {
-      setActiveView('tournaments');
-      setNavData({ view: 'map' });
-    } else if (viewParam && VALID_VIEWS.includes(viewParam)) {
-      setActiveView(viewParam);
-    } else {
-      setActiveView(prev => VALID_VIEWS.includes(prev) ? prev : 'dashboard');
-    }
+    const parsed = parseCurrentUrl();
+    setActiveView(parsed.view);
+    if (parsed.navData !== undefined) setNavData(parsed.navData);
   };
 
   // Sync Badge Count with Role Changes (Simulation)
@@ -285,31 +377,43 @@ const AppContent = () => {
     window.history.pushState({}, '', '/inicio');
   };
 
+  const handleSimulateRole = (role: UserRole | null) => {
+    setSimulatedRole(role);
+    setHasSelectedRole(true);
+    try {
+      if (role) {
+        sessionStorage.setItem('smash_simulated_role', role);
+      } else {
+        sessionStorage.removeItem('smash_simulated_role');
+      }
+      sessionStorage.setItem('smash_simulated_role_selected', 'true');
+    } catch (e) {}
+  };
+
   const handleNavigate = (view: string, data?: any) => {
     soundEffects.playScoreBeep();
+
+    // Check permissions before allowing navigation
+    if (effectiveUser && !canAccessView(effectiveUser.role, view)) {
+      console.warn(`[Smash RBAC] Acceso denegado a '${view}' para el rol '${effectiveUser.role}'. Redirigiendo a inicio.`);
+      view = 'dashboard';
+    }
+
     setActiveView(view);
     if (data !== undefined) setNavData(data);
     setMobileMenuOpen(false);
+
+    // Update browser URL via History API
+    const targetUrl = getUrlForView(view, data);
+    if (window.location.pathname !== targetUrl) {
+      window.history.pushState({ view, data }, '', targetUrl);
+    }
+
+    // Scroll to top on route change
+    window.scrollTo(0, 0);
+
     // Refresh unread count when navigating
     if (effectiveUser) fetchUnreadMessages(effectiveUser);
-  };
-
-  // --- TUTORIAL HANDLERS ---
-  const handleStartTutorial = (tutorialId: string) => {
-    setActiveTutorialId(tutorialId);
-    setIsTutorialActive(true);
-  };
-
-  const handleTutorialComplete = () => {
-    setIsTutorialActive(false);
-    setActiveTutorialId(null);
-  };
-
-  const activeTutorialDef = TUTORIALS.find(t => t.id === activeTutorialId);
-
-  const handleSimulateRole = (role: UserRole) => {
-    setSimulatedRole(role);
-    setHasSelectedRole(true);
   };
 
   const handleDevSuperAdminBypass = () => {
@@ -457,7 +561,7 @@ const AppContent = () => {
 
           <div className="space-y-3">
             <button
-              onClick={() => { setSimulatedRole(null); setHasSelectedRole(true); }}
+              onClick={() => handleSimulateRole(null)}
               className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-orange-500/50 hover:shadow-lg hover:shadow-orange-500/10 transition-all group"
             >
               <div className="w-10 h-10 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -470,7 +574,7 @@ const AppContent = () => {
             </button>
 
             <button
-              onClick={() => { setSimulatedRole('admin'); setHasSelectedRole(true); }}
+              onClick={() => handleSimulateRole('admin')}
               className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-purple-500/50 hover:shadow-lg hover:shadow-purple-500/10 transition-all group"
             >
               <div className="w-10 h-10 rounded-lg bg-purple-500/20 text-purple-400 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -483,7 +587,7 @@ const AppContent = () => {
             </button>
 
             <button
-              onClick={() => { setSimulatedRole('professor'); setHasSelectedRole(true); }}
+              onClick={() => handleSimulateRole('professor')}
               className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-emerald-500/50 hover:shadow-lg hover:shadow-emerald-500/10 transition-all group"
             >
               <div className="w-10 h-10 rounded-lg bg-emerald-500/20 text-emerald-400 flex items-center justify-center group-hover:scale-110 transition-transform">
@@ -496,7 +600,7 @@ const AppContent = () => {
             </button>
 
             <button
-              onClick={() => { setSimulatedRole('player'); setHasSelectedRole(true); }}
+              onClick={() => handleSimulateRole('player')}
               className="w-full flex items-center gap-4 p-4 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 hover:border-primary/50 hover:shadow-lg hover:shadow-primary/10 transition-all group"
             >
               <div className="w-10 h-10 rounded-lg bg-primary/20 text-primary flex items-center justify-center group-hover:scale-110 transition-transform">

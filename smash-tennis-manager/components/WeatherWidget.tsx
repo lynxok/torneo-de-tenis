@@ -55,12 +55,16 @@ export const WeatherWidget: React.FC<{ compact?: boolean }> = ({ compact = false
             }
         } catch (e) {}
 
-        // Fetch real weather data from Open-Meteo for Diamante, Entre Ríos (-32.0664, -60.6384)
+        // Fetch real weather data from Open-Meteo for Diamante, Entre Ríos (-32.0664, -60.6384) with 8s timeout
         const fetchWeather = async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 8000);
             try {
                 const response = await fetch(
-                    'https://api.open-meteo.com/v1/forecast?latitude=-32.0664&longitude=-60.6384&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,uv_index_max&timezone=America%2FArgentina%2FBuenos_Aires'
+                    'https://api.open-meteo.com/v1/forecast?latitude=-32.0664&longitude=-60.6384&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,rain,weather_code,cloud_cover,wind_speed_10m,wind_gusts_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,uv_index_max&timezone=America%2FArgentina%2FBuenos_Aires',
+                    { signal: controller.signal }
                 );
+                clearTimeout(timeoutId);
                 const data = await response.json();
 
                 const current = data.current;
@@ -138,9 +142,18 @@ export const WeatherWidget: React.FC<{ compact?: boolean }> = ({ compact = false
 
     if (loading) {
         return (
-            <div className="bg-card border border-white/10 rounded-2xl p-6 flex items-center justify-center gap-3 text-muted animate-pulse">
-                <RefreshCw className="animate-spin text-primary" size={18} />
-                <span className="text-xs font-bold">Cargando el clima...</span>
+            <div className="bg-card border border-white/10 rounded-2xl p-4 sm:p-6 shadow-xl animate-pulse space-y-4">
+                <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <div className="h-5 w-36 bg-white/10 rounded-md"></div>
+                    <div className="h-4 w-16 bg-white/5 rounded-md"></div>
+                </div>
+                <div className="flex items-center gap-4">
+                    <div className="w-14 h-14 bg-white/10 rounded-2xl"></div>
+                    <div className="space-y-2 flex-1">
+                        <div className="h-8 w-20 bg-white/10 rounded-lg"></div>
+                        <div className="h-3 w-32 bg-white/5 rounded"></div>
+                    </div>
+                </div>
             </div>
         );
     }

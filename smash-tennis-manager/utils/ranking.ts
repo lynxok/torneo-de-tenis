@@ -61,12 +61,42 @@ export function normalizeCategoryKey(cat?: string | null): string {
     return getEquivalentCategory(cat, 'numeric') || cat.trim();
 }
 
+export function isSystemOrAdminAccount(p: UserProfile): boolean {
+    if (p.role === 'superadmin') return true;
+    const fullName = `${p.name || ''} ${p.lastname || ''}`.trim().toLowerCase();
+    const email = (p.email || '').toLowerCase();
+    
+    if (
+        fullName.includes('admin') || 
+        fullName.includes('sistema') || 
+        fullName.includes('superadmin') || 
+        fullName.includes('smash tenis') ||
+        fullName.includes('organizador')
+    ) {
+        return true;
+    }
+
+    if (
+        email.startsWith('admin@') || 
+        email.includes('superadmin') || 
+        email.includes('smash.admin') ||
+        email.includes('support@')
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
 /**
  * Calculates global and category rankings for a list of players
  */
 export function computeRankings(players: UserProfile[]): RankedPlayer[] {
-    // 1. Calculate points for all players
-    const withPoints: RankedPlayer[] = players.map(p => {
+    // 0. Filter out system and pure organizer admin accounts from public ranking
+    const eligiblePlayers = players.filter(p => !isSystemOrAdminAccount(p));
+
+    // 1. Calculate points for all eligible players
+    const withPoints: RankedPlayer[] = eligiblePlayers.map(p => {
         const details = calculatePointsDetails(p);
         return {
             ...p,

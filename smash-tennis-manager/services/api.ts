@@ -538,6 +538,12 @@ export const api = {
         async signIn(email: string, password: string) {
             return await supabase.auth.signInWithPassword({ email, password });
         },
+        async resetPasswordForEmail(email: string) {
+            const redirectUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : undefined;
+            return await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: redirectUrl
+            });
+        },
         async signOut() {
             return await supabase.auth.signOut();
         }

@@ -1068,7 +1068,7 @@ const PlayerBookings: React.FC<{ user: UserProfile }> = ({ user }) => {
               totalPrice={splitBillBooking.total_price || (splitBillBooking as any).price || 0}
               courtName={splitBillBooking.court_name}
               clubName={splitBillBooking.institutions?.name || 'Club'}
-              clubAlias={splitBillBooking.institutions?.alias_mp || 'parqueespana.tenis'}
+              clubAlias={splitBillBooking.institutions?.alias_mp || ''}
               date={formatFriendlyDate(splitBillBooking.date)}
               timeSlot={`${splitBillBooking.start_time} - ${splitBillBooking.end_time}`}
               initialPlayersCount={splitBillBooking.match_type === 'doubles' || (splitBillBooking.participants && splitBillBooking.participants.length > 2) ? 4 : 2}
@@ -1510,7 +1510,7 @@ const PlayerNewBookingModal = ({
                         const total = calculateTotal();
                         const pricePerPerson = Math.round(total / successSplitCount);
                         const selectedInstObj = institutions.find(i => i.id === selectedInstId);
-                        const clubAlias = selectedInstObj?.alias_mp || 'parqueespana.tenis';
+                        const clubAlias = selectedInstObj?.alias_mp || '';
                         const totalDuration = minDuration * durationMultiplier;
 
                         const handleShareClubWhatsApp = () => {
@@ -1933,7 +1933,7 @@ const PlayerNewBookingModal = ({
                             {currentStep === 3 && (() => {
                                 const total = calculateTotal();
                                 const selectedInstObj = institutions.find(i => i.id === selectedInstId);
-                                const clubAlias = selectedInstObj?.alias_mp || 'parqueespana.tenis';
+                                const clubAlias = selectedInstObj?.alias_mp || '';
                                 const totalDuration = minDuration * durationMultiplier;
 
                                 return (
@@ -1995,22 +1995,28 @@ const PlayerNewBookingModal = ({
                                                 <div className="p-3.5 bg-sidebar border border-white/10 rounded-xl space-y-2">
                                                     <div className="flex items-center justify-between text-xs">
                                                         <span className="text-[10px] uppercase font-bold text-muted">1. Alias Mercado Pago / Banco del Club:</span>
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => {
-                                                                navigator.clipboard.writeText(clubAlias);
-                                                                setCopiedSuccessAlias(true);
-                                                                addToast(`¡Alias "${clubAlias}" copiado!`, "success");
-                                                                setTimeout(() => setCopiedSuccessAlias(false), 2000);
-                                                            }}
-                                                            className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
-                                                        >
-                                                            {copiedSuccessAlias ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
-                                                            {copiedSuccessAlias ? 'Copiado' : 'Copiar'}
-                                                        </button>
+                                                        {clubAlias && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(clubAlias);
+                                                                    setCopiedSuccessAlias(true);
+                                                                    addToast(`¡Alias "${clubAlias}" copiado!`, "success");
+                                                                    setTimeout(() => setCopiedSuccessAlias(false), 2000);
+                                                                }}
+                                                                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
+                                                            >
+                                                                {copiedSuccessAlias ? <Check size={12} className="text-emerald-400" /> : <Copy size={12} />}
+                                                                {copiedSuccessAlias ? 'Copiado' : 'Copiar'}
+                                                            </button>
+                                                        )}
                                                     </div>
                                                     <div className="font-mono text-emerald-400 font-black text-base bg-black/30 p-2 rounded-lg border border-white/5">
-                                                        {clubAlias}
+                                                        {clubAlias || (
+                                                            <span className="text-amber-300 italic font-sans text-xs">
+                                                                El club todavía no cargó su alias
+                                                            </span>
+                                                        )}
                                                     </div>
                                                     <p className="text-[11px] text-muted">
                                                         Realiza la transferencia de <strong>${total}</strong> desde tu app bancaria o MP.
@@ -2216,9 +2222,21 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
     const [weatherCancelScope, setWeatherCancelScope] = useState<'full_day' | 'from_time'>('full_day');
     const [weatherStartTime, setWeatherStartTime] = useState('16:00');
     const [weatherReason, setWeatherReason] = useState('Suspensión por lluvia / mal tiempo');
-    const [weatherActionLoading, setWeatherActionLoading] = useState(false);
+    // Mobile Court Navigation (< md screens)
+    const [mobileCourtIndex, setMobileCourtIndex] = useState(0);
 
-    const { addToast } = useToast();
+    // Current time indicator calculation
+    const nowTimeStr = React.useMemo(() => {
+        const now = new Date();
+        const hrs = String(now.getHours()).padStart(2, '0');
+        const mins = String(now.getMinutes()).padStart(2, '0');
+        return `${hrs}:${mins}`;
+    }, []);
+
+    const isTodaySelected = React.useMemo(() => {
+        const todayStr = new Date().toISOString().split('T')[0];
+        return selectedDate === todayStr;
+    }, [selectedDate]);
 
     const handlePrevDay = () => {
         if (!selectedDate) return;
@@ -2635,75 +2653,139 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                     </div>
                 </div>
 
+                {/* Mobile Court Selector Tabs (< md) */}
+                {gridCourts.length > 1 && (
+                    <div className="md:hidden flex items-center justify-between bg-card border border-white/10 rounded-2xl p-2.5 mb-3 shadow-sm">
+                        <button
+                            type="button"
+                            onClick={() => setMobileCourtIndex(prev => Math.max(0, prev - 1))}
+                            disabled={mobileCourtIndex === 0}
+                            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white disabled:opacity-30 disabled:pointer-events-none transition-colors border border-white/5"
+                        >
+                            <ChevronLeft size={16} />
+                        </button>
+                        <div className="flex flex-col items-center">
+                            <span className="text-xs font-black text-white uppercase tracking-wider">
+                                {gridCourts[mobileCourtIndex] || 'Cancha'}
+                            </span>
+                            <span className="text-[10px] text-primary font-bold">
+                                Cancha {mobileCourtIndex + 1} de {gridCourts.length}
+                            </span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setMobileCourtIndex(prev => Math.min(gridCourts.length - 1, prev + 1))}
+                            disabled={mobileCourtIndex >= gridCourts.length - 1}
+                            className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white disabled:opacity-30 disabled:pointer-events-none transition-colors border border-white/5"
+                        >
+                            <ChevronRight size={16} />
+                        </button>
+                    </div>
+                )}
+
                 <div className="overflow-x-auto bg-card border border-white/10 rounded-2xl mb-4 relative min-h-[400px]">
                     {loadingGrid && (<div className="absolute inset-0 bg-dark/50 backdrop-blur-sm flex items-center justify-center z-10"><Loader2 className="animate-spin text-primary" size={40} /></div>)}
                     {isDayClosed ? (
                         <div className="flex flex-col items-center justify-center h-[400px] text-muted"><div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mb-4"><Lock size={32} /></div><p className="font-bold text-white">Cerrado en esta fecha.</p></div>
                     ) : (
-                        <div className="min-w-[800px]">
-                            <div className="grid bg-white/5 border-b border-white/10 text-center py-2.5 sticky top-0 z-10 backdrop-blur-md" style={{ gridTemplateColumns: `70px repeat(${gridCourts.length}, 1fr)` }}>
+                        <div className="w-full md:min-w-[800px]">
+                            {/* Header row: Mobile shows 1 court, md+ shows all */}
+                            <div 
+                                className="grid bg-white/5 border-b border-white/10 text-center py-2.5 sticky top-0 z-10 backdrop-blur-md" 
+                                style={{ 
+                                    gridTemplateColumns: window.innerWidth < 768 && gridCourts.length > 0 
+                                        ? '70px 1fr' 
+                                        : `70px repeat(${gridCourts.length}, 1fr)` 
+                                }}
+                            >
                                 <div className="text-[10px] font-bold text-muted uppercase flex items-center justify-center">Hora</div>
-                                {gridCourts.map(court => (<div key={court} className="text-xs font-black text-white uppercase tracking-wider">{court}</div>))}
+                                <div className="md:hidden text-xs font-black text-white uppercase tracking-wider">
+                                    {gridCourts[mobileCourtIndex] || 'Cancha'}
+                                </div>
+                                {gridCourts.map(court => (
+                                    <div key={court} className="hidden md:block text-xs font-black text-white uppercase tracking-wider">
+                                        {court}
+                                    </div>
+                                ))}
                             </div>
-                            {gridSlots.map((time) => (
-                                <div key={time} className="grid border-b border-white/5 hover:bg-white/5 transition-colors group" style={{ gridTemplateColumns: `70px repeat(${gridCourts.length}, 1fr)` }}>
-                                    <div className="py-2 text-center text-[10px] font-mono text-muted border-r border-white/5 flex flex-col justify-center items-center bg-card/30"><span className={time.endsWith('00') ? "text-white font-bold" : "opacity-50"}>{time}</span></div>
-                                    {gridCourts.map(court => {
-                                        const booking = getBookingForSlot(time, court);
-                                        const isStart = booking?.start_time === time;
-                                        const visualType = booking ? getBookingType(booking) : 'guest';
 
-                                        // Determine player names to display
-                                        let playerNamesList: string[] = [];
-                                        if (booking?.participants && booking.participants.length > 0) {
-                                            playerNamesList = booking.participants.map(p => p.name);
-                                        } else if (booking?.user_name) {
-                                            playerNamesList = [booking.user_name];
-                                        } else if (booking?.title && !['reserva de cancha', 'alquiler', 'guest', 'turno de cancha', 'turno'].includes(booking.title.trim().toLowerCase())) {
-                                            playerNamesList = [booking.title];
-                                        } else if (booking?.title) {
-                                            playerNamesList = [booking.title];
-                                        }
+                            {/* Slot rows */}
+                            {gridSlots.map((time) => {
+                                const isCurrentHour = isTodaySelected && nowTimeStr >= time && nowTimeStr < addMinutes(time, 30);
+                                const displayedCourtsOnMobile = [gridCourts[mobileCourtIndex] || gridCourts[0]];
 
-                                        const mainDisplayName = playerNamesList.length > 0 
-                                            ? playerNamesList.join(' vs ') 
-                                            : (visualType === 'maintenance' ? 'Mantenimiento' : visualType === 'class' ? 'Clase' : 'Reserva');
+                                return (
+                                    <div 
+                                        key={time} 
+                                        className={`grid border-b border-white/5 hover:bg-white/5 transition-colors group relative ${
+                                            isCurrentHour ? 'bg-primary/[0.04]' : ''
+                                        }`} 
+                                        style={{ 
+                                            gridTemplateColumns: window.innerWidth < 768 && gridCourts.length > 0 
+                                                ? '70px 1fr' 
+                                                : `70px repeat(${gridCourts.length}, 1fr)` 
+                                        }}
+                                    >
+                                        {/* Current Time Indicator Bar */}
+                                        {isCurrentHour && (
+                                            <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary shadow-sm z-20" title={`Hora actual aproximada (~${nowTimeStr} hs)`} />
+                                        )}
 
-                                        return (
-                                            <div key={court} className="p-0.5 border-r border-white/5 last:border-0 min-h-[46px] relative">
-                                                {booking ? (
+                                        <div className="py-2 text-center text-[10px] font-mono text-muted border-r border-white/5 flex flex-col justify-center items-center bg-card/30">
+                                            <span className={time.endsWith('00') ? "text-white font-bold" : "opacity-50"}>{time}</span>
+                                            {isCurrentHour && (
+                                                <span className="text-[8px] text-primary font-black uppercase">Ahora</span>
+                                            )}
+                                        </div>
+
+                                        {/* Mobile Court Single Column */}
+                                        <div className="md:hidden p-0.5 min-h-[46px] relative">
+                                            {(() => {
+                                                const court = displayedCourtsOnMobile[0];
+                                                if (!court) return null;
+                                                const booking = getBookingForSlot(time, court);
+                                                const isStart = booking?.start_time === time;
+                                                const visualType = booking ? getBookingType(booking) : 'guest';
+
+                                                let playerNamesList: string[] = [];
+                                                if (booking?.participants && booking.participants.length > 0) {
+                                                    playerNamesList = booking.participants.map(p => p.name);
+                                                } else if (booking?.user_name) {
+                                                    playerNamesList = [booking.user_name];
+                                                } else if (booking?.title && !['reserva de cancha', 'alquiler', 'guest', 'turno de cancha', 'turno'].includes(booking.title.trim().toLowerCase())) {
+                                                    playerNamesList = [booking.title];
+                                                } else if (booking?.title) {
+                                                    playerNamesList = [booking.title];
+                                                }
+
+                                                const mainDisplayName = playerNamesList.length > 0 
+                                                    ? playerNamesList.join(' vs ') 
+                                                    : (visualType === 'maintenance' ? 'Mantenimiento' : visualType === 'class' ? 'Clase' : 'Reserva');
+
+                                                return booking ? (
                                                     <div 
                                                         onClick={() => handleSlotClick(time, court, booking)} 
                                                         title={`Reserva: ${mainDisplayName} (${booking.start_time} - ${booking.end_time}) • ${court}`}
                                                         className={`h-full w-full rounded-lg flex flex-col justify-center cursor-pointer transition-all px-2.5 py-1 relative z-0 overflow-hidden shadow-sm ${
-                                                            visualType === 'tournament' ? 'bg-amber-600/70 border-l-4 border-amber-400 hover:bg-amber-600/90 text-white' : 
-                                                            visualType === 'class' ? 'bg-indigo-600/70 border-l-4 border-indigo-400 hover:bg-indigo-600/90 text-white' : 
-                                                            visualType === 'maintenance' ? 'bg-slate-700/85 border-l-4 border-slate-400 hover:bg-slate-700 text-slate-200' : 
-                                                            'bg-primary/25 border-l-4 border-primary hover:bg-primary/35 text-white'
+                                                            visualType === 'tournament' ? 'bg-amber-600/70 border-l-4 border-amber-400 text-white' : 
+                                                            visualType === 'class' ? 'bg-indigo-600/70 border-l-4 border-indigo-400 text-white' : 
+                                                            visualType === 'maintenance' ? 'bg-slate-700/85 border-l-4 border-slate-400 text-slate-200' : 
+                                                            'bg-primary/25 border-l-4 border-primary text-white'
                                                         }`}
                                                     >
                                                         {isStart ? (
                                                             <div className="flex flex-col justify-center space-y-0.5 z-10 leading-tight">
                                                                 <div className="flex items-center gap-1.5">
-                                                                    {visualType === 'class' ? (
-                                                                        <GraduationCap size={12} className="text-indigo-300 shrink-0" />
-                                                                    ) : visualType === 'tournament' ? (
-                                                                        <Trophy size={12} className="text-amber-300 shrink-0" />
-                                                                    ) : visualType === 'maintenance' ? (
-                                                                        <Lock size={12} className="text-slate-300 shrink-0" />
-                                                                    ) : (
-                                                                        <Users size={12} className="text-primary shrink-0" />
-                                                                    )}
                                                                     <span className="text-[11.5px] font-black text-white truncate tracking-tight uppercase">
                                                                         {playerNamesList.length > 0 ? playerNamesList[0] : mainDisplayName}
                                                                     </span>
                                                                 </div>
                                                                 {playerNamesList.length > 1 && (
-                                                                    <div className="text-[10px] font-bold text-white/90 truncate pl-4 tracking-tight uppercase">
+                                                                    <div className="text-[10px] font-bold text-white/90 truncate pl-1 tracking-tight uppercase">
                                                                         vs {playerNamesList.slice(1).join(' / ')}
                                                                     </div>
                                                                 )}
-                                                                <div className="text-[9.5px] text-white/60 font-semibold pl-4 truncate">
+                                                                <div className="text-[9.5px] text-white/60 font-semibold truncate">
                                                                     {booking.start_time} - {booking.end_time}
                                                                 </div>
                                                             </div>
@@ -2711,27 +2793,106 @@ const AdminBookingManager: React.FC<{ user: UserProfile }> = ({ user }) => {
                                                             <div className="flex items-center gap-1.5 opacity-65 text-[10px] font-semibold text-white/80 truncate">
                                                                 <span className="text-primary font-black">↳</span>
                                                                 <span className="truncate">{mainDisplayName}</span>
-                                                                <span className="text-[9px] text-white/50">({booking.start_time}-{booking.end_time})</span>
                                                             </div>
                                                         )}
                                                     </div>
                                                 ) : (
                                                     <button 
                                                         onClick={() => handleSlotClick(time, court)} 
-                                                        className="w-full h-full min-h-[46px] rounded-lg border-2 border-dashed border-emerald-500/35 bg-emerald-500/[0.04] hover:border-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-1.5 group/btn p-1.5 shadow-sm"
-                                                        title={`Turno disponible: ${time} hs en ${court}. Clic para registrar turno o bloquear cancha.`}
+                                                        className="w-full h-full min-h-[46px] rounded-lg border-2 border-dashed border-emerald-500/35 bg-emerald-500/[0.04] hover:border-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-1.5 p-1.5 shadow-sm"
                                                     >
-                                                        <span className="text-xs text-emerald-300 group-hover/btn:text-emerald-200 font-extrabold flex items-center gap-1 transition-colors">
-                                                            <Plus size={13} className="text-emerald-400 group-hover/btn:scale-110 transition-transform stroke-[2.5]" />
-                                                            <span className="hidden sm:inline tracking-tight">Disponible</span>
-                                                        </span>
+                                                        <Plus size={13} className="text-emerald-400 stroke-[2.5]" />
+                                                        <span className="text-xs text-emerald-300 font-extrabold">Disponible</span>
                                                     </button>
-                                                )}
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            ))}
+                                                );
+                                            })()}
+                                        </div>
+
+                                        {/* Desktop Multi-Court Columns */}
+                                        {gridCourts.map(court => {
+                                            const booking = getBookingForSlot(time, court);
+                                            const isStart = booking?.start_time === time;
+                                            const visualType = booking ? getBookingType(booking) : 'guest';
+
+                                            let playerNamesList: string[] = [];
+                                            if (booking?.participants && booking.participants.length > 0) {
+                                                playerNamesList = booking.participants.map(p => p.name);
+                                            } else if (booking?.user_name) {
+                                                playerNamesList = [booking.user_name];
+                                            } else if (booking?.title && !['reserva de cancha', 'alquiler', 'guest', 'turno de cancha', 'turno'].includes(booking.title.trim().toLowerCase())) {
+                                                playerNamesList = [booking.title];
+                                            } else if (booking?.title) {
+                                                playerNamesList = [booking.title];
+                                            }
+
+                                            const mainDisplayName = playerNamesList.length > 0 
+                                                ? playerNamesList.join(' vs ') 
+                                                : (visualType === 'maintenance' ? 'Mantenimiento' : visualType === 'class' ? 'Clase' : 'Reserva');
+
+                                            return (
+                                                <div key={court} className="hidden md:block p-0.5 border-r border-white/5 last:border-0 min-h-[46px] relative">
+                                                    {booking ? (
+                                                        <div 
+                                                            onClick={() => handleSlotClick(time, court, booking)} 
+                                                            title={`Reserva: ${mainDisplayName} (${booking.start_time} - ${booking.end_time}) • ${court}`}
+                                                            className={`h-full w-full rounded-lg flex flex-col justify-center cursor-pointer transition-all px-2.5 py-1 relative z-0 overflow-hidden shadow-sm ${
+                                                                visualType === 'tournament' ? 'bg-amber-600/70 border-l-4 border-amber-400 hover:bg-amber-600/90 text-white' : 
+                                                                visualType === 'class' ? 'bg-indigo-600/70 border-l-4 border-indigo-400 hover:bg-indigo-600/90 text-white' : 
+                                                                visualType === 'maintenance' ? 'bg-slate-700/85 border-l-4 border-slate-400 hover:bg-slate-700 text-slate-200' : 
+                                                                'bg-primary/25 border-l-4 border-primary hover:bg-primary/35 text-white'
+                                                            }`}
+                                                        >
+                                                            {isStart ? (
+                                                                <div className="flex flex-col justify-center space-y-0.5 z-10 leading-tight">
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        {visualType === 'class' ? (
+                                                                            <GraduationCap size={12} className="text-indigo-300 shrink-0" />
+                                                                        ) : visualType === 'tournament' ? (
+                                                                            <Trophy size={12} className="text-amber-300 shrink-0" />
+                                                                        ) : visualType === 'maintenance' ? (
+                                                                            <Lock size={12} className="text-slate-300 shrink-0" />
+                                                                        ) : (
+                                                                            <Users size={12} className="text-primary shrink-0" />
+                                                                        )}
+                                                                        <span className="text-[11.5px] font-black text-white truncate tracking-tight uppercase">
+                                                                            {playerNamesList.length > 0 ? playerNamesList[0] : mainDisplayName}
+                                                                        </span>
+                                                                    </div>
+                                                                    {playerNamesList.length > 1 && (
+                                                                        <div className="text-[10px] font-bold text-white/90 truncate pl-4 tracking-tight uppercase">
+                                                                            vs {playerNamesList.slice(1).join(' / ')}
+                                                                        </div>
+                                                                    )}
+                                                                    <div className="text-[9.5px] text-white/60 font-semibold pl-4 truncate">
+                                                                        {booking.start_time} - {booking.end_time}
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="flex items-center gap-1.5 opacity-65 text-[10px] font-semibold text-white/80 truncate">
+                                                                    <span className="text-primary font-black">↳</span>
+                                                                    <span className="truncate">{mainDisplayName}</span>
+                                                                    <span className="text-[9px] text-white/50">({booking.start_time}-{booking.end_time})</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <button 
+                                                            onClick={() => handleSlotClick(time, court)} 
+                                                            className="w-full h-full min-h-[46px] rounded-lg border-2 border-dashed border-emerald-500/35 bg-emerald-500/[0.04] hover:border-emerald-400 hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-1.5 group/btn p-1.5 shadow-sm"
+                                                            title={`Turno disponible: ${time} hs en ${court}. Clic para registrar turno o bloquear cancha.`}
+                                                        >
+                                                            <span className="text-xs text-emerald-300 group-hover/btn:text-emerald-200 font-extrabold flex items-center gap-1 transition-colors">
+                                                                <Plus size={13} className="text-emerald-400 group-hover/btn:scale-110 transition-transform stroke-[2.5]" />
+                                                                <span className="hidden sm:inline tracking-tight">Disponible</span>
+                                                            </span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
                         </div>
                     )}
                 </div>

@@ -18,7 +18,7 @@ export interface PlayerEnrollModalProps {
   playerAvailabilityNotes: string;
   onAvailabilityNotesChange: (notes: string) => void;
   onToggleAvailabilityChip: (chip: string) => void;
-  onConfirmEnroll: () => void;
+  onConfirmEnroll: (extraData?: { dni?: string; phone?: string }) => void;
   isEnrolling: boolean;
 }
 
@@ -41,6 +41,11 @@ export const PlayerEnrollModal: React.FC<PlayerEnrollModalProps> = ({
   onConfirmEnroll,
   isEnrolling
 }) => {
+  const [dniInput, setDniInput] = React.useState(user.dni || '');
+  const [phoneInput, setPhoneInput] = React.useState(user.phone || '');
+  const needsDni = !user.dni || user.dni.trim().length < 6;
+  const needsPhone = !user.phone || user.phone.trim().length < 6;
+
   if (!isOpen) return null;
 
   return (
@@ -187,6 +192,49 @@ export const PlayerEnrollModal: React.FC<PlayerEnrollModalProps> = ({
             </div>
           )}
 
+          {/* DNI & Phone Request on First Tournament Enrollment */}
+          {(needsDni || needsPhone) && (
+            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
+              <div className="flex items-center gap-2 text-amber-300 font-bold text-xs">
+                <Info size={16} className="text-amber-400" />
+                <span>Datos requeridos para el torneo</span>
+              </div>
+              <p className="text-[11px] text-slate-300">
+                Para el seguro deportivo y la fiscalización oficial del torneo, por favor completá tus datos de contacto:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {needsDni && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-1">
+                      DNI / Documento *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ej: 38450123"
+                      value={dniInput}
+                      onChange={e => setDniInput(e.target.value)}
+                      className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-400 outline-none"
+                    />
+                  </div>
+                )}
+                {needsPhone && (
+                  <div>
+                    <label className="block text-[10px] font-bold text-muted uppercase tracking-wider mb-1">
+                      WhatsApp de Contacto *
+                    </label>
+                    <input
+                      type="tel"
+                      placeholder="Ej: 3434123456"
+                      value={phoneInput}
+                      onChange={e => setPhoneInput(e.target.value)}
+                      className="w-full bg-sidebar border border-white/10 rounded-xl p-2.5 text-xs text-white placeholder-slate-500 focus:border-amber-400 outline-none"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Availability / Schedule Restrictions Section */}
           <div className="space-y-2">
             <label className="text-xs text-slate-300 font-bold uppercase tracking-wider flex items-center gap-1.5">
@@ -247,9 +295,9 @@ export const PlayerEnrollModal: React.FC<PlayerEnrollModalProps> = ({
           </button>
           <button
             type="button"
-            onClick={onConfirmEnroll}
-            disabled={isEnrolling}
-            className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all"
+            onClick={() => onConfirmEnroll({ dni: dniInput.trim() || undefined, phone: phoneInput.trim() || undefined })}
+            disabled={isEnrolling || (needsDni && (!dniInput.trim() || dniInput.trim().length < 6)) || (needsPhone && (!phoneInput.trim() || phoneInput.trim().length < 6))}
+            className="px-6 py-2.5 bg-primary hover:bg-primary-hover text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-primary/20 disabled:opacity-50 transition-all cursor-pointer"
           >
             {isEnrolling ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Confirmar Inscripción
           </button>
