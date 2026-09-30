@@ -16,7 +16,7 @@ import {
     Shield,
     Zap
 } from 'lucide-react';
-import { Tournament, Match, User } from '../../types';
+import { Tournament, Match, User, TournamentPlayer } from '../../types';
 import { GroupZone, UnifiedStandingRow } from '../../utils/bracketHelper';
 import { formatPlayerName, formatMatchScore } from '../../utils/formatters';
 import { soundEffects } from '../../services/soundEffects';
@@ -32,6 +32,7 @@ interface TournamentGroupsTabProps {
     handlePlayerClickForSwap: (playerId: string, playerName: string) => void;
     tournament: Tournament;
     user: User;
+    players?: TournamentPlayer[];
     isClubAdmin: boolean;
     openScheduleModal: (m: Match) => void;
     openQuickScorerModal: (m: Match) => void;
@@ -59,6 +60,7 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
     handlePlayerClickForSwap,
     tournament,
     user,
+    players = [],
     isClubAdmin,
     openScheduleModal,
     openQuickScorerModal,
@@ -68,6 +70,29 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
     setH2hPlayers,
     formatScheduledInfo,
 }) => {
+    // Lookup map to guarantee player names are always resolved even if m.player1_name / m.player2_name is empty
+    const playerNameMap = React.useMemo(() => {
+        const map = new Map<string, string>();
+        // 1. From players prop
+        (players || []).forEach(p => {
+            const pId = p.player_id || p.id;
+            const pName = p.name || p.player_name || (p as any).user?.name;
+            const pLastname = (p as any).lastname || (p as any).user?.lastname;
+            if (pId && pName) {
+                map.set(pId, formatPlayerName(pName, pLastname));
+            }
+        });
+        // 2. From zones standings
+        (zones || []).forEach(z => {
+            (z.players || []).forEach(zp => {
+                if (zp.playerId && zp.playerName && !map.has(zp.playerId)) {
+                    map.set(zp.playerId, formatPlayerName(zp.playerName));
+                }
+            });
+        });
+        return map;
+    }, [players, zones]);
+
     return (
         <div className="space-y-6">
             {zones.length === 0 ? (
@@ -329,8 +354,10 @@ export const TournamentGroupsTab: React.FC<TournamentGroupsTabProps> = ({
                                             const canEditScore = isMatchReady && (isClubAdmin || (isUserInMatch && !isMatchFinishedAndConfirmed));
                                             const formattedScore = formatMatchScore(m.score);
                                             const isDoubles = tournament.type === 'doubles' || !!m.player1_partner_id;
-                                            const p1DisplayName = m.team1_name || formatPlayerName(m.player1_name) || (m.proposal_data?.group_format === 'cross_4' && m.proposal_data?.zone_match_number === 3 ? 'Ganador P1' : m.proposal_data?.zone_match_number === 4 ? 'Ganador P2' : 'A definir');
-                                            const p2DisplayName = m.team2_name || formatPlayerName(m.player2_name) || (m.proposal_data?.group_format === 'cross_4' && m.proposal_data?.zone_match_number === 3 ? 'Perdedor P2' : m.proposal_data?.zone_match_number === 4 ? 'Perdedor P1' : 'A definir');
+                                            const p1Lookup = m.player1_id ? playerNameMap.get(m.player1_id) : null;
+                                            const p2Lookup = m.player2_id ? playerNameMap.get(m.player2_id) : null;
+                                            const p1DisplayName = m.team1_name || (m.player1_name ? formatPlayerName(m.player1_name) : null) || p1Lookup || (m.proposal_data?.group_format === 'cross_4' && m.proposal_data?.zone_match_number === 3 ? 'Ganador P1' : m.proposal_data?.zone_match_number === 4 ? 'Ganador P2' : 'A definir');
+                                            const p2DisplayName = m.team2_name || (m.player2_name ? formatPlayerName(m.player2_name) : null) || p2Lookup || (m.proposal_data?.group_format === 'cross_4' && m.proposal_data?.zone_match_number === 3 ? 'Perdedor P2' : m.proposal_data?.zone_match_number === 4 ? 'Perdedor P1' : 'A definir');
                                             const isP1Placeholder = !m.player1_id;
                                             const isP2Placeholder = !m.player2_id;
                                             

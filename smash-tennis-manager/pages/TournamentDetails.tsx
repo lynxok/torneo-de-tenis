@@ -2616,6 +2616,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                 setDisputeMatchId={setDisputeMatchId}
                                 setH2hPlayers={setH2hPlayers}
                                 formatScheduledInfo={formatScheduledInfo}
+                                players={players}
                             />
                         )}
 
