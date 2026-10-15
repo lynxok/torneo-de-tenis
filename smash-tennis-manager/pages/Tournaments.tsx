@@ -687,8 +687,12 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                                 </span>
                                                             )}
 
-                                                            {/* Registration Status Badge */}
-                                                            {isRegClosed ? (
+                                                            {/* Registration / Tournament Status Badge */}
+                                                            {t.status === 'finished' || Boolean(t.champion_name) ? (
+                                                                <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center gap-1 shadow-sm">
+                                                                    🏆 Finalizado
+                                                                </span>
+                                                            ) : isRegClosed ? (
                                                                 <span className="px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 flex items-center gap-1">
                                                                     🔴 Inscripción Cerrada
                                                                 </span>
@@ -762,6 +766,23 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                         <MapPin size={14} /> {t.institutions?.name}
                                                     </div>
 
+                                                    {/* Badge Destacado de Campeón si ya está finalizado */}
+                                                    {(t.status === 'finished' || t.champion_name) && (
+                                                        <div className="mb-4 p-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/10 border border-amber-400/40 flex items-center gap-2.5 shadow-sm">
+                                                            <div className="w-7 h-7 rounded-lg bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-sm shrink-0">
+                                                                🏆
+                                                            </div>
+                                                            <div className="min-w-0">
+                                                                <span className="text-[9px] font-black uppercase tracking-wider text-amber-400 block leading-tight">
+                                                                    Campeón Consagrado
+                                                                </span>
+                                                                <span className="text-xs font-black text-white truncate block">
+                                                                    {t.champion_name || 'A definir'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
                                                     {/* Categorías o Sub-competencias */}
                                                     <div className="mb-4">
                                                         {hasCompetitions ? (
@@ -813,12 +834,13 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                     {(() => {
                                                         let nextStepText = '';
                                                         let nextStepColor = '';
+                                                        const isFinished = t.status === 'finished' || Boolean(t.champion_name);
                                                         if (t.status === 'draft') {
                                                             nextStepText = 'Próximo paso: Abrir inscripciones';
                                                             nextStepColor = 'bg-slate-800 text-slate-300 border-white/10';
-                                                        } else if (t.status === 'finished') {
-                                                            nextStepText = 'Torneo finalizado: Ver campeones';
-                                                            nextStepColor = 'bg-purple-500/15 text-purple-300 border-purple-500/30';
+                                                        } else if (isFinished) {
+                                                            nextStepText = `Torneo finalizado · Campeón: ${t.champion_name || 'Ver cuadro'}`;
+                                                            nextStepColor = 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30';
                                                         } else if (isRegClosed) {
                                                             nextStepText = 'Próximo paso: Armar cuadros / Cargar resultados';
                                                             nextStepColor = 'bg-amber-500/15 text-amber-300 border-amber-500/30';
