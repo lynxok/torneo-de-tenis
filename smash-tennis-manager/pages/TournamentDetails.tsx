@@ -2557,7 +2557,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                         >
                                             <ImageIcon size={14} /> Ver Placa de Campeón
                                         </button>
-                                        {(isOrganizer || user?.role === 'superadmin' || user?.role === 'admin') && (
+                                        {canEditTournament(tournament, user) && (
                                             <button
                                                 onClick={handlePublishChampionStory}
                                                 disabled={isPublishingOfficialStory}
