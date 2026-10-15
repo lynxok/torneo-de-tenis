@@ -46,6 +46,27 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
   const tier = getTournamentTier(tournament);
   const isOrganizerOrAdmin = currentUser?.role === 'admin' || currentUser?.role === 'superadmin';
 
+  // Fallback robusto para encontrar el campeón si no viene precargado en tournament.champion_name
+  const resolvedChampionName = useMemo(() => {
+    if (championName && championName.trim() && championName.toLowerCase() !== 'por definir' && championName.toLowerCase() !== 'a definir') {
+      return championName.trim();
+    }
+    if (tournament.champion_name && tournament.champion_name.trim()) {
+      return tournament.champion_name.trim();
+    }
+    // Buscar en matches la final jugada con ganador
+    const allMatches = [...matches, ...playoffRounds.flatMap(r => r.matches || [])];
+    const finalMatch = allMatches.find(m => (m.round === 'Final' || m.round === 'Gran Final' || m.proposal_data?.bracket_round === 'Final') && (m.is_played || m.winner_id));
+    if (finalMatch && finalMatch.winner_id) {
+      if (finalMatch.winner_id === finalMatch.player1_id) {
+        return finalMatch.team1_name || finalMatch.player1_name || 'Campeón';
+      } else if (finalMatch.winner_id === finalMatch.player2_id) {
+        return finalMatch.team2_name || finalMatch.player2_name || 'Campeón';
+      }
+    }
+    return 'Por Definir';
+  }, [championName, tournament.champion_name, matches, playoffRounds]);
+
   const formatShortScore = (score: any) => {
     return formatMatchScore(score) || '';
   };
@@ -242,7 +263,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
 
       ctx.fillStyle = '#ffffff';
       ctx.font = isSquare ? '900 42px sans-serif' : '900 52px sans-serif';
-      const cName = championName || tournament.champion_name || 'Por Definir';
+      const cName = resolvedChampionName;
       ctx.fillText(cName, width / 2, centerY + (isSquare ? 75 : 100));
 
       ctx.fillStyle = 'rgba(253, 230, 138, 0.8)';
@@ -936,7 +957,7 @@ export const ShareGraphicModal: React.FC<ShareGraphicModalProps> = ({
                     <div>
                       <div className={`${aspectRatio === 'square' ? 'text-[9px]' : 'text-[10px]'} font-black tracking-widest text-amber-400 uppercase`}>CAMPEÓN DEL TORNEO</div>
                       <div className={`${aspectRatio === 'square' ? 'text-base sm:text-lg' : 'text-lg sm:text-xl'} font-black text-white mt-0.5`}>
-                        {championName || tournament.champion_name || 'Por Definir'}
+                        {resolvedChampionName}
                       </div>
                       <div className={`${aspectRatio === 'square' ? 'text-[10px]' : 'text-xs'} text-amber-200/70 mt-0.5`}>+{tier.pointsWinner} Pts para el Ranking</div>
                     </div>

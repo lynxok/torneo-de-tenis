@@ -383,26 +383,35 @@ export const StoryViewer: React.FC<StoryViewerProps> = ({
                                 }
                             }}
                         >
-                            <div className="w-9 h-9 rounded-full bg-slate-800 border-2 border-lime-400 overflow-hidden flex items-center justify-center text-xs font-bold text-lime-400 shadow-md">
-                                {activeStory.author?.profile_picture_url ? (
-                                    <img src={activeStory.author.profile_picture_url} alt="Autor" className="w-full h-full object-cover" />
-                                ) : (
-                                    activeStory.author?.name?.[0] || 'S'
-                                )}
-                            </div>
-                            <div>
-                                <p className="text-white font-bold text-sm leading-tight flex items-center gap-1.5">
-                                    <span>{activeStory.author?.name || 'Smash Tennis'}</span>
-                                    {activeStory.author?.role === 'superadmin' && (
-                                        <span className="px-1.5 py-0.5 rounded bg-lime-400/20 text-lime-400 text-[9px] font-black uppercase">
-                                            Oficial
-                                        </span>
-                                    )}
-                                </p>
-                                <p className="text-[11px] text-slate-300 font-medium">
-                                    Vence en {getRemainingHours(activeStory.expires_at)}
-                                </p>
-                            </div>
+                            {(() => {
+                                const isOfficial = activeStory.author?.role === 'superadmin' || activeStory.layers?.some(l => l.id === 'sticker-champion' || l.id === 'official-badge');
+                                return (
+                                    <>
+                                        <div className={`w-9 h-9 rounded-full border-2 overflow-hidden flex items-center justify-center text-xs font-bold shadow-md ${isOfficial ? 'border-amber-400 bg-amber-400 text-slate-950 font-black' : 'bg-slate-800 border-lime-400 text-lime-400'}`}>
+                                            {isOfficial ? (
+                                                <span className="text-base leading-none">🏆</span>
+                                            ) : activeStory.author?.profile_picture_url ? (
+                                                <img src={activeStory.author.profile_picture_url} alt="Autor" className="w-full h-full object-cover" />
+                                            ) : (
+                                                activeStory.author?.name?.[0] || 'S'
+                                            )}
+                                        </div>
+                                        <div>
+                                            <p className="text-white font-bold text-sm leading-tight flex items-center gap-1.5">
+                                                <span>{isOfficial ? 'Smash Tenis' : (activeStory.author?.name || 'Smash Tennis')}</span>
+                                                {isOfficial && (
+                                                    <span className="px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30 text-[9px] font-black uppercase flex items-center gap-1">
+                                                        ✓ Oficial
+                                                    </span>
+                                                )}
+                                            </p>
+                                            <p className="text-[11px] text-slate-300 font-medium">
+                                                Vence en {getRemainingHours(activeStory.expires_at)}
+                                            </p>
+                                        </div>
+                                    </>
+                                );
+                            })()}
                         </div>
 
                         <div className="flex items-center gap-1.5">

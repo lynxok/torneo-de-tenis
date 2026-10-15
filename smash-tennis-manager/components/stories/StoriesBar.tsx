@@ -72,10 +72,12 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
         latestStory: Story;
         firstIndex: number;
         count: number;
+        isOfficial?: boolean;
     }
 
     const otherUserGroups = stories.reduce<UserStoryGroup[]>((acc, story, idx) => {
         if (story.user_id === currentUser.id) return acc;
+        const isOfficialStory = story.author?.role === 'superadmin' || story.layers?.some(l => l.id === 'sticker-champion' || l.id === 'official-badge');
         const existing = acc.find(g => g.userId === story.user_id);
         if (!existing) {
             acc.push({
@@ -83,13 +85,15 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                 author: story.author,
                 latestStory: story,
                 firstIndex: idx,
-                count: 1
+                count: 1,
+                isOfficial: isOfficialStory
             });
         } else {
             existing.count += 1;
+            if (isOfficialStory) existing.isOfficial = true;
         }
         return acc;
-    }, []);
+    }, []).sort((a, b) => (b.isOfficial ? 1 : 0) - (a.isOfficial ? 1 : 0));
 
     return (
         <div className="w-full bg-slate-900/40 border border-slate-800/60 rounded-xl py-2 px-3 backdrop-blur-md mb-3.5 shadow-sm overflow-hidden">
@@ -177,8 +181,10 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                             </div>
 
                             {/* Mini Avatar del autor en la esquina inferior derecha */}
-                            <div className="absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full border border-slate-900 overflow-hidden bg-slate-800 shadow flex items-center justify-center">
-                                {group.author?.profile_picture_url ? (
+                            <div className={`absolute -bottom-0.5 -right-0.5 w-4.5 h-4.5 rounded-full border border-slate-900 overflow-hidden shadow flex items-center justify-center ${group.isOfficial ? 'bg-amber-400 text-slate-950 font-black' : 'bg-slate-800'}`}>
+                                {group.isOfficial ? (
+                                    <span className="text-[9px] font-black leading-none">🏆</span>
+                                ) : group.author?.profile_picture_url ? (
                                     <img 
                                         src={group.author.profile_picture_url} 
                                         alt={group.author.name} 
@@ -191,8 +197,8 @@ export const StoriesBar: React.FC<StoriesBarProps> = ({
                                 )}
                             </div>
                         </div>
-                        <span className="text-[10px] font-medium text-slate-300 max-w-[54px] truncate text-center">
-                            {group.author?.name || 'Jugador'}
+                        <span className={`text-[10px] max-w-[60px] truncate text-center ${group.isOfficial ? 'font-bold text-amber-400' : 'font-medium text-slate-300'}`}>
+                            {group.isOfficial ? 'Smash Oficial' : (group.author?.name || 'Jugador')}
                         </span>
                     </div>
                 ))}

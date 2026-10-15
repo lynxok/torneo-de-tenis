@@ -5007,10 +5007,19 @@ export const api = {
                     {
                         id: 'sticker-champion',
                         type: 'sticker',
-                        label: '🏆 CAMPEÓN',
+                        label: '🏆 CAMPEÓN OFICIAL',
                         x: 50,
                         y: 45
-                    }
+                    },
+                    {
+                        id: 'official-badge',
+                        type: 'text',
+                        text: '✨ COMUNICADO OFICIAL SMASH',
+                        color: '#bef264',
+                        bgColor: 'rgba(0, 0, 0, 0.75)',
+                        x: 50,
+                        y: 92
+                    } as any
                 ];
 
                 // 6. Publicar a través del método estándar de stories

@@ -224,6 +224,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [walkoverWinnerId, setWalkoverWinnerId] = useState<string>('');
     const [selectedWinnerId, setSelectedWinnerId] = useState<string>('');
     const [savingScore, setSavingScore] = useState(false);
+    const [isFinalizingTournament, setIsFinalizingTournament] = useState(false);
 
     // Dispute Modal State
     const [disputeMatchId, setDisputeMatchId] = useState<string | null>(null);
@@ -1678,8 +1679,76 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
 
     const finalMatch = playoffMatches.find(m => m.round === 'Final' || m.round === 'Gran Final');
     const championName = tournament?.champion_name || (finalMatch?.winner_id ? (
-        finalMatch.winner_id === finalMatch.player1_id ? finalMatch.player1_name : finalMatch.player2_name
+        finalMatch.winner_id === finalMatch.player1_id ? (finalMatch.team1_name || finalMatch.player1_name) : (finalMatch.team2_name || finalMatch.player2_name)
     ) : null);
+
+    const handleFinalizeTournament = async () => {
+        if (!tournament?.id) return;
+        const targetChamp = championName || 'Campeón';
+        if (!confirm(`¿Deseas dar por FINALIZADO el torneo "${tournament.name}" coronando a ${targetChamp}? Se actualizará el estado oficial y se publicará la historia institucional de Smash.`)) {
+            return;
+        }
+
+        setIsFinalizingTournament(true);
+        try {
+            soundEffects.playBookingSuccess();
+            await api.tournaments.update(tournament.id, {
+                status: 'finished',
+                champion_name: targetChamp
+            });
+
+            // Disparar publicación oficial de historia de campeón en segundo plano
+            try {
+                const isDoubles = tournament.type === 'doubles';
+                const champWinnerId = finalMatch?.winner_id;
+                const champPartnerId = finalMatch?.winner_id === finalMatch?.player1_id 
+                    ? finalMatch?.player1_partner_id 
+                    : finalMatch?.player2_partner_id;
+
+                if (champWinnerId) {
+                    const nowIso = new Date().toISOString();
+                    await supabase.from('ranking_history').insert({
+                        player_id: champWinnerId,
+                        points: 100,
+                        tournament_name: `🏆 Campeón: ${tournament.name}`,
+                        date_obtained: nowIso,
+                        year: new Date().getFullYear()
+                    }).catch(() => {});
+
+                    if (isDoubles && champPartnerId) {
+                        await supabase.from('ranking_history').insert({
+                            player_id: champPartnerId,
+                            points: 100,
+                            tournament_name: `🏆 Campeón: ${tournament.name} (Dobles)`,
+                            date_obtained: nowIso,
+                            year: new Date().getFullYear()
+                        }).catch(() => {});
+                    }
+                }
+
+                await api.stories.publishChampionStory({
+                    tournamentId: tournament.id,
+                    tournamentName: tournament.name || 'Torneo Smash',
+                    category: tournament.category,
+                    gender: tournament.gender,
+                    clubName: tournament.institutions?.name || 'Club Sede',
+                    championName: targetChamp,
+                    pointsWon: 100,
+                    authorId: user?.id
+                });
+            } catch (errStory) {
+                console.warn("Publicación de historia en finalización:", errStory);
+            }
+
+            addToast(`🏆 ¡Torneo finalizado con éxito! Se proclamó campeón a ${targetChamp} y se generó la historia de Smash.`, 'success');
+            await loadTournament();
+        } catch (err: any) {
+            console.error("Error al finalizar torneo:", err);
+            addToast("Error al finalizar torneo: " + (err.message || 'Intente nuevamente'), 'error');
+        } finally {
+            setIsFinalizingTournament(false);
+        }
+    };
 
     const handleQuickChangeOopStatus = async (matchId: string, newStatus: 'scheduled' | 'warming_up' | 'in_progress' | 'delayed' | 'finished') => {
         setUpdatingOopMatchId(matchId);
@@ -2393,6 +2462,73 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     </button>
                                 )}
                             </div>
+
+                            {/* Champion Defined Notification Banner (Organizador & Superadmin) */}
+                            {championName && tournament.status !== 'finished' && (
+                                <div className="mt-4 p-4 bg-gradient-to-r from-amber-500/20 via-yellow-500/15 to-amber-500/10 border-2 border-amber-400/50 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl animate-fadeIn">
+                                    <div className="flex items-center gap-3.5">
+                                        <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-amber-500 to-yellow-400 text-slate-950 flex items-center justify-center text-2xl font-black shadow-lg shadow-amber-500/30 shrink-0">
+                                            🏆
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[10px] font-black tracking-widest text-amber-400 uppercase bg-amber-400/10 px-2 py-0.5 rounded-md border border-amber-400/30">
+                                                    ¡Gran Final Disputada!
+                                                </span>
+                                            </div>
+                                            <h4 className="text-base font-black text-white mt-0.5">
+                                                Campeón Definido: <span className="text-amber-300 font-extrabold">{championName}</span>
+                                            </h4>
+                                            <p className="text-xs text-amber-100/80 mt-0.5">
+                                                El torneo ya tiene ganador consagrado. Puedes dar por concluido el certamen para asignar los puntos oficiales y publicar la historia en Smash.
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                        <button
+                                            onClick={handleFinalizeTournament}
+                                            disabled={isFinalizingTournament}
+                                            className="w-full sm:w-auto px-5 py-2.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 font-black rounded-xl text-xs uppercase tracking-wider transition-all shadow-lg shadow-amber-500/30 flex items-center justify-center gap-2 active:scale-95 disabled:opacity-50"
+                                        >
+                                            {isFinalizingTournament ? (
+                                                <>
+                                                    <Loader2 size={16} className="animate-spin" /> Finalizando...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Trophy size={16} /> Finalizar Torneo
+                                                </>
+                                            )}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Torneo ya finalizado: Aviso de Consagración */}
+                            {tournament.status === 'finished' && (
+                                <div className="mt-4 p-4 bg-gradient-to-r from-emerald-950/40 via-slate-900 to-emerald-950/40 border border-emerald-500/30 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-md">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center text-xl shrink-0">
+                                            👑
+                                        </div>
+                                        <div>
+                                            <div className="text-[10px] font-black tracking-widest text-emerald-400 uppercase">Torneo Finalizado Oficialmente</div>
+                                            <div className="text-sm font-extrabold text-white">Campeón: {tournament.champion_name || championName}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => {
+                                                soundEffects.playTennisHit();
+                                                setShowGraphicModal(true);
+                                            }}
+                                            className="px-3.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                                        >
+                                            <ImageIcon size={14} /> Ver Placa de Campeón
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Organizer Advice Banner */}
                             {groupMatches.length > 0 && tournament.status !== 'finished' && (
@@ -4460,7 +4596,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     tournament={tournament}
                     zones={zones}
                     playoffRounds={playoffRounds}
-                    championName={tournament.champion_name}
+                    championName={championName || tournament.champion_name}
                     matches={matches}
                     currentUser={user}
                 />
