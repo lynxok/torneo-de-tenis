@@ -225,6 +225,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
     const [selectedWinnerId, setSelectedWinnerId] = useState<string>('');
     const [savingScore, setSavingScore] = useState(false);
     const [isFinalizingTournament, setIsFinalizingTournament] = useState(false);
+    const [isPublishingOfficialStory, setIsPublishingOfficialStory] = useState(false);
 
     // Dispute Modal State
     const [disputeMatchId, setDisputeMatchId] = useState<string | null>(null);
@@ -1682,6 +1683,30 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
         finalMatch.winner_id === finalMatch.player1_id ? (finalMatch.team1_name || finalMatch.player1_name) : (finalMatch.team2_name || finalMatch.player2_name)
     ) : null);
 
+    const handlePublishChampionStory = async () => {
+        if (!tournament?.id) return;
+        const targetChamp = championName || tournament.champion_name || 'Campeón';
+        setIsPublishingOfficialStory(true);
+        try {
+            await api.stories.publishChampionStory({
+                tournamentId: tournament.id,
+                tournamentName: tournament.name || 'Torneo Smash',
+                category: tournament.category,
+                gender: tournament.gender,
+                clubName: tournament.institutions?.name || 'Club Sede',
+                championName: targetChamp,
+                pointsWon: 100,
+                authorId: user?.id
+            });
+            addToast(`🎉 ¡Historia oficial de ${targetChamp} publicada con éxito en Smash!`, 'success');
+        } catch (err: any) {
+            console.error("Error al publicar historia de campeón:", err);
+            addToast("No se pudo publicar la historia: " + (err.message || 'Error de permisos o conexión'), 'error');
+        } finally {
+            setIsPublishingOfficialStory(false);
+        }
+    };
+
     const handleFinalizeTournament = async () => {
         if (!tournament?.id) return;
         const targetChamp = championName || 'Campeón';
@@ -1697,7 +1722,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                 champion_name: targetChamp
             });
 
-            // Disparar publicación oficial de historia de campeón en segundo plano
+            // Otorgar puntos de ranking
             try {
                 const isDoubles = tournament.type === 'doubles';
                 const champWinnerId = finalMatch?.winner_id;
@@ -1725,7 +1750,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                         }).catch(() => {});
                     }
                 }
+            } catch (errRanking) {
+                console.warn("Asignación de puntos en finalización:", errRanking);
+            }
 
+            // Publicación oficial de historia de campeón
+            try {
                 await api.stories.publishChampionStory({
                     tournamentId: tournament.id,
                     tournamentName: tournament.name || 'Torneo Smash',
@@ -1736,11 +1766,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                     pointsWon: 100,
                     authorId: user?.id
                 });
-            } catch (errStory) {
+                addToast(`🏆 ¡Torneo finalizado y placa publicada en Historias de Smash!`, 'success');
+            } catch (errStory: any) {
                 console.warn("Publicación de historia en finalización:", errStory);
+                addToast(`Torneo finalizado con éxito, pero la historia no pudo subirse automáticamente (${errStory?.message || 'Error'}). Podés reintentar con el botón 'Publicar Historia'.`, 'info');
             }
 
-            addToast(`🏆 ¡Torneo finalizado con éxito! Se proclamó campeón a ${targetChamp} y se generó la historia de Smash.`, 'success');
             await loadTournament();
         } catch (err: any) {
             console.error("Error al finalizar torneo:", err);
@@ -2516,16 +2547,34 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             <div className="text-sm font-extrabold text-white">Campeón: {tournament.champion_name || championName}</div>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-wrap items-center gap-2">
                                         <button
                                             onClick={() => {
                                                 soundEffects.playTennisHit();
                                                 setShowGraphicModal(true);
                                             }}
-                                            className="px-3.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm"
+                                            className="px-3.5 py-1.5 bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 text-xs font-bold rounded-xl transition-all flex items-center gap-1.5 shadow-sm active:scale-95"
                                         >
                                             <ImageIcon size={14} /> Ver Placa de Campeón
                                         </button>
+                                        {(isOrganizer || user?.role === 'superadmin' || user?.role === 'admin') && (
+                                            <button
+                                                onClick={handlePublishChampionStory}
+                                                disabled={isPublishingOfficialStory}
+                                                className="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-400 hover:to-yellow-300 text-slate-950 text-xs font-black rounded-xl transition-all flex items-center gap-1.5 shadow-md shadow-amber-500/20 active:scale-95 disabled:opacity-50"
+                                                title="Publica o re-publica la historia oficial de consagración en la barra de historias de Smash"
+                                            >
+                                                {isPublishingOfficialStory ? (
+                                                    <>
+                                                        <Loader2 size={14} className="animate-spin" /> Publicando...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <Trophy size={14} /> Publicar Historia Oficial
+                                                    </>
+                                                )}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             )}
