@@ -359,8 +359,8 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             .catch(console.error);
     }, [user.institution_id]);
 
-    // Tab State: active tournaments vs finished history
-    const [activeTab, setActiveTab] = useState<'active' | 'finished'>('active');
+    // Tab State: all vs active tournaments vs finished history
+    const [activeTab, setActiveTab] = useState<'all' | 'active' | 'finished'>('all');
 
     // Organizer Filter States
     const isOrganizerOrAdmin = user.role === 'admin' || user.role === 'superadmin' || user.role === 'coordinator';
@@ -369,8 +369,8 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
     );
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'open' | 'ongoing' | 'finished'>('all');
 
-    // Counts for active vs finished
-    const { activeCount, finishedCount } = React.useMemo(() => {
+    // Counts for all, active vs finished
+    const { totalCount, activeCount, finishedCount } = React.useMemo(() => {
         let act = 0;
         let fin = 0;
         tournaments.forEach(t => {
@@ -381,7 +381,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                 act++;
             }
         });
-        return { activeCount: act, finishedCount: fin };
+        return { totalCount: tournaments.length, activeCount: act, finishedCount: fin };
     }, [tournaments]);
 
     // Group tournaments by start month (applying scope, tab and status filters)
@@ -397,14 +397,15 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             );
         }
 
-        // Filter by activeTab (active vs finished)
+        // Filter by activeTab ('all' | 'active' | 'finished')
         list = list.filter(t => {
             const isFinished = t.status === 'finished' || Boolean(t.champion_name);
             if (activeTab === 'finished') {
                 return isFinished;
-            } else {
+            } else if (activeTab === 'active') {
                 return !isFinished;
             }
+            return true;
         });
 
         // Filter by status (if organizer filters within the current tab)
@@ -425,7 +426,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             });
         }
 
-        // Sort tournaments: finished tournaments descending (most recent first), active ascending
+        // Sort tournaments: finished tournaments descending (most recent first), others ascending
         const sorted = [...list].sort((a, b) => {
             const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
             const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
@@ -536,23 +537,43 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                 />
             ) : (
                 <>
-                    {/* Navigation Tabs: En Juego/Próximos vs Historial de Finalizados */}
-                    <div className="flex border-b border-white/10 gap-2 sm:gap-4">
+                    {/* Navigation Tabs: Todos vs En Curso/Próximos vs Historial de Finalizados */}
+                    <div className="flex border-b border-white/10 gap-2 sm:gap-4 overflow-x-auto pb-0.5 custom-scrollbar">
+                        <button
+                            onClick={() => {
+                                setActiveTab('all');
+                                setSelectedMonthFilter('all');
+                            }}
+                            className={`flex items-center gap-2 pb-3 px-2 font-bold text-sm sm:text-base whitespace-nowrap transition-all border-b-2 ${
+                                activeTab === 'all'
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted hover:text-white'
+                            }`}
+                        >
+                            <Trophy size={18} className={activeTab === 'all' ? 'text-primary' : ''} />
+                            <span>Todos los Torneos</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
+                                activeTab === 'all' ? 'bg-primary/20 text-primary' : 'bg-white/5 text-muted'
+                            }`}>
+                                {totalCount}
+                            </span>
+                        </button>
+
                         <button
                             onClick={() => {
                                 setActiveTab('active');
                                 setSelectedMonthFilter('all');
                             }}
-                            className={`flex items-center gap-2 pb-3 px-2 font-bold text-sm sm:text-base transition-all border-b-2 ${
+                            className={`flex items-center gap-2 pb-3 px-2 font-bold text-sm sm:text-base whitespace-nowrap transition-all border-b-2 ${
                                 activeTab === 'active'
-                                    ? 'border-primary text-primary'
+                                    ? 'border-emerald-400 text-emerald-400'
                                     : 'border-transparent text-muted hover:text-white'
                             }`}
                         >
-                            <Flame size={18} className={activeTab === 'active' ? 'text-primary animate-pulse' : ''} />
+                            <Flame size={18} className={activeTab === 'active' ? 'text-emerald-400 animate-pulse' : ''} />
                             <span>En Curso y Próximos</span>
                             <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
-                                activeTab === 'active' ? 'bg-primary/20 text-primary' : 'bg-white/5 text-muted'
+                                activeTab === 'active' ? 'bg-emerald-400/20 text-emerald-300' : 'bg-white/5 text-muted'
                             }`}>
                                 {activeCount}
                             </span>
@@ -563,7 +584,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                 setActiveTab('finished');
                                 setSelectedMonthFilter('all');
                             }}
-                            className={`flex items-center gap-2 pb-3 px-2 font-bold text-sm sm:text-base transition-all border-b-2 ${
+                            className={`flex items-center gap-2 pb-3 px-2 font-bold text-sm sm:text-base whitespace-nowrap transition-all border-b-2 ${
                                 activeTab === 'finished'
                                     ? 'border-amber-400 text-amber-400'
                                     : 'border-transparent text-muted hover:text-white'
