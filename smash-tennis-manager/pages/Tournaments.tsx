@@ -3,7 +3,7 @@ import { Tournament, UserProfile, Institution, TournamentSaga } from '../types';
 import { api } from '../services/api';
 import { Card } from '../components/ui/Card';
 import { useToast } from '../components/ui/Toast';
-import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List, Tv, Eye, Settings2 } from 'lucide-react';
+import { Trophy, Calendar, MapPin, DollarSign, ChevronRight, Plus, AlertTriangle, X, Filter, Share2, MessageCircle, Sparkles, Trash2, Loader2, Edit2, Layers, Gift, Award, Zap, Map as MapIcon, List, Tv, Eye, Settings2, History, Flame } from 'lucide-react';
 import { getCategoryRank, getCategoriesForInstitution, ALL_CATEGORIES } from '../utils/categories';
 import { getTournamentTier, TIER_META, TIER_ORDER, getEffectiveTournamentTier, DEFAULT_TIER_CONFIG, getTierInfoByKey } from '../utils/tournamentTiers';
 import { TournamentsMap } from '../components/TournamentsMap';
@@ -359,6 +359,9 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             .catch(console.error);
     }, [user.institution_id]);
 
+    // Tab State: active tournaments vs finished history
+    const [activeTab, setActiveTab] = useState<'active' | 'finished'>('active');
+
     // Organizer Filter States
     const isOrganizerOrAdmin = user.role === 'admin' || user.role === 'superadmin' || user.role === 'coordinator';
     const [scopeFilter, setScopeFilter] = useState<'my_tournaments' | 'all'>(() => 
@@ -366,7 +369,22 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
     );
     const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'open' | 'ongoing' | 'finished'>('all');
 
-    // Group tournaments by start month (applying scope and status filters)
+    // Counts for active vs finished
+    const { activeCount, finishedCount } = React.useMemo(() => {
+        let act = 0;
+        let fin = 0;
+        tournaments.forEach(t => {
+            const isFin = t.status === 'finished' || Boolean(t.champion_name);
+            if (isFin) {
+                fin++;
+            } else {
+                act++;
+            }
+        });
+        return { activeCount: act, finishedCount: fin };
+    }, [tournaments]);
+
+    // Group tournaments by start month (applying scope, tab and status filters)
     const groupedTournaments = React.useMemo(() => {
         const groups: { [key: string]: { monthLabel: string; sortKey: string; items: Tournament[] } } = {};
         
@@ -379,28 +397,39 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             );
         }
 
-        // Filter by status
+        // Filter by activeTab (active vs finished)
+        list = list.filter(t => {
+            const isFinished = t.status === 'finished' || Boolean(t.champion_name);
+            if (activeTab === 'finished') {
+                return isFinished;
+            } else {
+                return !isFinished;
+            }
+        });
+
+        // Filter by status (if organizer filters within the current tab)
         if (statusFilter !== 'all') {
             list = list.filter(t => {
                 const isRegClosed = Boolean(
                     t.registration_closed || 
                     t.status === 'finished' ||
+                    Boolean(t.champion_name) ||
                     (t.registration_deadline && new Date() > new Date(t.registration_deadline + 'T23:59:59'))
                 );
 
                 if (statusFilter === 'draft') return t.status === 'draft';
-                if (statusFilter === 'open') return t.status !== 'draft' && t.status !== 'finished' && !isRegClosed;
-                if (statusFilter === 'ongoing') return t.status === 'active' || (isRegClosed && t.status !== 'finished' && t.status !== 'draft');
-                if (statusFilter === 'finished') return t.status === 'finished';
+                if (statusFilter === 'open') return t.status !== 'draft' && t.status !== 'finished' && !Boolean(t.champion_name) && !isRegClosed;
+                if (statusFilter === 'ongoing') return (t.status === 'active' || isRegClosed) && t.status !== 'finished' && !Boolean(t.champion_name) && t.status !== 'draft';
+                if (statusFilter === 'finished') return t.status === 'finished' || Boolean(t.champion_name);
                 return true;
             });
         }
 
-        // Sort tournaments by start_date ascending
+        // Sort tournaments: finished tournaments descending (most recent first), active ascending
         const sorted = [...list].sort((a, b) => {
             const dateA = a.start_date ? new Date(a.start_date).getTime() : 0;
             const dateB = b.start_date ? new Date(b.start_date).getTime() : 0;
-            return dateA - dateB;
+            return activeTab === 'finished' ? dateB - dateA : dateA - dateB;
         });
 
         sorted.forEach(t => {
@@ -427,8 +456,10 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
             groups[key].items.push(t);
         });
 
-        return Object.values(groups).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
-    }, [tournaments, scopeFilter, statusFilter, user]);
+        return Object.values(groups).sort((a, b) => {
+            return activeTab === 'finished' ? b.sortKey.localeCompare(a.sortKey) : a.sortKey.localeCompare(b.sortKey);
+        });
+    }, [tournaments, scopeFilter, statusFilter, activeTab, user]);
 
     const [selectedMonthFilter, setSelectedMonthFilter] = useState<string>('all');
     const [viewMode, setViewMode] = useState<'list' | 'map'>(() => 
@@ -505,6 +536,49 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                 />
             ) : (
                 <>
+                    {/* Navigation Tabs: En Juego/Próximos vs Historial de Finalizados */}
+                    <div className="flex border-b border-white/10 gap-2 sm:gap-4">
+                        <button
+                            onClick={() => {
+                                setActiveTab('active');
+                                setSelectedMonthFilter('all');
+                            }}
+                            className={`flex items-center gap-2 pb-3 px-2 font-bold text-sm sm:text-base transition-all border-b-2 ${
+                                activeTab === 'active'
+                                    ? 'border-primary text-primary'
+                                    : 'border-transparent text-muted hover:text-white'
+                            }`}
+                        >
+                            <Flame size={18} className={activeTab === 'active' ? 'text-primary animate-pulse' : ''} />
+                            <span>En Curso y Próximos</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
+                                activeTab === 'active' ? 'bg-primary/20 text-primary' : 'bg-white/5 text-muted'
+                            }`}>
+                                {activeCount}
+                            </span>
+                        </button>
+
+                        <button
+                            onClick={() => {
+                                setActiveTab('finished');
+                                setSelectedMonthFilter('all');
+                            }}
+                            className={`flex items-center gap-2 pb-3 px-2 font-bold text-sm sm:text-base transition-all border-b-2 ${
+                                activeTab === 'finished'
+                                    ? 'border-amber-400 text-amber-400'
+                                    : 'border-transparent text-muted hover:text-white'
+                            }`}
+                        >
+                            <History size={18} className={activeTab === 'finished' ? 'text-amber-400' : ''} />
+                            <span>Historial y Campeones</span>
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-extrabold ${
+                                activeTab === 'finished' ? 'bg-amber-400/20 text-amber-300' : 'bg-white/5 text-muted'
+                            }`}>
+                                {finishedCount}
+                            </span>
+                        </button>
+                    </div>
+
                     {/* Organizer Scope & Status Filter Pills */}
                     {isOrganizerOrAdmin && (
                         <div className="bg-card border border-white/10 rounded-2xl p-3.5 space-y-3 shadow-sm">
@@ -601,7 +675,7 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                         : 'bg-card border-white/10 text-muted hover:text-white hover:bg-white/5'
                                 }`}
                             >
-                                Todos los Meses ({tournaments.length})
+                                Todos los Meses ({groupedTournaments.reduce((acc, g) => acc + g.items.length, 0)})
                             </button>
                             {groupedTournaments.map(g => (
                                 <button
@@ -628,6 +702,20 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                     ) : tournaments.length === 0 ? (
                         <div className="text-center py-20 border border-dashed border-white/10 rounded-2xl text-muted">
                             No hay torneos programados por el momento.
+                        </div>
+                    ) : groupedTournaments.length === 0 ? (
+                        <div className="text-center py-16 border border-dashed border-white/10 rounded-2xl p-6 space-y-2">
+                            <div className="w-12 h-12 mx-auto rounded-full bg-white/5 flex items-center justify-center text-muted">
+                                {activeTab === 'finished' ? <Trophy size={24} /> : <Calendar size={24} />}
+                            </div>
+                            <h4 className="text-white font-bold text-base">
+                                {activeTab === 'finished' ? 'Aún no hay torneos finalizados' : 'No hay torneos activos en este momento'}
+                            </h4>
+                            <p className="text-muted text-xs max-w-sm mx-auto">
+                                {activeTab === 'finished' 
+                                    ? 'A medida que se consagren campeones y concluyan las llaves, aparecerán listados aquí para la consulta histórica.' 
+                                    : 'Los nuevos torneos que se publiquen aparecerán en esta sección.'}
+                            </p>
                         </div>
                     ) : (
                         <div className="space-y-10">
