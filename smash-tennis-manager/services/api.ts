@@ -1062,6 +1062,16 @@ export const api = {
                 }));
             }
 
+            // 3.5 Clean existing group matches if re-generating fixture
+            const { error: delError } = await supabase
+                .from('matches')
+                .delete()
+                .eq('tournament_id', tournamentId)
+                .eq('round', 'Fase de Grupos');
+            if (delError) {
+                console.warn('Could not clean previous group matches:', delError);
+            }
+
             // 4. Generate Matches
             const matchesToInsert: any[] = [];
 

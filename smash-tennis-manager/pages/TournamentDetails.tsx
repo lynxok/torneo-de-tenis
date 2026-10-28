@@ -2414,13 +2414,12 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     <>
                                         <button
                                             onClick={() => {
-                                                const hasPlayedMatches = matches.some(m => m.round === 'Fase de Grupos' && (m.is_played || m.score));
-                                                if (hasPlayedMatches) {
-                                                    alert('No se puede reiniciar el fixture porque ya hay partidos de zona jugados o con marcadores registrados.');
-                                                    return;
-                                                }
-                                                if (matches.some(m => m.round === 'Fase de Grupos')) {
-                                                    if (!confirm('Ya existe un fixture de grupos generado. ¿Deseas volver a sortear y reconfigurar la modalidad (se reemplazarán los partidos no jugados)?')) {
+                                                const playedCount = matches.filter(m => m.round === 'Fase de Grupos' && (m.is_played || m.score)).length;
+                                                if (playedCount > 0) {
+                                                    const proceed = confirm(`⚠️ ATENCIÓN ORGANIZADOR:\n\nYa existen ${playedCount} partido(s) de zona con marcadores o resultados registrados.\n\nSi continúas para reconfigurar la modalidad o cambiar el sistema de juego, estos partidos se resetearán para armar el nuevo fixture.\n\n¿Deseas continuar y abrir la configuración de zonas?`);
+                                                    if (!proceed) return;
+                                                } else if (matches.some(m => m.round === 'Fase de Grupos')) {
+                                                    if (!confirm('Ya existe un fixture de grupos generado. ¿Deseas volver a sortear o cambiar la modalidad (se reemplazarán los partidos actuales)?')) {
                                                         return;
                                                     }
                                                 }
