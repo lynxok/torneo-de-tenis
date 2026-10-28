@@ -119,10 +119,10 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
           </div>
 
           {/* GROUP STAGE MATCH FORMAT SELECTOR */}
-          <div className="space-y-2">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between">
               <label className="text-xs text-muted uppercase font-bold flex items-center gap-1.5">
-                <span>1. Sistema de Juego en Zonas</span>
+                <span>1. Modalidad de Cruces en Zonas</span>
               </label>
               <button
                 type="button"
@@ -133,51 +133,91 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Opción 1: Round Robin */}
               <button
                 type="button"
                 onClick={() => setSelectedFormat('round_robin')}
-                className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
                   selectedFormat === 'round_robin'
-                    ? 'bg-primary/20 border-primary text-white shadow-sm ring-1 ring-primary/50'
+                    ? 'bg-primary/20 border-primary text-white shadow-lg shadow-primary/10 ring-2 ring-primary/60'
                     : 'bg-sidebar/50 border-white/5 text-muted hover:text-white hover:bg-white/5'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-white">Todos contra Todos</span>
-                  <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full text-slate-300 font-mono">Tradicional</span>
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="font-black text-sm text-white flex items-center gap-1.5">
+                      <Grid size={15} className="text-primary" /> Todos contra Todos
+                    </span>
+                    <span className="text-[10px] bg-white/10 px-2 py-0.5 rounded-full text-slate-300 font-mono font-bold">
+                      Round Robin
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-semibold text-emerald-400 mb-2">
+                    🎾 3 partidos por jugador (6 por grupo de 4)
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    Cada jugador se enfrenta contra todos los rivales de su grupo sin excepción.
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-400 mt-1 leading-relaxed">
-                  Cada jugador se enfrenta a todos sus rivales de zona. En zonas de 4 son 6 partidos en total (<strong>3 partidos por jugador</strong>).
-                </p>
-                <div className="mt-2 text-[10px] font-medium text-slate-400">
-                  Ideal para: <span className="text-white">Torneos largos o semanales con tiempo</span>
+
+                <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400 font-medium">Recomendado para:</span>
+                  <span className="text-white font-bold bg-white/10 px-2 py-0.5 rounded">Torneos largos o ligas</span>
                 </div>
               </button>
 
+              {/* Opción 2: Cruzada de 4 */}
               <button
                 type="button"
                 onClick={() => setSelectedFormat('cross_4')}
-                className={`p-3.5 rounded-xl border text-left transition-all relative ${
+                className={`p-4 rounded-2xl border text-left transition-all relative flex flex-col justify-between ${
                   selectedFormat === 'cross_4'
-                    ? 'bg-amber-500/20 border-amber-500 text-white shadow-sm ring-1 ring-amber-500/50'
+                    ? 'bg-amber-500/20 border-amber-500 text-white shadow-lg shadow-amber-500/20 ring-2 ring-amber-400'
                     : 'bg-sidebar/50 border-white/5 text-muted hover:text-white hover:bg-white/5'
                 }`}
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-xs text-amber-300 flex items-center gap-1.5">
-                    <Zap size={13} className="text-amber-400" /> Americana / Cruzada de 4
-                  </span>
-                  <span className="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-mono font-bold">2 Fechas</span>
+                <div>
+                  <div className="flex items-center justify-between gap-1 mb-1">
+                    <span className="font-black text-sm text-amber-300 flex items-center gap-1.5">
+                      <Zap size={15} className="text-amber-400" /> Cruzada de 4 (Americana)
+                    </span>
+                    <span className="text-[10px] bg-amber-500/30 text-amber-300 border border-amber-500/40 px-2 py-0.5 rounded-full font-mono font-bold">
+                      2 Fechas
+                    </span>
+                  </div>
+                  <div className="text-[11px] font-semibold text-amber-300 mb-2">
+                    ⚡ 2 partidos por jugador (4 por grupo de 4)
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed">
+                    <strong>Fecha 1:</strong> Cruces iniciales (1 vs 2 y 3 vs 4).<br />
+                    <strong>Fecha 2:</strong> Ganador vs Perdedor cruzado (y viceversa).
+                  </p>
                 </div>
-                <p className="text-[11px] text-slate-300/80 mt-1 leading-relaxed">
-                  Cruces iniciales + 2da fecha automática (<em>Ganadores vs Ganadores</em> y <em>Perdedores vs Perdedores</em>). Exactamente <strong>2 partidos por jugador</strong>.
-                </p>
-                <div className="mt-2 text-[10px] font-medium text-amber-300/80">
-                  Ideal para: <span className="text-amber-200">Torneos de fin de semana o relámpago</span>
+
+                <div className="mt-3 pt-2.5 border-t border-white/10 flex items-center justify-between text-[10px]">
+                  <span className="text-slate-400 font-medium">Recomendado para:</span>
+                  <span className="text-amber-200 font-bold bg-amber-500/20 px-2 py-0.5 rounded">Fin de semana / Express</span>
                 </div>
               </button>
             </div>
+
+            {/* Banner explicativo del formato seleccionado */}
+            {selectedFormat === 'cross_4' ? (
+              <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-200 flex items-center gap-2">
+                <Zap size={16} className="text-amber-400 shrink-0" />
+                <span>
+                  <strong>Modalidad Cruzada activa:</strong> En zonas de 4, cada jugador disputará exactamente 2 partidos (Ganador vs Perdedor del cruce opuesto). Si una zona tiene 3 o 5 jugadores, jugarán Todos contra Todos automáticamente.
+                </span>
+              </div>
+            ) : (
+              <div className="p-3 bg-primary/10 border border-primary/20 rounded-xl text-xs text-slate-300 flex items-center gap-2">
+                <Grid size={16} className="text-primary shrink-0" />
+                <span>
+                  <strong>Modalidad Round Robin activa:</strong> En zonas de 4 cada jugador disputará 3 partidos (todos contra todos, 6 en total por zona).
+                </span>
+              </div>
+            )}
           </div>
 
           {/* GROUP FORMAT SELECTOR */}
@@ -381,7 +421,9 @@ export const GenerateFixtureModal: React.FC<GenerateFixtureModalProps> = ({
                   </p>
                   <ul className="list-disc pl-4 space-y-1 text-slate-300/90 text-[11px]">
                     <li><strong>Fecha 1 (Cruces iniciales):</strong> Jugador 1 vs Jugador 4 y Jugador 2 vs Jugador 3.</li>
-                    <li><strong>Fecha 2 (Definición automática):</strong> Los dos ganadores juegan entre sí (definen el 1° y 2° puesto), y los dos perdedores juegan entre sí (definen el 3° y 4° puesto).</li>
+                    <li><strong>Fecha 2 (Cruces cruzados):</strong> El ganador del Partido 1 juega contra el perdedor del Partido 2, y el ganador del Partido 2 juega contra el perdedor del Partido 1.</li>
+                    <li><strong>Clasificación:</strong> Al finalizar los 2 partidos por jugador, la tabla define las posiciones (1°, 2°, 3° y 4°) por partidos ganados, diferencia de sets y games.</li>
+                    <li><strong>¿Qué pasa si hay 5 jugadores en un grupo?</strong> En grupos de 5 participantes se disputa automáticamente <em>Todos contra Todos</em> (10 partidos en total, 4 partidos por jugador), ya que la modalidad cruzada requiere grupos exactos de 4 personas.</li>
                     <li><strong>Ahorro de canchas y tiempo:</strong> Ideal para torneos de un fin de semana evitando que un jugador espere partidos intrascendentes.</li>
                   </ul>
                 </div>

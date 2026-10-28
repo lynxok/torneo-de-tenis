@@ -129,8 +129,8 @@ export const EditTournamentModal: React.FC<EditTournamentModalProps> = ({
                   onChange={e => onFormChange({ ...formData, min_guaranteed_matches: parseInt(e.target.value) })}
                 >
                   <option value={1}>1 Partido (Directo)</option>
-                  <option value={2}>2 Partidos (Zonas de 3)</option>
-                  <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
+                  <option value={2}>2 Partidos (Cruzada de 4 / Zonas de 3)</option>
+                  <option value={3}>3 Partidos (Todos contra Todos en 4)</option>
                   <option value={4}>4 Partidos (Zonas de 5)</option>
                 </select>
               </div>
@@ -146,6 +146,10 @@ export const EditTournamentModal: React.FC<EditTournamentModalProps> = ({
                   <span>Activar BYEs en cuadro</span>
                 </label>
               </div>
+            </div>
+            {/* Modalidad de Zonas Aviso */}
+            <div className="p-2.5 bg-blue-500/10 border border-blue-500/25 rounded-xl text-[11px] text-blue-200">
+              💡 <strong>Sistema de Cruces en Zonas:</strong> Si deseas jugar modalidad <em>Cruzada de 4 (2 partidos)</em> o <em>Todos contra Todos (3 partidos)</em>, se define al momento de hacer el sorteo en el botón <strong>"Configurar y Generar Grupos"</strong>.
             </div>
           </div>
 

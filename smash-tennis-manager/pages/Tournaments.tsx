@@ -1295,8 +1295,8 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                                     onChange={e => setNewTournament({ ...newTournament, min_guaranteed_matches: parseInt(e.target.value) })}
                                                 >
                                                     <option value={1}>1 Partido (Directo)</option>
-                                                    <option value={2}>2 Partidos (Zonas de 3)</option>
-                                                    <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
+                                                    <option value={2}>2 Partidos (Cruzada de 4 / Zonas de 3)</option>
+                                                    <option value={3}>3 Partidos (Todos contra Todos en 4)</option>
                                                     <option value={4}>4 Partidos (Zonas de 5)</option>
                                                 </select>
                                             </div>
@@ -1484,8 +1484,8 @@ export const Tournaments: React.FC<TournamentsProps> = ({ user, onNavigate, init
                                             onChange={e => setEditFormData({ ...editFormData, min_guaranteed_matches: parseInt(e.target.value) })}
                                         >
                                             <option value={1}>1 Partido (Directo)</option>
-                                            <option value={2}>2 Partidos (Zonas de 3)</option>
-                                            <option value={3}>3 Partidos (Zonas de 4 / Circuito)</option>
+                                            <option value={2}>2 Partidos (Cruzada de 4 / Zonas de 3)</option>
+                                            <option value={3}>3 Partidos (Todos contra Todos en 4)</option>
                                             <option value={4}>4 Partidos (Zonas de 5)</option>
                                         </select>
                                     </div>

@@ -2414,9 +2414,15 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                     <>
                                         <button
                                             onClick={() => {
-                                                if (matches.some(m => m.round === 'Fase de Grupos')) {
-                                                    alert('Ya existe una fase de grupos activa.');
+                                                const hasPlayedMatches = matches.some(m => m.round === 'Fase de Grupos' && (m.is_played || m.score));
+                                                if (hasPlayedMatches) {
+                                                    alert('No se puede reiniciar el fixture porque ya hay partidos de zona jugados o con marcadores registrados.');
                                                     return;
+                                                }
+                                                if (matches.some(m => m.round === 'Fase de Grupos')) {
+                                                    if (!confirm('Ya existe un fixture de grupos generado. ¿Deseas volver a sortear y reconfigurar la modalidad (se reemplazarán los partidos no jugados)?')) {
+                                                        return;
+                                                    }
                                                 }
                                                 if (players.length < 3) {
                                                     addToast('Se necesitan al menos 3 jugadores inscriptos para generar grupos.', 'warning');
@@ -2429,7 +2435,7 @@ export const TournamentDetails: React.FC<TournamentDetailsProps> = ({ tournament
                                             }}
                                             className="px-4 py-2 bg-blue-500/10 border border-blue-500/20 text-blue-400 hover:bg-blue-500/20 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-sm"
                                         >
-                                            <Settings2 size={14} /> Configurar y Generar Grupos
+                                            <Settings2 size={14} /> {matches.some(m => m.round === 'Fase de Grupos') ? 'Reconfigurar / Sortear Zonas' : 'Configurar y Generar Grupos'}
                                         </button>
 
                                         {groupMatches.length > 0 && (
